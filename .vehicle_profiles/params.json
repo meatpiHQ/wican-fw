@@ -37,6 +37,22 @@
       "max": "1"
     }
   },
+  "AH_CHARGED": {
+    "description": "Cumulative charge current (Ah)",
+    "settings": {
+      "unit": "Ah",
+      "class": "none",
+      "min": "0"
+    }
+  },
+  "AH_DISCHARGED": {
+    "description": "Cumulative discharge current (Ah)",
+    "settings": {
+      "unit": "Ah",
+      "class": "none",
+      "min": "0"
+    }
+  },
   "AIRBAG": {
     "description": "Airbag H/wire Duty",
     "settings": {
@@ -69,6 +85,31 @@
       "max": "80"
     }
   },
+  "BAT_FAN": {
+    "description": "HV battery fan status",
+    "settings": {
+      "unit": "",
+      "class": "none",
+      "min": "0",
+      "max": "255"
+    }
+  },
+  "BMS_IGNITION": {
+    "description": "BMS ignition signal",
+    "settings": {
+      "unit": "",
+      "class": "power",
+      "type": "binary_sensor"
+    }
+  },
+  "BRAKE_LAMP": {
+    "description": "Brake lamp on",
+    "settings": {
+      "unit": "",
+      "class": "none",
+      "type": "binary_sensor"
+    }
+  },
   "CABIN_TEMPERATURE": {
     "description": "Cabin temperature",
     "settings": {
@@ -84,6 +125,51 @@
       "class": "battery",
       "min": "0",
       "max": "840"
+    }
+  },
+  "CELL_V_DEV": {
+    "description": "Cell voltage deviation",
+    "settings": {
+      "unit": "V",
+      "class": "voltage",
+      "min": "0",
+      "max": "1"
+    }
+  },
+  "CELL_V_MAX": {
+    "description": "Highest cell voltage",
+    "settings": {
+      "unit": "V",
+      "class": "voltage",
+      "min": "2",
+      "max": "4.5"
+    }
+  },
+  "CELL_V_MAX_NO": {
+    "description": "Cell number with highest voltage",
+    "settings": {
+      "unit": "",
+      "class": "none",
+      "min": "1",
+      "max": "96"
+    }
+  },
+  "CELL_V_MIN": {
+    "description": "Lowest cell voltage",
+    "settings": {
+      "unit": "V",
+      "class": "voltage",
+      "min": "2",
+      "max": "4.5"
+    }
+  },
+  "CELL_V_MIN_NO": {
+    "description": "Cell number with lowest voltage",
+    "settings": {
+      "unit": "",
+      "class": "none",
+      "min": "1",
+      "max": "96"
     }
   },
   "CHARGER_CONNECTED": {
@@ -249,6 +335,38 @@
     "settings": {
       "unit": "none",
       "class": "none"
+    }
+  },
+  "GEAR_D": {
+    "description": "Gear D selected",
+    "settings": {
+      "unit": "",
+      "class": "none",
+      "type": "binary_sensor"
+    }
+  },
+  "GEAR_N": {
+    "description": "Gear N selected",
+    "settings": {
+      "unit": "",
+      "class": "none",
+      "type": "binary_sensor"
+    }
+  },
+  "GEAR_P": {
+    "description": "Gear P selected",
+    "settings": {
+      "unit": "",
+      "class": "none",
+      "type": "binary_sensor"
+    }
+  },
+  "GEAR_R": {
+    "description": "Gear R selected",
+    "settings": {
+      "unit": "",
+      "class": "none",
+      "type": "binary_sensor"
     }
   },
   "HUMIDITY": {
@@ -2113,6 +2231,15 @@
       "max": "80"
     }
   },
+  "HV_KW": {
+    "description": "High Voltage Battery power (negative = charging)",
+    "settings": {
+      "unit": "kW",
+      "class": "power",
+      "min": "-150",
+      "max": "150"
+    }
+  },
   "HV_KWH_R": {
     "description": "Battery Remaining Energy",
     "settings": {
@@ -2553,6 +2680,23 @@
       "class": "none"
     }
   },
+  "MAIN_RELAY": {
+    "description": "HV battery main relay closed",
+    "settings": {
+      "unit": "",
+      "class": "power",
+      "type": "binary_sensor"
+    }
+  },
+  "MOTOR_RPM": {
+    "description": "Drive motor speed",
+    "settings": {
+      "unit": "rpm",
+      "class": "none",
+      "min": "-12000",
+      "max": "12000"
+    }
+  },
   "OCTANE_RATIO_L": {
     "description": "Learned Octane Ratio",
     "settings": {
@@ -2588,6 +2732,14 @@
     "settings": {
       "unit": "%",
       "class": "none"
+    }
+  },
+  "OP_HOURS": {
+    "description": "BMS operating time",
+    "settings": {
+      "unit": "h",
+      "class": "duration",
+      "min": "0"
     }
   },
   "OP_TIME": {
@@ -2694,6 +2846,24 @@
       "class": "power"
     }
   },
+  "P_CHG_MAX": {
+    "description": "Maximum allowed charge power",
+    "settings": {
+      "unit": "kW",
+      "class": "power",
+      "min": "0",
+      "max": "120"
+    }
+  },
+  "P_DIS_MAX": {
+    "description": "Maximum allowed discharge power",
+    "settings": {
+      "unit": "kW",
+      "class": "power",
+      "min": "0",
+      "max": "120"
+    }
+  },
   "RANGE": {
     "description": "Current Range",
     "settings": {
@@ -2734,6 +2904,15 @@
       "max": "100"
     }
   },
+  "SOC_BMS": {
+    "description": "State of Charge reported by the BMS",
+    "settings": {
+      "unit": "%",
+      "class": "battery",
+      "min": "0",
+      "max": "100"
+    }
+  },
   "SOC_D": {
     "description": "Displayed State of Charge",
     "settings": {
@@ -2762,6 +2941,24 @@
       "class": "none",
       "min": "0",
       "max": "105"
+    }
+  },
+  "SOH_MIN": {
+    "description": "State of Health of the weakest cell",
+    "settings": {
+      "unit": "%",
+      "class": "none",
+      "min": "0",
+      "max": "105"
+    }
+  },
+  "SOH_MIN_CELL_NO": {
+    "description": "Cell number with lowest State of Health",
+    "settings": {
+      "unit": "",
+      "class": "none",
+      "min": "1",
+      "max": "96"
     }
   },
   "SPEED": {
@@ -2868,11 +3065,164 @@
       "unit": "°C"
     }
   },
+  "T_BAT_INLET": {
+    "description": "HV battery inlet temperature",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-40",
+      "max": "80"
+    }
+  },
+  "T_BAT_MAX": {
+    "description": "HV battery max temperature",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-40",
+      "max": "80"
+    }
+  },
+  "T_BAT_MIN": {
+    "description": "HV battery min temperature",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-40",
+      "max": "80"
+    }
+  },
   "T_CAB": {
     "description": "Cabin Temp",
     "settings": {
       "unit": "°C",
       "class": "temperature"
+    }
+  },
+  "T_HEATER1": {
+    "description": "HV battery heater 1 temperature",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-40",
+      "max": "80"
+    }
+  },
+  "T_HEATER2": {
+    "description": "HV battery heater 2 temperature",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-40",
+      "max": "80"
+    }
+  },
+  "T_MOD1": {
+    "description": "HV battery module 1 temperature",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-40",
+      "max": "80"
+    }
+  },
+  "T_MOD10": {
+    "description": "HV battery module 10 temperature",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-40",
+      "max": "80"
+    }
+  },
+  "T_MOD11": {
+    "description": "HV battery module 11 temperature",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-40",
+      "max": "80"
+    }
+  },
+  "T_MOD2": {
+    "description": "HV battery module 2 temperature",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-40",
+      "max": "80"
+    }
+  },
+  "T_MOD3": {
+    "description": "HV battery module 3 temperature",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-40",
+      "max": "80"
+    }
+  },
+  "T_MOD4": {
+    "description": "HV battery module 4 temperature",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-40",
+      "max": "80"
+    }
+  },
+  "T_MOD5": {
+    "description": "HV battery module 5 temperature",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-40",
+      "max": "80"
+    }
+  },
+  "T_MOD6": {
+    "description": "HV battery module 6 temperature",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-40",
+      "max": "80"
+    }
+  },
+  "T_MOD7": {
+    "description": "HV battery module 7 temperature",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-40",
+      "max": "80"
+    }
+  },
+  "T_MOD8": {
+    "description": "HV battery module 8 temperature",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-40",
+      "max": "80"
+    }
+  },
+  "T_MOD9": {
+    "description": "HV battery module 9 temperature",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-40",
+      "max": "80"
+    }
+  },
+  "T_OUTSIDE": {
+    "description": "Outside temperature",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-40",
+      "max": "60"
     }
   },
   "WASTEGATE": {
