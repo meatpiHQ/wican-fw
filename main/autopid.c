@@ -1433,7 +1433,11 @@ static void send_commands(char *commands, uint32_t delay_ms)
         char str_send[cmd_len + 1]; // +1 for null terminator
         strncpy(str_send, cmd_start, cmd_len);
         str_send[cmd_len] = '\0'; // Null-terminate the command string
-        if ((strstr(str_send, "ath0") == NULL && strstr(str_send, "ATH0") == NULL && strstr(str_send, "at h0") == NULL && strstr(str_send, "AT H0") == NULL) &&
+        // Skip empty commands: a pid_init that already ends in ';' becomes
+        // "...\r\r" once the trailing '\r' is appended, and the empty
+        // command between the two '\r' must not be sent to the ELM327.
+        if (cmd_len > 1 &&
+            (strstr(str_send, "ath0") == NULL && strstr(str_send, "ATH0") == NULL && strstr(str_send, "at h0") == NULL && strstr(str_send, "AT H0") == NULL) &&
             (strstr(str_send, "ats0") == NULL && strstr(str_send, "ATS0") == NULL && strstr(str_send, "at s0") == NULL && strstr(str_send, "AT s0") == NULL) &&
             (strstr(str_send, "ate1") == NULL && strstr(str_send, "ATE1") == NULL && strstr(str_send, "at e1") == NULL && strstr(str_send, "AT E1") == NULL))
         {
@@ -1968,7 +1972,8 @@ all_pids_t* load_all_pids(void){
                             curr_pid->init = (char*)malloc(init_len + 2);
                             if (curr_pid->init) {
                                 strncpy(curr_pid->init, init_item->valuestring, init_len);
-                                curr_pid->init[init_len] = '\0';
+                                curr_pid->init[init_len]     = '\r';
+                                curr_pid->init[init_len + 1] = '\0';
                                 
                                 // Replace semicolons with carriage returns
                                 for (size_t j = 0; j < init_len; j++) {
@@ -2168,7 +2173,8 @@ all_pids_t* load_all_pids(void){
                                     curr_pid->init = (char*)malloc(init_len + 2);
                                     if (curr_pid->init) {
                                         strncpy(curr_pid->init, init_item->valuestring, init_len);
-                                        curr_pid->init[init_len] = '\0';
+                                        curr_pid->init[init_len]     = '\r';
+                                        curr_pid->init[init_len + 1] = '\0';
                                         
                                         // Replace semicolons with carriage returns
                                         for (size_t j = 0; j < init_len; j++) {
