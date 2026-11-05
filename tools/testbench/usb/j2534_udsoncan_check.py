@@ -38,6 +38,14 @@ failed = 0
 conn = J2534Connection(DLL, rxid=RXID, txid=TXID)
 with Client(conn) as client:
     client.config["data_identifiers"] = {0xF190: udsoncan.AsciiCodec(17)}
+    # this leg checks the byte stream, not the link's latency: udsoncan's default
+    # P2 (50 ms) is below the bench tunnel's round trip (46 ms on 2026-11-06, and
+    # driver 1.6 no longer hides half of it inside PassThruWriteMsgs); the TP 2.0
+    # bench measures latency. A real tool on a link that slow must raise its P2
+    # too, or set the driver's WriteWait. The simulator's 10 03 answer carries
+    # P2 = 50 ms, which udsoncan would adopt (use_server_timing) over this value.
+    client.config["p2_timeout"] = 1.0
+    client.config["use_server_timing"] = False
     for name, fn in requests:
         try:
             r = fn(client)

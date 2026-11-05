@@ -1,13 +1,13 @@
 # WiCAN J2534 PassThru driver (Windows)
 
-`wican_j2534_setup_1.5.0.exe` installs the WiCAN SAE J2534-1 (04.04) PassThru
+`wican_j2534_setup_1.6.0.exe` installs the WiCAN SAE J2534-1 (04.04) PassThru
 driver: a 32-bit `wican_j2534.dll` that lets Windows diagnostic and reflash
 tools drive a vehicle's bus through a WiCAN PRO, over USB or WiFi.
 
 | | |
 |---|---|
-| Version | 1.5.0 (the DLL reports itself as `WiCAN J2534 1.5`; 2026-10-27: `PassThruGetLastError` explains every device refusal in words; 1.4, the same day: `PassThruReadMsgs` waits on an event instead of a `Sleep(1)` poll, and the driver log is on by default at `C:\Users\Public\Documents\WiCAN\wican_j2534.log` with every message in full both ways, see below; 1.3: accepts the J1850 VPW protocol; 1.2: event-driven ACK wait, GET_CONFIG answers, requests serialized across threads) |
-| SHA-256 | `61bdadbd9aad79be8a4779a8695592034203d57b6a39b393c04785ade435d3f4` |
+| Version | 1.6.0 (the DLL reports itself as `WiCAN J2534 1.6`; 2026-11-06: `PassThruWriteMsgs` sends every message of a call in one request and, with `Timeout` 0, returns as soon as it is on the link instead of waiting for the WiCAN's answer, see below; 1.5, 2026-10-27: `PassThruGetLastError` explains every device refusal in words; 1.4, the same day: `PassThruReadMsgs` waits on an event instead of a `Sleep(1)` poll, and the driver log is on by default at `C:\Users\Public\Documents\WiCAN\wican_j2534.log` with every message in full both ways; 1.3: accepts the J1850 VPW protocol; 1.2: event-driven ACK wait, GET_CONFIG answers, requests serialized across threads) |
+| SHA-256 | `cbf0a017182f8362053c66f8118d23e8c88cf3ab491e7212a6da830c888f7a67` |
 | Requires | WiCAN PRO on firmware v6 (a build of 2026-10-20 or later for ISO15765 and J1850 VPW: see below), Windows 10 or 11 |
 | Protocols | CAN, ISO15765 (ISO-TP) on the CAN controller, and J1850 VPW (GM Class 2) on the device's OBD chip. J1850 PWM, ISO9141 and ISO14230 return `ERR_NOT_SUPPORTED`. |
 
@@ -44,6 +44,25 @@ makes `PassThruGetLastError` say why the WiCAN refused a call ("the WiCAN
 refused: ERR_INVALID_BAUDRATE (0x18): the CAN bus runs at another bit
 rate ..."); until then a device status left "no error" behind and a tool's
 dialog said nothing useful.
+
+Driver 1.6 (2026-11-06) changes the write path, after a field comparison
+with a Tactrix Openport 2.0 on a VW TP 2.0 flasher (a 2 MB read in 40 min
+against 20). A `PassThruWriteMsgs` call with `Timeout` 0 queues its
+messages and returns, as SAE J2534-1 says ("queue and return") and as the
+Openport driver does; the queued messages are held for about a millisecond
+so the writes that follow join them, and they go to the WiCAN in one
+request (a read, or any other call, sends what is held first). Until 1.5
+every message was its own request and the call waited for the WiCAN's
+answer, so a tool that sends or acknowledges a transfer frame by frame paid
+the link's round trip on every frame it wrote: on the bench a 2 MB TP 2.0
+write over the WiCAN's own hotspot projects to 3.1 min now against 18.8. A
+refusal arrives on the driver's reader thread and is reported by the next
+write call, which then sends nothing. A non-zero `Timeout` still waits for
+the WiCAN's answer; the registry value `WriteWait` (DWORD 1) or the
+environment variable `WICAN_J2534_WRITE_WAIT=1` makes every write wait as
+1.5 did. Pairs with the firmware of 2026-11-06 (the J2534 receive pump
+wakes on the bus frame and coalesces bursts); either side works with the
+other.
 
 The installer is not code-signed, so Windows SmartScreen may ask you to
 confirm before it runs. The same file is attached to each firmware release.

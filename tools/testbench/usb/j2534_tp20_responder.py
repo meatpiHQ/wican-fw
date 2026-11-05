@@ -38,6 +38,9 @@ def main():
     ap.add_argument("--blocks", type=int, default=40)
     ap.add_argument("--timeout", type=float, default=120.0)
     ap.add_argument("--ack-timeout", type=float, default=2.0)
+    ap.add_argument("--receiver", action="store_true",
+                    help="the ECU RECEIVES the blocks (the tester's --write-direction): it ACKs every 0x0N / 0x1N "
+                         "frame on 0x300 with 0xB(N+1) at once and measures how long the tool takes to resume")
     a = ap.parse_args()
 
     bus = can.Bus(interface="pcan", channel=a.pcan, bitrate=500000, receive_own_messages=False)
@@ -78,7 +81,53 @@ def main():
     ack_lat, block_times = [], []
     served, fails = 0, []
     t_start = time.perf_counter()
-    print("responder: waiting for the tester (bs %d, t3 %.1f ms, %d blocks)" % (a.bs, a.t3_ms, a.blocks), flush=True)
+    print("responder: waiting for the tester (bs %d, t3 %.1f ms, %d blocks%s)" % (
+        a.bs, a.t3_ms, a.blocks, ", receiver" if a.receiver else ""), flush=True)
+
+    if a.receiver:
+        # the write direction: every tester frame on 0x740; after a 0x0N / 0x1N
+        # frame the ECU ACKs and the tool resumes; the gap from the ACK to the
+        # tool's next frame is what the tool's link costs it per block end
+        resume_lat, t_blk0, t_ack_sent, frames_in = [], None, None, 0
+        while served < a.blocks and time.perf_counter() - t_start < a.timeout:
+            ts, fr = wait_for(lambda d: len(d) >= 1, 5.0)
+            if fr is None:
+                continue
+            if fr[:1] == b"\xA8":
+                print("responder: tester disconnected", flush=True)
+                break
+            if t_blk0 is None:
+                t_blk0 = ts
+            if t_ack_sent is not None:
+                resume_lat.append(ts - t_ack_sent)
+                t_ack_sent = None
+            op, s = fr[0] >> 4, fr[0] & 0xF
+            if op not in (0x0, 0x1, 0x2, 0x3):
+                continue
+            frames_in += 1
+            if op in (0x0, 0x1):
+                send(bytes([0xB0 | ((s + 1) & 0xF)]))
+                t_ack_sent = time.perf_counter()
+            if op == 0x1:
+                served += 1
+                block_times.append(time.perf_counter() - t_blk0)
+                t_blk0 = None
+        halt.set()
+        time.sleep(0.2)
+        bus.shutdown()
+        if resume_lat:
+            resume_lat.sort()
+            print("tool resumes after the ECU's ACK (n=%d): median %.1f ms, p95 %.1f ms, max %.1f ms" % (
+                len(resume_lat), statistics.median(resume_lat) * 1000, resume_lat[int(len(resume_lat) * 0.95)] * 1000,
+                resume_lat[-1] * 1000), flush=True)
+        if block_times:
+            print("per block received (255 B, 37 frames): median %.1f ms, max %.1f ms" % (
+                statistics.median(block_times) * 1000, max(block_times) * 1000), flush=True)
+        if served < a.blocks:
+            print("RESPONDER FAIL: received %d of %d blocks (%d frames)" % (served, a.blocks, frames_in), flush=True)
+            sys.exit(1)
+        print("RESPONDER DONE: %d blocks received" % served, flush=True)
+        return
 
     while served < a.blocks and time.perf_counter() - t_start < a.timeout:
         ts, req = wait_for(lambda d: (len(d) >= 5 and (d[0] >> 4) == 1 and d[3] == 0x1A) or d[:1] == b"\xA8", 5.0)
