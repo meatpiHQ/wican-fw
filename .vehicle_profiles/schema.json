@@ -84,6 +84,8 @@
                 "HV_CAPACITY",
                 "HV_CAPACITY_KWH",
                 "HV_CAPACITY_R",
+                "HV_COOLANT_INLET_TMP",
+                "HV_COOLANT_OUTLET_TMP",
                 "HV_C_DIFF",
                 "HV_C_D_MAX",
                 "HV_C_D_MAX_NO",
