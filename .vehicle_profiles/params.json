@@ -311,6 +311,24 @@
       "class": "energy"
     }
   },
+  "HV_COOLANT_INLET_TMP": {
+    "description": "HV battery coolant inlet temperature",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-50",
+      "max": "205"
+    }
+  },
+  "HV_COOLANT_OUTLET_TMP": {
+    "description": "HV battery coolant outlet temperature",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-50",
+      "max": "205"
+    }
+  },
   "HV_C_DIFF": {
     "description": "Battery Cell Voltage Deviation",
     "settings": {
