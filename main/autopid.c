@@ -1212,7 +1212,6 @@ void parse_elm327_response(char *buffer, response_t *response) {
     
     int k = 0;
     int frame_count = 0;
-    int response_failed = 0;
     char *frame;
     char *data_start;
     uint32_t lowest_header = UINT32_MAX;  // Initialize to maximum value
@@ -1302,11 +1301,6 @@ void parse_elm327_response(char *buffer, response_t *response) {
                 if (nrc_count >= 2 && nrc_bytes[0] >= 1 && nrc_bytes[0] <= 7 &&
                     nrc_bytes[1] == 0x7F)
                 {
-                    if (nrc_count < 4 || nrc_bytes[3] != 0x78)
-                    {
-                        // Terminal negative response: the request was rejected.
-                        response_failed = 1;
-                    }
                     frame = strtok(NULL, "\r\n");
                     continue;
                 }
@@ -1381,12 +1375,11 @@ void parse_elm327_response(char *buffer, response_t *response) {
         frame = strtok(NULL, "\r\n");
     }
 
-    if (response_failed || k == 0)
+    if (k == 0)
     {
-        // No usable data: the request was rejected with a terminal negative
-        // response or only response-pending frames were received. Report an
-        // error so the parameter is marked as failed instead of evaluating
-        // garbage.
+        // No usable data: every frame was a negative response (or malformed).
+        // Report an error so the parameter is marked as failed instead of
+        // evaluating garbage.
         sprintf((char*)response->data, "error");
         response->length = strlen((char*)response->data);
         // The caller short-circuits on the "error" string and never frees
