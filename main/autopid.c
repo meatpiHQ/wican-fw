@@ -883,6 +883,7 @@ void autopid_update_values(void)
         if ((curr_pid->pid_type == PID_STD && !all_pids->pid_std_en) ||
             (curr_pid->pid_type == PID_CUSTOM && !all_pids->pid_custom_en) ||
             (curr_pid->pid_type == PID_SPECIFIC && !all_pids->pid_specific_en)) {
+            value_index += curr_pid->parameters_count;
             continue;
         }
 
@@ -1513,6 +1514,27 @@ static void publish_parameter_mqtt(parameter_t *param) {
 }
 
 
+static bool same_pid_request(const pid_data2_t *a, const pid_data2_t *b)
+{
+    if (!a || !b || a->pid_type != b->pid_type)
+    {
+        return false;
+    }
+    if (!a->cmd || !b->cmd || strcmp(a->cmd, b->cmd) != 0)
+    {
+        return false;
+    }
+    const char *a_init = a->init ? a->init : "";
+    const char *b_init = b->init ? b->init : "";
+    if (strcmp(a_init, b_init) != 0)
+    {
+        return false;
+    }
+    const char *a_rx = a->rxheader ? a->rxheader : "";
+    const char *b_rx = b->rxheader ? b->rxheader : "";
+    return strcmp(a_rx, b_rx) == 0;
+}
+
 static void autopid_task(void *pvParameters)
 {
     static char default_init[] = "ati\rate0\rath1\ratl0\rats1\ratsp6\ratst96\r";
@@ -1582,6 +1604,10 @@ static void autopid_task(void *pvParameters)
 
         elm327_lock();
         xSemaphoreTake(all_pids->mutex, portMAX_DELAY);
+
+        pid_data2_t *last_req_pid = NULL;
+        bool last_cmd_ok = false;
+        bool last_response_ok = false;
         
         // Loop through all PIDs
         for(uint32_t i = 0; i < all_pids->pid_count; i++) 
@@ -1649,6 +1675,7 @@ static void autopid_task(void *pvParameters)
                         }
 
                         previous_pid_type = curr_pid->pid_type;
+                        last_req_pid = NULL;
                     }
 
                     ESP_LOGI(TAG, "Processing parameter: %s", param->name);
@@ -1660,29 +1687,45 @@ static void autopid_task(void *pvParameters)
                     {
                         if(!pid_requested)
                         {
-                            twai_message_t tx_msg;
-
-                            pid_requested = true;
-
-                            if(curr_pid->pid_type == PID_CUSTOM || curr_pid->pid_type == PID_SPECIFIC) 
+                            // Also reuse the last response when consecutive PID
+                            // entries share the same request (e.g. a multi-parameter
+                            // profile flattened into 1-parameter entries by the Web UI).
+                            if(same_pid_request(curr_pid, last_req_pid))
                             {
-                                if(curr_pid->init != NULL && strlen(curr_pid->init) > 0)
-                                {
-                                    send_commands(curr_pid->init, 2);
-                                }
+                                pid_requested = true;
+                                pid_cmd_ok = last_cmd_ok;
+                                pid_response_ok = last_response_ok;
                             }
-
-                            ESP_LOGI(TAG, "Executing command: %s", curr_pid->cmd);
-                            DEBUG_LOGI(TAG, "Executing command: %s", curr_pid->cmd);
-                            pid_cmd_ok = elm327_process_cmd((uint8_t*)curr_pid->cmd, 
-                                                strlen(curr_pid->cmd), 
-                                                &tx_msg, 
-                                                &autopidQueue) == ESP_OK;
-                            if(pid_cmd_ok)
+                            else
                             {
-                                ESP_LOGI(TAG, "Command processed successfully");
-                                DEBUG_LOGI(TAG, "Command processed successfully");
-                                pid_response_ok = xQueueReceive(autopidQueue, &elm327_response, pdMS_TO_TICKS(1000)) == pdPASS;
+                                twai_message_t tx_msg;
+
+                                pid_requested = true;
+
+                                if(curr_pid->pid_type == PID_CUSTOM || curr_pid->pid_type == PID_SPECIFIC) 
+                                {
+                                    if(curr_pid->init != NULL && strlen(curr_pid->init) > 0)
+                                    {
+                                        send_commands(curr_pid->init, 2);
+                                    }
+                                }
+
+                                ESP_LOGI(TAG, "Executing command: %s", curr_pid->cmd);
+                                DEBUG_LOGI(TAG, "Executing command: %s", curr_pid->cmd);
+                                pid_cmd_ok = elm327_process_cmd((uint8_t*)curr_pid->cmd, 
+                                                    strlen(curr_pid->cmd), 
+                                                    &tx_msg, 
+                                                    &autopidQueue) == ESP_OK;
+                                if(pid_cmd_ok)
+                                {
+                                    ESP_LOGI(TAG, "Command processed successfully");
+                                    DEBUG_LOGI(TAG, "Command processed successfully");
+                                    pid_response_ok = xQueueReceive(autopidQueue, &elm327_response, pdMS_TO_TICKS(1000)) == pdPASS;
+                                }
+
+                                last_req_pid = curr_pid;
+                                last_cmd_ok = pid_cmd_ok;
+                                last_response_ok = pid_response_ok;
                             }
                         }
 
@@ -2225,13 +2268,14 @@ all_pids_t* load_all_pids(void){
                                 int param_count = cJSON_GetArraySize(params);
                                 curr_pid->parameters_count = param_count;  // Set the count
                                 curr_pid->parameters = (parameter_t*)calloc(param_count, sizeof(parameter_t));
-                                curr_pid->parameters->period = all_pids->cycle;
-                                curr_pid->parameters->timer = 0;
-                                curr_pid->parameters->value = FLT_MAX;
                                 cJSON* param;
                                 int param_index = 0;
                                 cJSON_ArrayForEach(param, params) 
                                 {
+                                    curr_pid->parameters[param_index].period = all_pids->cycle;
+                                    curr_pid->parameters[param_index].timer = 0;
+                                    curr_pid->parameters[param_index].value = FLT_MAX;
+
                                     cJSON* name_item = cJSON_GetObjectItem(param, "name");
                                     curr_pid->parameters[param_index].name = name_item ? strdup(name_item->valuestring) : NULL;
 
@@ -2653,21 +2697,35 @@ void autopid_init(char* id)
         ESP_LOGE(TAG, "Failed to create autopid_values mutex");
         return;
     }
-    autopid_values = malloc(sizeof(autopid_value_t) * all_pids->pid_count);
+    uint32_t total_params = 0;
+    for (uint32_t i = 0; i < all_pids->pid_count; i++)
+    {
+        total_params += all_pids->pids[i].parameters_count;
+    }
+
+    autopid_values = calloc(total_params > 0 ? total_params : 1, sizeof(autopid_value_t));
     if (!autopid_values)
     {
         ESP_LOGE(TAG, "Failed to allocate memory for autopid_values");
         return;
     }
 
-    for (int i = 0; i < all_pids->pid_count; i++)
+    uint32_t value_index = 0;
+    for (uint32_t i = 0; i < all_pids->pid_count; i++)
     {
-        autopid_values[i].name = malloc(strlen(all_pids->pids[i].parameters->name) + 1);
-        strcpy(autopid_values[i].name, all_pids->pids[i].parameters->name);
-        autopid_values[i].value = FLT_MAX;
-        autopid_values[i].sensor_type = all_pids->pids[i].parameters->sensor_type;
+        for (uint32_t j = 0; j < all_pids->pids[i].parameters_count; j++)
+        {
+            parameter_t *param = &all_pids->pids[i].parameters[j];
+            if (param->name)
+            {
+                autopid_values[value_index].name = strdup(param->name);
+            }
+            autopid_values[value_index].value = FLT_MAX;
+            autopid_values[value_index].sensor_type = param->sensor_type;
+            value_index++;
+        }
     }
-    autopid_values_count = all_pids->pid_count;
+    autopid_values_count = value_index;
 
 
     
