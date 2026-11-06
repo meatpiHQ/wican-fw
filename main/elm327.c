@@ -472,7 +472,7 @@ static char* elm327_set_protocol(const char* command_str)
 		new_protocol = command_str[2];
 	}
 
-	if(new_protocol == elm327_config.protocol)
+	if(new_protocol == elm327_config.protocol && can_is_enabled())
 	{
 		return (char*)ok_str;
 	}
@@ -830,6 +830,10 @@ static int8_t elm327_request(char *cmd, char *rsp, QueueHandle_t *queue)
 	// 	ESP_LOGI(TAG, "sending %08X", txframe.identifier&TWAI_EXTD_ID_MASK);
 	// }
 	// ESP_LOG_BUFFER_HEX(TAG, txframe.data, 8);
+	if(!can_is_enabled())
+	{
+		can_enable();
+	}
 	if( elm327_can_log != NULL)
 	{
 		elm327_can_log(&txframe, ELM327_CAN_TX);
