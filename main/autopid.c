@@ -1225,15 +1225,19 @@ void parse_elm327_response(char *buffer, response_t *response) {
     ESP_LOGI(TAG, "First frame: %s", frame ? frame : "NULL");
 
     while (frame != NULL) {
-        ESP_LOGD(TAG, "Processing frame %d: %s", frame_count + 1, frame);
-        frame_count++;
-
         // Remove trailing '>' if present
         size_t len = strlen(frame);
         if (len > 0 && frame[len - 1] == '>') {
             frame[len - 1] = '\0';
+            len--;
             ESP_LOGV(TAG, "Removed trailing '>' from frame");
         }
+        if (len == 0) {
+            frame = strtok(NULL, "\r\n");
+            continue;
+        }
+
+        ESP_LOGD(TAG, "Processing frame %d: %s", frame_count + 1, frame);
 
         data_start = strchr(frame, ' ');
         if (data_start != NULL) {
@@ -1250,6 +1254,31 @@ void parse_elm327_response(char *buffer, response_t *response) {
             char header_str[9] = {0};
             strncpy(header_str, frame, header_length);
             uint32_t current_header = strtoul(header_str, NULL, 16);
+
+            data_start++;
+
+            // Handle different header formats
+            switch (header_length) {
+                case 2: 
+                    if (strlen(data_start) < 9) {
+                        ESP_LOGW(TAG, "Frame too short for 2-byte header format, skipping");
+                        frame = strtok(NULL, "\r\n");
+                        continue;
+                    }
+                    data_start += 9;
+                    ESP_LOGV(TAG, "2-byte header format: Adjusted data_start by 9");
+                    break;
+                case 3:
+                case 8:
+                    ESP_LOGV(TAG, "%d-byte header format: No adjustment needed", header_length);
+                    break;
+                default:
+                    ESP_LOGW(TAG, "Unexpected header length: %d, skipping frame", header_length);
+                    frame = strtok(NULL, "\r\n");
+                    continue;
+            }
+
+            frame_count++;
             ESP_LOGD(TAG, "Frame %d header: 0x%lX (length: %d)", frame_count, current_header, header_length);
             
             // Track highest header
@@ -1265,24 +1294,6 @@ void parse_elm327_response(char *buffer, response_t *response) {
             } else if (current_header != first_header) {
                 all_headers_same = false;
                 ESP_LOGD(TAG, "Different header detected: 0x%lX != 0x%lX", current_header, first_header);
-            }
-
-            data_start++;
-
-            // Handle different header formats
-            switch (header_length) {
-                case 2: 
-                    data_start += 9;
-                    ESP_LOGV(TAG, "2-byte header format: Adjusted data_start by 9");
-                    break;
-                case 3:
-                case 8:
-                    ESP_LOGV(TAG, "%d-byte header format: No adjustment needed", header_length);
-                    break;
-                default:
-                    ESP_LOGW(TAG, "Unexpected header length: %d, skipping frame", header_length);
-                    frame = strtok(NULL, "\r\n");
-                    continue;
             }
 
             // Store start position for copying data
@@ -1348,7 +1359,7 @@ void parse_elm327_response(char *buffer, response_t *response) {
                     ESP_LOGW(TAG, "Incomplete byte at end of frame: %s", data_start);
                     break;
                 }
-                if (k >= BUFFER_SIZE) {
+                if (k >= BUFFER_SIZE - 1) {
                     ESP_LOGW(TAG, "Response exceeds BUFFER_SIZE (%d), truncating", BUFFER_SIZE);
                     break;
                 }
@@ -1365,6 +1376,7 @@ void parse_elm327_response(char *buffer, response_t *response) {
         frame = strtok(NULL, "\r\n");
     }
 
+    response->data[k] = '\0';
     response->length = k;
     
     // Set priority data based on frame count and header comparison
