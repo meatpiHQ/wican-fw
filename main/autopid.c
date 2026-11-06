@@ -1431,24 +1431,22 @@ void autopid_parser(char *str, uint32_t len, QueueHandle_t *q)
                 parse_elm327_response(auto_pid_buf, &response);
                 if (xQueueSend(autopidQueue, &response, pdMS_TO_TICKS(1000)) != pdPASS)
                 {
+                    autopid_free_response(&response);
                     ESP_LOGE(TAG, "Failed to send to queue");
                     DEBUG_LOGE(TAG, "Failed to send to queue");
                 }
+                // Ownership of priority_data was handed to the queue (or freed
+                // above on failure); clear the static struct's pointer so a
+                // later call cannot free or re-queue it.
+                response.priority_data = NULL;
+                response.priority_data_len = 0;
             }
             else
             {
                 sprintf((char*)response.data, "error");
                 response.length = strlen((char*)response.data);
-                // The static response struct may still carry a priority_data
-                // buffer from a previous successful parse. The consumer frees
-                // priority_data after each response, so drop and clear the
-                // stale pointer here to avoid queuing (and later double-
-                // freeing) the same buffer alongside the error response.
-                if (response.priority_data != NULL)
-                {
-                    free(response.priority_data);
-                    response.priority_data = NULL;
-                }
+                response.priority_data = NULL;
+                response.priority_data_len = 0;
                 ESP_LOGE(TAG, "Error response: %s", auto_pid_buf);
                 DEBUG_LOGE(TAG, "Error response: %s", auto_pid_buf);
                 if (xQueueSend(autopidQueue, &response, pdMS_TO_TICKS(1000)) != pdPASS)
