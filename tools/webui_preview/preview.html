@@ -2134,7 +2134,12 @@
   if ((window.__mockPreset || {}).j1939Active === true) ov("j1939", { enabled: true, mode: "active" });
   else if ((window.__mockPreset || {}).j1939Listening === true) ov("j1939", { enabled: true });
   ov("data_logger", { enabled: false });
+  /* store and forward (2026-11-06): the data_logger document a scene wants
+     (e.g. {enabled:true, format:"jsonl", autopid_log:"all"}) */
+  if ((window.__mockPreset || {}).logger) ov("data_logger", window.__mockPreset.logger);
   ov("vpn_manager", { enabled: true, type: "wireguard", address: "10.66.0.2", routes: "10.66.0.0/24", endpoint: "vpn.example.com", port: 51820 });
+  /* a probe's VPN setting (2026-11-06): after the defaults above, which would undo it */
+  if ((window.__mockPreset || {}).vpnManager) ov("vpn_manager", window.__mockPreset.vpnManager);
   ov("usb_host_manager", { enabled: true, role: "host" });
   /* the "gps_off" USB scene is a receiver ignored because the USB GPS receiver switch
      is off (usb_acm_cli v2, issue #978: `gps` default true, `console` default false) */
@@ -2163,7 +2168,8 @@
     return { enabled: sm.enabled !== false, state: sp && sm.enabled !== false ? "low_voltage" : "normal", voltage: state.batteryV,
       sleep_v: (sm.sleep_mv || 13100) / 1000, wake_v: (sm.wake_mv || 13200) / 1000, naps: 0,
       pending: sp ? sp.cause : "none", sleep_in_s: left, critical_v: 11.9, critical_s: 300,
-      hold_s: hold, holds_left: 3 - state.holds, holds_max: 3 };
+      hold_s: hold, holds_left: 3 - state.holds, holds_max: 3,
+      activity_s: sp && state.logReadUntil > Date.now() ? Math.ceil((state.logReadUntil - Date.now()) / 1000) : 0 };
   };
   /* what /api/usb, /api/espnetlink, /api/usb/acm and /api/gps answer for the USB
      scene state.usb names (Quick Setup's USB step, 2026-10-07): "none",
@@ -2295,6 +2301,12 @@
        mock counts it down from the first read, then stops answering like a device that went to
        sleep (state.asleep; set it back to false to "wake" it) */
     sleepPending: (window.__mockPreset || {}).sleepPending || null,
+    /* store and forward (2026-11-06): what /api/logger's export{} block and
+       files count say, and a log read in progress (logReadS seconds of the
+       sleep extension left: /api/sleep activity_s) */
+    loggerExport: (window.__mockPreset || {}).loggerExport || null,
+    loggerFiles: (window.__mockPreset || {}).loggerFiles || 0,
+    logReadUntil: typeof (window.__mockPreset || {}).logReadS === "number" ? Date.now() + 1000 * window.__mockPreset.logReadS : 0,
     asleep: false,
     /* the USB connector as Quick Setup's USB step sees it (2026-10-07): a preset or
        __mockState.usb names the scene, usbScene() below spells it out; null = the
@@ -2812,8 +2824,13 @@
     "/api/autopid/dbc": () => J({ dbcs: state.dbcs || [], max: 4 }),
     "/api/autopid/dbc/signals": (full) => { const q = new URLSearchParams((full || "").split("?")[1] || ""); const db = q.get("db");
       const items = (state.dbcSignals || []).filter((s) => !db || s.db === db); return J({ total: items.length, items }); },
-    "/api/logger": () => J({ enabled: !!state.loggerRunning, running: !!state.loggerRunning, paused: false, storage_ok: false, file: state.loggerFile, file_rows: 0, files: 0, queued: 0,
+    "/api/logger": () => J({ enabled: !!state.loggerRunning, running: !!state.loggerRunning, paused: false, storage_ok: false,
+      format: (S.data_logger && S.data_logger.values && S.data_logger.values.format) || "sqlite",
+      autopid_log: (S.data_logger && S.data_logger.values && S.data_logger.values.autopid_log) || "off",
+      file: state.loggerFile, file_rows: 0, files: state.loggerFiles || 0, queued: 0,
       written: 0, dropped: 0, errors: 0, rotations: 0,
+      /* what GET /api/logger/export served (store and forward, 2026-11-06) */
+      export: state.loggerExport || { reads: 0, rows: 0, bytes: 0, age_s: -1, cursor: "" },
       can: { enabled: false, file: "", file_rows: 0, files: 0, queued: 0, frames_written: 0, frames_dropped: 0, rotations: 0 },
       salvaged: state.loggerSalvaged || 0, corrupt: state.loggerCorrupt || 0,
       clock: state.clockUnset ? { valid: false, source: "none", steps_this_boot: 0, rotations_by_clock: 0, journal_bytes: 0, journal: "/sd/logs/clock.jsonl" }
@@ -3225,6 +3242,17 @@
       return T(out + JSON.stringify({ _cursor: "0:0", more: false }) + "\n");
     }
     if (method === "POST" && path === "/api/logger/gate") { state.gateCalls++; return J({ ok: true }); }
+    /* the GPS track (2026-11-06): a three-point GPX document with the device's trailer */
+    if (method === "GET" && path === "/api/logger/gpx") {
+      const fmt = (S.data_logger && S.data_logger.values && S.data_logger.values.format) || "sqlite";
+      if (fmt !== "jsonl" && fmt !== "csv") return T("params stream is not jsonl or csv", 400);
+      const pts = [[-25.344400, 131.036900, 88.8], [-25.344900, 131.037400, 89.1], [-25.345600, 131.038200, 89.5]];
+      const body = '<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="WiCAN PRO" xmlns="http://www.topografix.com/GPX/1/1">\n'
+        + "<metadata><name>WiCAN track</name><time>2026-11-06T03:00:00.000Z</time></metadata>\n<trk><name>WiCAN track</name>\n<trkseg>\n"
+        + pts.map((p, i) => '<trkpt lat="' + p[0].toFixed(6) + '" lon="' + p[1].toFixed(6) + '"><ele>' + p[2].toFixed(1) + "</ele><time>2026-11-06T03:00:0" + i + ".000Z</time><extensions><speed>17.10</speed><course>270.5</course><sat>7</sat></extensions></trkpt>\n").join("")
+        + '</trkseg>\n</trk>\n</gpx>\n<!-- cursor="1793930400:4120" more="false" points="3" -->\n';
+      return T(body);
+    }
     if (method === "GET" && path === "/api/fs/download") {
       const p = q.get("path");
       /* the clock journal (2026-10-13): the legacy JSON-lines file and the ASC file were open when the clock
@@ -4342,8 +4370,11 @@ function sleepSoonWhy(){
 function sleepHoldsLeft(){const st=sleepSoon.st;return st&&typeof st.holds_left==="number"?st.holds_left:0;}
 function sleepHoldText(){
   const st=sleepSoon.st;if(!st||typeof st.holds_left!=="number")return"";
-  if(st.hold_s>0)return"Kept awake on your request ("+st.holds_left+" of "+st.holds_max+" holds left). ";
-  return st.holds_left===0?"Kept awake "+st.holds_max+" times: no further extension. ":"";
+  /* a log read in progress (the Home Assistant backfill, the dashboard's
+     history) pushes the countdown out a minute at a time (2026-11-06) */
+  const act=st.activity_s>0?"Kept awake while the log is being read. ":"";
+  if(st.hold_s>0)return act+"Kept awake on your request ("+st.holds_left+" of "+st.holds_max+" holds left). ";
+  return act+(st.holds_left===0?"Kept awake "+st.holds_max+" times: no further extension. ":"");
 }
 function applySleepStatus(st){
   if(st&&typeof st.enabled==="boolean")conn.sleepEnabled=st.enabled;
@@ -6188,6 +6219,50 @@ PAGES.automate=async(view,sub)=>{
         ...(wh.status==="rejected"?[h("span",{class:"help",style:"color:var(--crit)"},"Home Assistant rejected this device's identity: pushes are paused until it re-registers.")]:[]),
         wh.url?h("span",{class:"help",style:"overflow-wrap:anywhere"},"URL: ",h("b",{class:"mono",style:"color:var(--text)"},wh.url)):h("span",{class:"help"},"Not registered: the HA integration registers itself when it discovers the device"));};
     await paint();
+    /* Store and forward (2026-11-06): the vehicle parameters logged to the SD
+       card while the car is away are pulled by the integration once it is
+       home (GET /api/logger/export) and imported into each sensor's
+       long-term statistics at the recorded hours. The switch stages the
+       data_logger keys the backfill needs (the logger on, JSON lines or CSV
+       files, the AutoPID sink on every sample); the chips read /api/logger
+       (the files on the card, what the integration has read so far). */
+    let dl=null;try{dl=await api("/api/settings/data_logger");delete dl.degraded;delete dl.pending_reboot;}catch(e){}
+    /* Ali, 2026-11-06: with a VPN the integration reaches the device away from
+       home too, so the catch-up runs over mobile data as well: say so. The
+       setting, not the tunnel's state (the tunnel comes up on the road). */
+    const vm=await tryGet("/api/settings/vpn_manager"),vpnOn=!!(vm&&vm.enabled);
+    const sfOn=x=>!!(x&&x.enabled&&(x.format==="jsonl"||x.format==="csv")&&x.autopid_log!=="off");
+    /* the feature needs the card (Ali, 2026-11-06: show it disabled without one or
+       with a card WiCAN cannot use): the status poll's sd summary says which */
+    const sdNo=()=>{const s=sdSummary(),b=conn.status&&conn.status.bits;
+      if(!s)return(b&&b.sdcard_mounted===false)?"No SD card inserted":null;
+      if(s.state==="absent")return"No SD card inserted";
+      if(s.state==="failed")return sdShort(s);
+      if(s.state==="unreadable")return sdShort(s);
+      return null;};
+    const sfEl=h("div",{class:"rowflex",style:"flex-wrap:wrap;gap:8px;margin-top:6px"});
+    const paintSf=async()=>{const lg=await tryGet("/api/logger");if(!lg)return;
+      const ex=lg.export||{},on=sfOn(dl),no=sdNo();
+      sfEl.replaceChildren(
+        ...(no?[chip("Unavailable: "+no.toLowerCase(),"crit"),...((sdSummary()||{}).state==="unreadable"?[sdFormatLink()]:[]),
+                h("span",{class:"help"},on?"The setting is on; nothing is recorded until a FAT32 card is in the slot.":"Insert a FAT32 SD card to use it.")]:[
+        chip(on?"Logging "+(dl.autopid_log==="all"?"every sample":"changes")+" as "+dl.format:"Off",on?"ok":""),
+        ...(on&&lg.enabled&&!lg.storage_ok?[chip("SD card not available","crit")]:[]),
+        ...(lg.files?[chip(fmt.num(lg.files)+" file"+(lg.files===1?"":"s")+" on the card","")]:[]),
+        ...(on&&vpnOn?[chip("VPN on: pulls over mobile data too","warn"),
+          h("span",{class:"help"},"With the VPN on, Home Assistant reaches the device away from home as well and pulls the log there too: everything since its last read, about 220 KB per parameter and hour recorded.")]:[]),
+        h("span",{class:"help"},ex.reads?"Last read "+fmtSpan(ex.age_s||0)+" ago, "+fmt.num(ex.rows)+" rows served since the start.":"Not read yet: Home Assistant pulls the log when the car is back after being away.")]));};
+    if(dl){
+      const sfSw=switchCtl(sfOn(dl),v=>{
+        if(v){dl.enabled=true;if(dl.format!=="jsonl"&&dl.format!=="csv")dl.format="jsonl";if(dl.autopid_log==="off")dl.autopid_log="all";}
+        else dl.autopid_log="off";
+        store.stage("data_logger",dl);paintSf();},{yes:"On",no:"Off"});
+      if(sdNo()){const inp=sfSw.querySelector("input");inp.disabled=true;sfSw.title=sdNo();sfSw.style.opacity=".55";sfSw.style.cursor="not-allowed";}
+      await paintSf();
+      haRows.push(h("div",{class:"frow",dataset:{sf:"1"}},h("label",{},"Store and forward"),h("div",{class:"ctl"},sfSw),
+        h("div",{class:"help"},"Logs the vehicle parameters to the SD card (every sample, JSON lines: the Logger page has the details) so the Home Assistant integration can backfill the hours the car was away into each sensor's long-term statistics once it is home. Hourly resolution; the live pushes are never replayed.",
+          sfEl)));
+    }
     paneHa.append(card("Home Assistant","home",...haRows,
       h("div",{class:"frow"},h("label",{},"Webhook stats"),h("div",{class:"ctl"},statsEl)),
       note("","The WebHook URL, failover URL and interval are managed by the Home Assistant integration while enabled: it registers itself via POST /api/webhook. Gzip compresses pushes (needs an integration from 2026-07 or newer).")));
@@ -6801,6 +6876,7 @@ PAGES.power=async(view)=>{
          (meatpi 2026-10-06): it cuts a longer sleep delay short too */
       note("","Critical battery floor: under "+(st&&st.critical_v?st.critical_v.toFixed(1):"11.9")+" V for "+fmtSpan(st&&st.critical_s?st.critical_s:300)+" WiCAN goes to sleep without waiting for a longer sleep delay, and with sleep mode off too. It wakes at the wake-up voltage."),
       note("","Keep awake: while a countdown runs, the bar at the top offers ten more minutes, and the page asks one minute before the entry. A press moves the sleep delay and the critical floor out by ten minutes, three times per start; nothing is saved and a restart drops it."),
+      note("","Reading the log: while Home Assistant backfills a drive's parameters from the SD card (Automate > Home Assistant > Store and forward), or the dashboard reads its history, a running countdown is pushed out a minute at a time, ten minutes at most past the first read. Nothing is saved."),
       note("warn","Disabling sleep continuously drains the vehicle battery when the engine is off. Only disable for testing.")));
   }catch(e){wrap.append(banner("crit","alert",e.message));}
   return null;
@@ -7004,6 +7080,7 @@ PAGES.logger=async(view)=>{
   async function status(){
     const[l,rtcNow]=await Promise.all([tryGet("/api/logger"),tryGet("/api/rtc")]);if(!l)return;
     const can=l.can||{};const sd=isMounted();
+    const gn=$("#gpx-fmt-note");if(gn&&l.format)gn.style.display=(l.format==="jsonl"||l.format==="csv")?"none":"";
     /* a card in the slot WiCAN cannot read (2026-10-25): say so, offer the format */
     const sds=sdSummary(),sdBad=!sd&&sdAttention(sds);
     const state=!l.enabled?chip("Off",""):l.paused?chip("Paused","warn"):(l.running&&l.storage_ok)?chip("Recording","ok"):sd?chip("Waiting for storage","warn"):sdBad?chip("Not recording","warn"):chip("No SD card","crit");
@@ -7070,6 +7147,21 @@ PAGES.logger=async(view)=>{
       show,{empty:"No log files yet."});
     filesWrap.replaceChildren(tbl,ents.length>MAXN?h("div",{class:"help",style:"margin-top:8px"},"Newest "+MAXN+" of "+ents.length+" files: open the folder for the rest."):null);
   }
+  /* the GPS track (2026-11-06, Ali: "let's also do the GPX GPS time series"):
+     the recorded gps_* parameters served back as a GPX document by
+     GET /api/logger/gpx?since=<epoch>; a window picker and a download link.
+     Needs the params stream as JSON lines or CSV (Store and forward sets it). */
+  const GPX_WINDOWS=[[3600,"Last hour"],[3*3600,"Last 3 hours"],[6*3600,"Last 6 hours"],[24*3600,"Last 24 hours"],[7*86400,"Last 7 days"],[0,"Everything on the card"]];
+  const gpxSel=h("select",{},...GPX_WINDOWS.map(([s,t])=>h("option",{value:String(s)},t)));gpxSel.value=String(24*3600);
+  const gpxHref=()=>{const s=Number(gpxSel.value);return API+"/api/logger/gpx"+(s?"?since="+Math.floor(Date.now()/1000-s):"");};
+  const gpxLink=h("a",{class:"btn sm pri",id:"gpx-download",href:gpxHref(),download:"wican_track.gpx"},ic("download")," Download GPX");
+  gpxSel.onchange=()=>{gpxLink.href=gpxHref();};
+  /* the format note follows /api/logger's `format` on every status poll */
+  const gpxNote=note("warn","The parameter log is not JSON lines or CSV, so no track can be built from it: choose JSON lines above, or turn on Store and forward under Automate > Home Assistant.");gpxNote.id="gpx-fmt-note";gpxNote.style.display="none";
+  filesEl.append(cardTools("GPS track","map",[],
+    h("div",{class:"frow"},h("label",{},"Window"),h("div",{class:"ctl"},h("div",{class:"rowflex",style:"gap:10px;flex-wrap:wrap"},gpxSel,gpxLink)),
+      h("div",{class:"help"},"The GPS fix recorded with the vehicle parameters (the gps_latitude, gps_longitude, gps_altitude, gps_speed, gps_heading and gps_satellites values, every sample while Store and forward or the parameter log is on) as a GPX 1.1 track: a point per fix, a new segment after ten minutes without one, up to 2000 points per download (the file ends with a note when there are more). Opens in any map tool; the Home Assistant integration's wican.save_gpx service fetches the same.")),
+    gpxNote));
   filesEl.append(cardTools("Log files","folder",[h("button",{class:"btn sm gh",type:"button",title:"Refresh the list",onclick:()=>loadFiles()},ic("refresh")),
     h("a",{class:"btn sm gh",title:"The clock journal: every time the clock was set or stepped, with the files that were open (tools/log_clock.py re-bases a file with it)",href:API+"/api/fs/download?path="+enc(LOG_DIR+"/clock.jsonl"),download:"clock.jsonl"},ic("download"),"Clock journal"),
     folderBtn()],filesWrap));

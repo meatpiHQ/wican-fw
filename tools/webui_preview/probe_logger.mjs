@@ -38,8 +38,8 @@ const setSel = (el, v) => { el.value = v; fire(el, "change"); };
 (async () => {
   await sleep(1200);
   const titles = cards().map((c) => ((c.querySelector("h3") || {}).textContent || "").trim());
-  check("cards: Status · Logger settings · Vehicle parameters · CAN frames · Log files (" + titles.join(" · ") + ")",
-    JSON.stringify(titles) === JSON.stringify(["Status", "Logger settings", "Vehicle parameters", "CAN frames", "Log files"]));
+  check("cards: Status · Logger settings · Vehicle parameters · CAN frames · GPS track · Log files (" + titles.join(" · ") + ")",
+    JSON.stringify(titles) === JSON.stringify(["Status", "Logger settings", "Vehicle parameters", "CAN frames", "GPS track", "Log files"]));
   const status = cardByTitle("Status");
   const chips = [...status.querySelectorAll(".lg-chips .chip")].map((c) => c.textContent.trim());
   /* the mock's card reads 14.83 GB since the 64-bit capacity fix (issue #982, 2026-10-11) */
@@ -129,6 +129,26 @@ const setSel = (el, v) => { el.value = v; fire(el, "change"); };
   row("enabled").querySelector("label.switch input").click(); await sleep(50);
   check("disabling hides the stream cards and the nudge", !shown(cardByTitle("Vehicle parameters")) && !shown(cardByTitle("CAN frames")) && !shown(nothing));
   check("one component staged for submit", w.eval("store").count() === 1 && /Submit/.test(d().querySelector("#submitbtn").textContent));
+
+  /* the GPS track card (2026-11-06): a window picker and the GPX download link;
+     the mock's log is sqlite, so the format note shows */
+  const gpxCard = cardByTitle("GPS track");
+  check("GPS track card present", !!gpxCard);
+  if (gpxCard) {
+    const link = gpxCard.querySelector("#gpx-download");
+    check("the download link asks /api/logger/gpx for the last 24 h", !!link && /\/api\/logger\/gpx\?since=\d{10}$/.test(link.getAttribute("href")) && link.getAttribute("download") === "wican_track.gpx", link && link.getAttribute("href"));
+    const sel = gpxCard.querySelector("select");
+    setSel(sel, "0"); await sleep(30);
+    check("Everything on the card drops the window", /\/api\/logger\/gpx$/.test(link.getAttribute("href")), link.getAttribute("href"));
+    setSel(sel, "3600"); await sleep(30);
+    const now = Math.floor(Date.now() / 1000);
+    const since = Number((link.getAttribute("href").match(/since=(\d+)/) || [])[1]);
+    check("Last hour asks for the hour before now", Math.abs(now - 3600 - since) <= 5, since);
+    const fmtNote = gpxCard.querySelector("#gpx-fmt-note");
+    check("the format note shows on a sqlite log", !!fmtNote && fmtNote.style.display !== "none" && /not JSON lines or CSV/.test(fmtNote.textContent));
+    const r = await w.fetch("/api/logger/gpx?since=1");
+    check("the mock serves no track for a sqlite log (400)", r.status === 400);
+  }
 
   /* the Files deep link from "Open folder" */
   w.eval("store").pending.clear(); w.eval("store").dirty.clear(); w.eval("renderSubmit()");

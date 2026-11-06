@@ -15,7 +15,7 @@
 # land in test-reports\logs\<run>\ (gitignored).
 #
 param(
-    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'bleram', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'profilee2e', 'slcan', 'j2534auto', 'j2534std', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'wgcycle', 'tspublic', 'tlschain', 'garage', 'espnleasy', 'espnlapn', 'usbgps', 'usbdetach', 'abrp', 'backup', 'fwupdate', 'espnlota', 'logclock', 'sdformat', 'obdfw', 'canselftest', 'attpstore', 'obdbringup', 'connections', 'stackaudit', 'dwc2', 'logsinks', 'release', 'all', 'list')]
+    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'bleram', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'profilee2e', 'slcan', 'j2534auto', 'j2534std', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'wgcycle', 'tspublic', 'tlschain', 'habackfill', 'garage', 'espnleasy', 'espnlapn', 'usbgps', 'usbdetach', 'abrp', 'backup', 'fwupdate', 'espnlota', 'logclock', 'sdformat', 'obdfw', 'canselftest', 'attpstore', 'obdbringup', 'connections', 'stackaudit', 'dwc2', 'logsinks', 'release', 'all', 'list')]
     [string]$What,
     [Parameter(Position = 1)][string]$Component,
     [ValidateSet('6.0.2', '6.1')][string]$Idf = '6.1',  # the ESP-IDF the build stages use (6.1 since 6.0.0-beta.5, 2026-10-27; 6.0.2 stays installed; build.ps1 -Idf has the same table)
@@ -947,6 +947,7 @@ function Show-Inventory {
     Write-Host '  wgcycle    - WireGuard torn down while MQTT runs through it, N times (the beta.5 vpn_state crashes, 2026-11-02): wg-bench on the Pi, the broker at its tunnel address, a station trial to a network that does not exist drops the uplink each cycle; connects grows, MQTT returns, no reboot (~30 s per cycle, 10 cycles)'
     Write-Host '  tspublic   - Tailscale on Betty: six DUT-initiated subnet requests over pure relay through rekey (direct UDP blocked), no false direct endpoint, direct DISCO/ICMP/HTTP recovery, PSRAM stacks, flat RAM, zero errors/faults, exact settings restoration and scoped teardown (~10 min; needs betty and the DUT on the Pi''s internet path)'
     Write-Host '  tlschain   - An HTTPS chain ending in a cross-signed root (Cloudflare under GTS Root R4 as signed by GlobalSign Root CA, 2026-11-03) accepted by the built-in certificate bundle: the HA webhook pointed at such a host must get an HTTP answer, never a transport error; restored afterwards (~40 s; needs internet for the DUT)'
+    Write-Host '  habackfill - Store and forward (2026-11-06): a drive recorded on the SD card as JSON lines reaches the bench Home Assistant''s long-term statistics once the pushes return, through the export route and its cursor; the Catch up history button, nothing imported twice, the sleep countdown pushed out while the log is read (the OWON at 12.5 V), everything restored (~12 min, 2 planned restarts; needs the bench HA on rpi001, the simulator answering 010C, internal/bench_ha_credentials.json)'
     Write-Host '  espnleasy  - the ESPNetLink easy-setup surfaces on the DUT (2026-10-13): the usb summary on /api/status against /api/espnetlink, the sim_pin key (a no-op PUT, no restart), the UI doors in the served page, the GPS hint counting away from home (ap off on the P4 for 100 s, home again) (~6 min; needs the P4 daemon)'
     Write-Host '  espnlapn   - the carrier settings relay in the USB modes (2026-10-28): a bench APN set on the WiCAN reaches the dongle through the share pass (one planned dongle restart), a plain WiCAN restart writes nothing, the APN restored as found and the LTE back (~8 min, 3 to 4 planned WiCAN restarts, 2 dongle restarts; the dongle on the connector in a USB mode with its console on; its LTE is down while the bench APN is on it)'
     Write-Host '  garage     - the garage story with the ESPNetLink (2026-10-12): home WiFi on the P4, away on the dongle LTE with the VPN to betty, home again, flaps, a dongle reboot away, sleep/wake both ways; the data path judged at a receiver on betty by the source address of every POST; the default legs in usb_rndis with VPN variant A (~35 min; wifi_modem, variant B, g9 and g11 by hand)'
@@ -1533,6 +1534,28 @@ try {
                     $out = & $py -u "$repo\tools\testbench\ha\tls_chain_bench.py" '--dut' 'localhost:18083' 2>&1 | ForEach-Object { Write-Host $_; $_ }
                     Save-StageLog 'tls_chain' $out
                     if (-not ($out | Select-String -Quiet 'TLS CHAIN PASS')) { throw 'no TLS CHAIN PASS (the DUT on the bench AP with internet? does the host still serve the cross-signed chain? testing/tlschain.md)' }
+                } finally {
+                    if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
+                    Stop-ConsoleTail $con
+                }
+            }
+        }
+        'habackfill' {
+            # Store and forward (2026-11-06): the drive recorded on the SD card
+            # reaches the bench HA's long-term statistics through the export
+            # route once the pushes return; the Catch up history button; the
+            # sleep countdown pushed out while the log is read (the OWON);
+            # everything restored. testing/habackfill.md.
+            Invoke-Stage 'Store and forward: the SD card log into Home Assistant' {
+                $py = $script:BenchPy
+                $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18086:${DutIp}:80", $BenchHost)
+                $con = Start-ConsoleTail 'ha_backfill'
+                try {
+                    Start-Sleep -Seconds 3
+                    if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (port 18086 busy?)" }
+                    $out = & $py -u "$repo\tools\testbench\ha\ha_history_backfill_bench.py" '--dut' 'localhost:18086' '--dut-ip' $DutIp '--pi' $BenchHost 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    Save-StageLog 'ha_backfill' $out
+                    if (-not ($out | Select-String -Quiet 'HA BACKFILL PASS')) { throw 'no HA BACKFILL PASS (the bench HA up on rpi001? the simulator answering 010C? testing/habackfill.md)' }
                 } finally {
                     if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
                     Stop-ConsoleTail $con

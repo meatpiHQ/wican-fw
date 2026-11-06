@@ -28,7 +28,12 @@
   if ((window.__mockPreset || {}).j1939Active === true) ov("j1939", { enabled: true, mode: "active" });
   else if ((window.__mockPreset || {}).j1939Listening === true) ov("j1939", { enabled: true });
   ov("data_logger", { enabled: false });
+  /* store and forward (2026-11-06): the data_logger document a scene wants
+     (e.g. {enabled:true, format:"jsonl", autopid_log:"all"}) */
+  if ((window.__mockPreset || {}).logger) ov("data_logger", window.__mockPreset.logger);
   ov("vpn_manager", { enabled: true, type: "wireguard", address: "10.66.0.2", routes: "10.66.0.0/24", endpoint: "vpn.example.com", port: 51820 });
+  /* a probe's VPN setting (2026-11-06): after the defaults above, which would undo it */
+  if ((window.__mockPreset || {}).vpnManager) ov("vpn_manager", window.__mockPreset.vpnManager);
   ov("usb_host_manager", { enabled: true, role: "host" });
   /* the "gps_off" USB scene is a receiver ignored because the USB GPS receiver switch
      is off (usb_acm_cli v2, issue #978: `gps` default true, `console` default false) */
@@ -57,7 +62,8 @@
     return { enabled: sm.enabled !== false, state: sp && sm.enabled !== false ? "low_voltage" : "normal", voltage: state.batteryV,
       sleep_v: (sm.sleep_mv || 13100) / 1000, wake_v: (sm.wake_mv || 13200) / 1000, naps: 0,
       pending: sp ? sp.cause : "none", sleep_in_s: left, critical_v: 11.9, critical_s: 300,
-      hold_s: hold, holds_left: 3 - state.holds, holds_max: 3 };
+      hold_s: hold, holds_left: 3 - state.holds, holds_max: 3,
+      activity_s: sp && state.logReadUntil > Date.now() ? Math.ceil((state.logReadUntil - Date.now()) / 1000) : 0 };
   };
   /* what /api/usb, /api/espnetlink, /api/usb/acm and /api/gps answer for the USB
      scene state.usb names (Quick Setup's USB step, 2026-10-07): "none",
@@ -189,6 +195,12 @@
        mock counts it down from the first read, then stops answering like a device that went to
        sleep (state.asleep; set it back to false to "wake" it) */
     sleepPending: (window.__mockPreset || {}).sleepPending || null,
+    /* store and forward (2026-11-06): what /api/logger's export{} block and
+       files count say, and a log read in progress (logReadS seconds of the
+       sleep extension left: /api/sleep activity_s) */
+    loggerExport: (window.__mockPreset || {}).loggerExport || null,
+    loggerFiles: (window.__mockPreset || {}).loggerFiles || 0,
+    logReadUntil: typeof (window.__mockPreset || {}).logReadS === "number" ? Date.now() + 1000 * window.__mockPreset.logReadS : 0,
     asleep: false,
     /* the USB connector as Quick Setup's USB step sees it (2026-10-07): a preset or
        __mockState.usb names the scene, usbScene() below spells it out; null = the
@@ -706,8 +718,13 @@
     "/api/autopid/dbc": () => J({ dbcs: state.dbcs || [], max: 4 }),
     "/api/autopid/dbc/signals": (full) => { const q = new URLSearchParams((full || "").split("?")[1] || ""); const db = q.get("db");
       const items = (state.dbcSignals || []).filter((s) => !db || s.db === db); return J({ total: items.length, items }); },
-    "/api/logger": () => J({ enabled: !!state.loggerRunning, running: !!state.loggerRunning, paused: false, storage_ok: false, file: state.loggerFile, file_rows: 0, files: 0, queued: 0,
+    "/api/logger": () => J({ enabled: !!state.loggerRunning, running: !!state.loggerRunning, paused: false, storage_ok: false,
+      format: (S.data_logger && S.data_logger.values && S.data_logger.values.format) || "sqlite",
+      autopid_log: (S.data_logger && S.data_logger.values && S.data_logger.values.autopid_log) || "off",
+      file: state.loggerFile, file_rows: 0, files: state.loggerFiles || 0, queued: 0,
       written: 0, dropped: 0, errors: 0, rotations: 0,
+      /* what GET /api/logger/export served (store and forward, 2026-11-06) */
+      export: state.loggerExport || { reads: 0, rows: 0, bytes: 0, age_s: -1, cursor: "" },
       can: { enabled: false, file: "", file_rows: 0, files: 0, queued: 0, frames_written: 0, frames_dropped: 0, rotations: 0 },
       salvaged: state.loggerSalvaged || 0, corrupt: state.loggerCorrupt || 0,
       clock: state.clockUnset ? { valid: false, source: "none", steps_this_boot: 0, rotations_by_clock: 0, journal_bytes: 0, journal: "/sd/logs/clock.jsonl" }
@@ -1119,6 +1136,17 @@
       return T(out + JSON.stringify({ _cursor: "0:0", more: false }) + "\n");
     }
     if (method === "POST" && path === "/api/logger/gate") { state.gateCalls++; return J({ ok: true }); }
+    /* the GPS track (2026-11-06): a three-point GPX document with the device's trailer */
+    if (method === "GET" && path === "/api/logger/gpx") {
+      const fmt = (S.data_logger && S.data_logger.values && S.data_logger.values.format) || "sqlite";
+      if (fmt !== "jsonl" && fmt !== "csv") return T("params stream is not jsonl or csv", 400);
+      const pts = [[-25.344400, 131.036900, 88.8], [-25.344900, 131.037400, 89.1], [-25.345600, 131.038200, 89.5]];
+      const body = '<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="WiCAN PRO" xmlns="http://www.topografix.com/GPX/1/1">\n'
+        + "<metadata><name>WiCAN track</name><time>2026-11-06T03:00:00.000Z</time></metadata>\n<trk><name>WiCAN track</name>\n<trkseg>\n"
+        + pts.map((p, i) => '<trkpt lat="' + p[0].toFixed(6) + '" lon="' + p[1].toFixed(6) + '"><ele>' + p[2].toFixed(1) + "</ele><time>2026-11-06T03:00:0" + i + ".000Z</time><extensions><speed>17.10</speed><course>270.5</course><sat>7</sat></extensions></trkpt>\n").join("")
+        + '</trkseg>\n</trk>\n</gpx>\n<!-- cursor="1793930400:4120" more="false" points="3" -->\n';
+      return T(body);
+    }
     if (method === "GET" && path === "/api/fs/download") {
       const p = q.get("path");
       /* the clock journal (2026-10-13): the legacy JSON-lines file and the ASC file were open when the clock

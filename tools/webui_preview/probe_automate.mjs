@@ -247,6 +247,34 @@ const check = (n, ok) => { console.log((ok ? "PASS " : "FAIL ") + n); if (!ok) p
     check("custom PIDs survived the import", cust.includes("OilTemp"));
     check("RX Hdr column present on custom tab", !!d().querySelector('input[placeholder="7E8"]'));
   }
+  /* Store and forward (2026-11-06): one switch on the HA card stages the
+     data_logger keys the backfill needs; the mock's defaults are off. Runs
+     after the vehicle flow (it stages another document; the navigation
+     guard's Discard below clears both) and judges through the page's own
+     surfaces: the row's chips and the Submit button's count and title. */
+  {
+    const haCard2 = [...d().querySelectorAll(".section")].find((c) => /Home Assistant/.test((c.querySelector("h3") || {}).textContent));
+    const sfRow = haCard2 && haCard2.querySelector('.frow[data-sf="1"]');
+    check("Store and forward row on the HA card", !!sfRow && /Store and forward/.test(sfRow.textContent));
+    const sfInput = sfRow && sfRow.querySelector(".switch input");
+    /* textContent glues the pieces ("forwardOffLogs"): read the switch's own label */
+    const swText = () => ((sfRow.querySelector(".swl") || {}).textContent || "").trim();
+    check("store and forward reads Off on the mock's defaults (sqlite, autopid_log off)",
+      !!sfInput && !sfInput.checked && swText() === "Off" && /Not read yet/.test(sfRow.textContent));
+    const countOf = () => { const m = /Submit Changes \((\d+)\)/.exec(d().querySelector("#submitlabel").textContent); return m ? Number(m[1]) : 0; };
+    const before = countOf();
+    if (sfInput) { sfInput.click(); await sleep(200); }
+    check("switching it on stages the Logger document (Submit count +1, title names Logger)",
+      countOf() === before + 1 && /Logger/.test(d().querySelector("#submitbtn").title));
+    check("the chip then reads Logging every sample as jsonl", /Logging every sample as jsonl/.test(sfRow.textContent));
+    /* Ali, 2026-11-06 evening: no network rule; with the VPN enabled (the
+       mock's vpn_manager is) the row warns that the pull runs over mobile data */
+    check("with the VPN enabled the row warns that the pull runs over mobile data too",
+      /VPN on: pulls over mobile data too/.test(sfRow.textContent) && /220 KB per parameter/.test(sfRow.textContent));
+    if (sfInput) { sfInput.click(); await sleep(200); }
+    check("switching it off reads Off again and keeps the document staged", swText() === "Off" && countOf() === before + 1);
+    check("the VPN warning goes with the switch", !/VPN on/.test(sfRow.textContent));
+  }
   if (errs.length) { console.log('errors so far:'); errs.forEach(e=>console.log('  '+e)); }
   /* rules page: the veh flow staged settings, so the unsaved-changes
      guard modal appears on navigation: choose Discard (authentic UX) */
@@ -267,6 +295,53 @@ const check = (n, ok) => { console.log((ok ? "PASS " : "FAIL ") + n); if (!ok) p
   const m2 = (d().querySelector("#modal-root") || {}).textContent || "";
   /* 2026-09-17: the plain-language builder (Trigger / Only if / Then) replaced the When/Do/With JSON modal */
   check("rule builder modal (Trigger/Only if/Then)", /Trigger/.test(m2) && /Only if/.test(m2) && /Then/.test(m2) && !/With/.test(m2));
+  /* Store and forward without a usable card (Ali, 2026-11-06): the switch is
+     disabled and the chip says why; a second page load per SD scene */
+  for (const [scene, words] of [["absent", /no sd card inserted/i], ["exfat", /not readable/i], ["failed", /not answering/i]]) {
+    const errs2 = [];
+    const vc2 = new VirtualConsole();
+    vc2.on("jsdomError", (e) => errs2.push(e.message));
+    const dom2 = new JSDOM(html, {
+      runScripts: "dangerously", url: "http://wican.local/#/automate/homeassistant",
+      pretendToBeVisual: true, virtualConsole: vc2,
+      beforeParse(w2) {
+        w2.__mockPreset = { sd: scene };
+        w2.matchMedia = () => ({ matches: false, addListener() {}, addEventListener() {} });
+        w2.scrollTo = () => {}; w2.HTMLCanvasElement.prototype.getContext = () => null;
+      },
+    });
+    await sleep(1200);
+    const row2 = dom2.window.document.querySelector('.frow[data-sf="1"]');
+    const inp2 = row2 && row2.querySelector(".switch input");
+    check("store and forward switch disabled with the SD scene " + scene,
+      !!inp2 && inp2.disabled && /Unavailable/.test(row2.textContent) && words.test(row2.textContent));
+    check("the exfat scene offers the format link, the others do not",
+      (scene === "exfat") === !!(row2 && row2.querySelector(".sd-fmt-link")));
+    if (errs2.length) { console.log("JS errors (sd " + scene + "):"); errs2.forEach((e) => console.log("  " + e)); process.exitCode = 1; }
+    dom2.window.close();
+  }
+  /* the warning needs the VPN setting: a page load with it off and the
+     logger on shows the chips without it */
+  {
+    const errs3 = [];
+    const vc3 = new VirtualConsole();
+    vc3.on("jsdomError", (e) => errs3.push(e.message));
+    const dom3 = new JSDOM(html, {
+      runScripts: "dangerously", url: "http://wican.local/#/automate/homeassistant",
+      pretendToBeVisual: true, virtualConsole: vc3,
+      beforeParse(w3) {
+        w3.__mockPreset = { vpnManager: { enabled: false }, logger: { enabled: true, format: "jsonl", autopid_log: "all" } };
+        w3.matchMedia = () => ({ matches: false, addListener() {}, addEventListener() {} });
+        w3.scrollTo = () => {}; w3.HTMLCanvasElement.prototype.getContext = () => null;
+      },
+    });
+    await sleep(1200);
+    const row3 = dom3.window.document.querySelector('.frow[data-sf="1"]');
+    check("with the VPN disabled the row carries no VPN warning (the logger on)",
+      !!row3 && /Logging every sample as jsonl/.test(row3.textContent) && !/VPN on/.test(row3.textContent));
+    if (errs3.length) { console.log("JS errors (vpn off):"); errs3.forEach((e) => console.log("  " + e)); process.exitCode = 1; }
+    dom3.window.close();
+  }
   if (errs.length) { console.log("JS errors:"); errs.forEach((e) => console.log("  " + e)); process.exitCode = 1; }
   console.log(process.exitCode ? "PROBE FAIL" : "PROBE PASS");
   process.exit(process.exitCode || 0);

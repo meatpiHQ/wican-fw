@@ -59,7 +59,22 @@ static void on_prepare_sleep(void)
                                  led_set_level(0,0,0) parity) */
 }
 
+/* Store and forward (2026-11-06): a drive's rows on the SD card are pulled
+   by the Home Assistant integration once the car is home, through
+   /api/logger/export, and the car at home is a car with the engine off:
+   the sleep countdown runs meanwhile. Every read that carries rows keeps
+   the device awake a minute more (sleep_manager caps it at ten minutes
+   past the first read of a countdown), so the backfill finishes before the
+   entry instead of waiting for the next drive. The dashboard's history
+   reads count the same. Runs on the httpd task after the response. */
+static void on_log_read(uint32_t rows)
+{
+    (void)rows;
+    (void)sleep_manager_activity(60); /* INVALID_STATE = nothing counts */
+}
+
 void main_sleep_wire(void)
 {
     (void)sleep_manager_set_prepare_cb(on_prepare_sleep);
+    (void)data_logger_set_reader_cb(on_log_read);
 }
