@@ -22,6 +22,8 @@
 #ifndef __EXP_PAR__
 #define __EXP_PAR__
 
-bool evaluate_expression(uint8_t *expression,  uint8_t *data, double V, double *result);
+#include <stddef.h>
+
+bool evaluate_expression(uint8_t *expression,  uint8_t *data, size_t data_len, double V, double *result);
 
 #endif
