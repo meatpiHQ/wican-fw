@@ -94,7 +94,8 @@ async function add_json(jsonPath, params, allCars) {
     });
     newCar.pids.forEach((pid) => {
       if (Object.keys(pidtokey).includes(pid.pid)) {
-        pid.parameters = { ...pid.parameters, ...car.parameters };
+        const existing = car.pids[pidtokey[pid.pid]];
+        existing.parameters = { ...existing.parameters, ...pid.parameters };
       } else {
         car.pids.push(pid);
       }
