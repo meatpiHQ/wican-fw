@@ -40,6 +40,7 @@
 #include "slcan.h"
 #include "can.h"
 #include "ble.h"
+#include "esp_bt.h"
 #include "wifi_network.h"
 #include "esp_mac.h"
 #include "esp_ota_ops.h"
@@ -526,6 +527,13 @@ void app_main(void)
     	int pass = config_server_ble_pass();
     	xmsg_ble_tx_queue = xQueueCreate(100, sizeof( xdev_buffer) );
     	ble_init(&xmsg_ble_tx_queue, &xMsg_Rx_Queue, CONNECTED_LED_GPIO_NUM, pass, &ble_uid[0]);
+    }
+    else
+    {
+    	// BLE is off: hand the RAM reserved for the BT controller/host back to the heap
+    	// (needed for TLS webhooks on the ESP32-C3); enabling BLE requires a reboot anyway
+    	esp_err_t rel = esp_bt_mem_release(ESP_BT_MODE_BLE);
+    	ESP_LOGI(TAG, "BT memory release: %s, free heap now %lu", esp_err_to_name(rel), esp_get_free_heap_size());
     }
 
 

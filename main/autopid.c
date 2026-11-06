@@ -44,6 +44,8 @@
 #include "dev_status.h"
 #include "debug_logs.h"
 #include "ha_webhooks.h"
+#include "esp_tls.h"
+#include "esp_heap_caps.h"
 #include "wifi_network.h"
 #include "sleep_mode.h"
 #include <time.h>
@@ -254,16 +256,17 @@ typedef struct
 //     printf("\n");
 // }
 
-static bool webhook_parse_http_url(const char *url, char *host, size_t host_len, int *out_port, char *path, size_t path_len)
+static bool webhook_parse_http_url(const char *url, char *host, size_t host_len, int *out_port, char *path, size_t path_len, bool *out_tls)
 {
     if (!url || !host || !path || !out_port)
         return false;
 
-    // HTTP only
-    if (strncasecmp(url, "http://", 7) != 0)
+    // HTTP or HTTPS (HTTPS is verified against the embedded Let's Encrypt roots)
+    bool tls = (strncasecmp(url, "https://", 8) == 0);
+    if (!tls && strncasecmp(url, "http://", 7) != 0)
         return false;
 
-    const char *p = url + 7;
+    const char *p = url + (tls ? 8 : 7);
     // host[:port][/path]
     const char *host_end = p;
     while (*host_end && *host_end != '/' && *host_end != ':')
@@ -275,7 +278,7 @@ static bool webhook_parse_http_url(const char *url, char *host, size_t host_len,
     memcpy(host, p, hlen);
     host[hlen] = '\0';
 
-    int port = 80;
+    int port = tls ? 443 : 80;
     const char *after_host = host_end;
     if (*after_host == ':')
     {
@@ -305,7 +308,93 @@ static bool webhook_parse_http_url(const char *url, char *host, size_t host_len,
     }
 
     *out_port = port;
+    if (out_tls)
+        *out_tls = tls;
     return true;
+}
+
+extern const char le_roots_pem_start[] asm("_binary_le_roots_pem_start");
+extern const char le_roots_pem_end[] asm("_binary_le_roots_pem_end");
+
+// HTTPS variant of the webhook POST (same request/response handling as the plain socket path)
+static esp_err_t webhook_post_tls(const char *host, int port, const char *path, const char *body, size_t body_len,
+                                  int timeout_ms, int *out_status, char *out_snippet, size_t out_snippet_len)
+{
+    esp_tls_cfg_t cfg = {
+        .cacert_buf = (const unsigned char *)le_roots_pem_start,
+        .cacert_bytes = le_roots_pem_end - le_roots_pem_start,
+        .timeout_ms = timeout_ms,
+    };
+    esp_tls_t *tls = esp_tls_init();
+    if (!tls)
+        return ESP_ERR_NO_MEM;
+
+    if (esp_tls_conn_new_sync(host, strlen(host), port, &cfg, tls) != 1)
+    {
+        if (out_snippet && out_snippet_len)
+        {
+            // report the mbedTLS/esp-tls error and heap state to tell memory issues from network/cert issues
+            esp_tls_error_handle_t eh = NULL;
+            int tls_code = 0, tls_flags = 0;
+            if (esp_tls_get_error_handle(tls, &eh) == ESP_OK && eh)
+                esp_tls_get_and_clear_last_error(eh, &tls_code, &tls_flags);
+            snprintf(out_snippet, out_snippet_len, "tls connect failed -0x%x f=0x%x heap=%u blk=%u",
+                     (unsigned)-tls_code, (unsigned)tls_flags, (unsigned)esp_get_free_heap_size(),
+                     (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+        }
+        esp_tls_conn_destroy(tls);
+        return ESP_FAIL;
+    }
+
+    char hdr[384];
+    int hdr_len = snprintf(hdr, sizeof(hdr),
+                           "POST %s HTTP/1.1\r\n"
+                           "Host: %s\r\n"
+                           "Content-Type: application/json\r\n"
+                           "Connection: close\r\n"
+                           "Content-Length: %u\r\n"
+                           "\r\n", path, host, (unsigned)body_len);
+    esp_err_t ret = ESP_FAIL;
+    const char *parts[2] = {hdr, body};
+    size_t lens[2] = {(size_t)hdr_len, body_len};
+    for (int i = 0; i < 2; i++)
+    {
+        size_t sent = 0;
+        while (sent < lens[i])
+        {
+            ssize_t n = esp_tls_conn_write(tls, parts[i] + sent, lens[i] - sent);
+            if (n == ESP_TLS_ERR_SSL_WANT_READ || n == ESP_TLS_ERR_SSL_WANT_WRITE)
+                continue;
+            if (n <= 0)
+                goto done;
+            sent += (size_t)n;
+        }
+    }
+
+    char resp[512];
+    ssize_t r;
+    do
+    {
+        r = esp_tls_conn_read(tls, resp, sizeof(resp) - 1);
+    } while (r == ESP_TLS_ERR_SSL_WANT_READ || r == ESP_TLS_ERR_SSL_WANT_WRITE);
+    if (r <= 0)
+        goto done;
+    resp[r] = '\0';
+
+    const char *sp = strstr(resp, "HTTP/");
+    const char *code = sp ? strchr(sp, ' ') : NULL;
+    if (out_status)
+        *out_status = code ? atoi(code + 1) : -1;
+    if (out_snippet && out_snippet_len > 0)
+    {
+        const char *body_start = strstr(resp, "\r\n\r\n");
+        strlcpy(out_snippet, body_start ? body_start + 4 : resp, out_snippet_len);
+        webhook_sanitize_snippet(out_snippet);
+    }
+    ret = ESP_OK;
+done:
+    esp_tls_conn_destroy(tls);
+    return ret;
 }
 
 static esp_err_t webhook_post_json(const char *url, const char *body, size_t body_len, int timeout_ms, int *out_status, char *out_snippet, size_t out_snippet_len)
@@ -323,8 +412,11 @@ static esp_err_t webhook_post_json(const char *url, const char *body, size_t bod
     char host[96] = {0};
     char path[192] = {0};
     int port = 80;
-    if (!webhook_parse_http_url(url, host, sizeof(host), &port, path, sizeof(path)))
+    bool tls = false;
+    if (!webhook_parse_http_url(url, host, sizeof(host), &port, path, sizeof(path), &tls))
         return ESP_ERR_INVALID_ARG;
+    if (tls)
+        return webhook_post_tls(host, port, path, body, body_len, timeout_ms, out_status, out_snippet, out_snippet_len);
 
     char port_str[8];
     snprintf(port_str, sizeof(port_str), "%d", port);
@@ -2326,7 +2418,7 @@ static void autopid_webhook_task(void *pvParameters)
             if (err == ESP_OK && webhook_cfg.enabled && webhook_cfg.url[0] != '\0')
             {
                 // Enforce HTTP-only
-                if (strncasecmp(webhook_cfg.url, "http://", 7) != 0)
+                if (strncasecmp(webhook_cfg.url, "http://", 7) != 0 && strncasecmp(webhook_cfg.url, "https://", 8) != 0)
                 {
                     uint64_t now = (uint64_t)(esp_timer_get_time() / 1000000ULL);
                     uint32_t interval_sec = (webhook_cfg.interval > 0) ? (uint32_t)webhook_cfg.interval : 60;
@@ -2338,7 +2430,7 @@ static void autopid_webhook_task(void *pvParameters)
                         upd.fail_count++;
                         strlcpy(upd.status, "failed", sizeof(upd.status));
                         webhook_format_utc(upd.last_error_time);
-                        strlcpy(upd.last_error, "https not supported: use http://", sizeof(upd.last_error));
+                        strlcpy(upd.last_error, "url must start with http:// or https://", sizeof(upd.last_error));
                         (void)ha_webhooks_update_cache(&upd);
                     }
                     vTaskDelay(pdMS_TO_TICKS(1000));
@@ -2477,6 +2569,15 @@ static void autopid_webhook_task(void *pvParameters)
                                 limitJsonDecimalPrecision(root_obj);
 
                                 char *body = cJSON_PrintUnformatted(root_obj);
+                                // free the JSON trees before the (RAM hungry) TLS handshake, only the text is needed
+                                cJSON_Delete(root_obj);
+                                root_obj = NULL;
+                                cJSON_Delete(cfg_curr);
+                                cfg_curr = NULL;
+                                cJSON_Delete(sts_curr);
+                                sts_curr = NULL;
+                                cJSON_Delete(auto_curr);
+                                auto_curr = NULL;
                                 if (body)
                                 {
                                     int status = -1;
@@ -2657,7 +2758,7 @@ void autopid_init(char* id)
     xTaskCreate(autopid_task, "autopid_task", 5000, (void *)AF_INET, 5, NULL);
     if(config_server_get_webhook_en())
     {
-        xTaskCreate(autopid_webhook_task, "autopid_webhook_task", 6144, NULL, 4, NULL);
+        xTaskCreate(autopid_webhook_task, "autopid_webhook_task", 9216, NULL, 4, NULL);
     }
 
 }

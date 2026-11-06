@@ -22,7 +22,7 @@
 #define __AUTO_PID_H__
 
 #define BUFFER_SIZE 1024
-#define QUEUE_SIZE 10
+#define QUEUE_SIZE 2   // one request is in flight at a time; each slot holds a 1 KB response
 
 
 typedef struct {
