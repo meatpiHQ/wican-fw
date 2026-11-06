@@ -1516,8 +1516,8 @@ static void publish_parameter_mqtt(parameter_t *param) {
 static void autopid_task(void *pvParameters)
 {
     static char default_init[] = "ati\rate0\rath1\ratl0\rats1\ratsp6\ratst96\r";
-    wc_timer_t ecu_check_timer;
-    wc_timer_t group_cycle_timer;
+    wc_timer_t ecu_check_timer = 0;
+    wc_timer_t group_cycle_timer = 0;
 
     ESP_LOGI(TAG, "Autopid Task Started");
     DEBUG_LOGI(TAG, "Autopid Task Started");
@@ -1931,7 +1931,8 @@ all_pids_t* load_all_pids(void){
             all_pids->vehicle_model = car_model_item && car_model_item->valuestring ? strdup(car_model_item->valuestring) : NULL;
             all_pids->std_ecu_protocol = ecu_protocol_item && ecu_protocol_item->valuestring ? strdup(ecu_protocol_item->valuestring) : NULL;
             all_pids->ha_discovery_en = ha_discovery_item && ha_discovery_item->valuestring ? (strcmp(ha_discovery_item->valuestring, "enable") == 0) : false;
-            all_pids->cycle = cycle_item && cycle_item->valuestring ? atoi(cycle_item->valuestring) : 10000;
+            all_pids->cycle = (cycle_item && cycle_item->valuestring && strlen(cycle_item->valuestring) > 0) ? atoi(cycle_item->valuestring) :
+                              (cJSON_IsNumber(cycle_item) ? cycle_item->valueint : 10000);
             all_pids->pid_std_en = standard_pids_item && standard_pids_item->valuestring ? (strcmp(standard_pids_item->valuestring, "enable") == 0) : false;
             all_pids->pid_specific_en = specific_pids_item && specific_pids_item->valuestring ? (strcmp(specific_pids_item->valuestring, "enable") == 0) : false;
             all_pids->group_destination = group_destination_item && group_destination_item->valuestring ? strdup(group_destination_item->valuestring) : NULL;
@@ -1994,7 +1995,8 @@ all_pids_t* load_all_pids(void){
                         }
                     }
 
-                    curr_pid->period = period_item && period_item->valuestring ? atoi(period_item->valuestring) : 10000;
+                    curr_pid->period = (period_item && period_item->valuestring && strlen(period_item->valuestring) > 0) ? atoi(period_item->valuestring) :
+                                       (cJSON_IsNumber(period_item) ? period_item->valueint : all_pids->cycle);
                     curr_pid->rxheader = rxheader_item && rxheader_item->valuestring ? strdup(rxheader_item->valuestring) : NULL;
                     curr_pid->pid_type = PID_CUSTOM;
 
@@ -2003,12 +2005,15 @@ all_pids_t* load_all_pids(void){
                     if (curr_pid->parameters) {
                         curr_pid->parameters->name = name_item && name_item->valuestring ? strdup(name_item->valuestring) : NULL;
                         curr_pid->parameters->expression = expr_item && expr_item->valuestring ? strdup(expr_item->valuestring) : NULL;
-                        curr_pid->parameters->period = period_item && period_item->valuestring ? atoi(period_item->valuestring) : 0;
+                        curr_pid->parameters->period = (period_item && period_item->valuestring && strlen(period_item->valuestring) > 0) ? atoi(period_item->valuestring) :
+                                                       (cJSON_IsNumber(period_item) ? period_item->valueint : all_pids->cycle);
                         curr_pid->parameters->destination = send_to_item && send_to_item->valuestring ? strdup(send_to_item->valuestring) : NULL;
                         curr_pid->parameters->timer = 0;
                         curr_pid->parameters->value = FLT_MAX;
-                        curr_pid->parameters->min = (min_value_item && min_value_item->valuestring && strlen(min_value_item->valuestring) > 0) ? atof(min_value_item->valuestring) : FLT_MAX;
-                        curr_pid->parameters->max = (max_value_item && max_value_item->valuestring && strlen(max_value_item->valuestring) > 0) ? atof(max_value_item->valuestring) : FLT_MAX;
+                        curr_pid->parameters->min = (min_value_item && min_value_item->valuestring && strlen(min_value_item->valuestring) > 0) ? atof(min_value_item->valuestring) :
+                                                    (cJSON_IsNumber(min_value_item) ? (float)min_value_item->valuedouble : FLT_MAX);
+                        curr_pid->parameters->max = (max_value_item && max_value_item->valuestring && strlen(max_value_item->valuestring) > 0) ? atof(max_value_item->valuestring) :
+                                                    (cJSON_IsNumber(max_value_item) ? (float)max_value_item->valuedouble : FLT_MAX);
                         curr_pid->parameters->destination_type = type_item && type_item->valuestring ? 
                             (strcmp(type_item->valuestring, "MQTT_Topic") == 0 ? DEST_MQTT_TOPIC :
                             strcmp(type_item->valuestring, "MQTT_WallBox") == 0 ? DEST_MQTT_WALLBOX :
@@ -2049,7 +2054,8 @@ all_pids_t* load_all_pids(void){
                         cJSON* rxheader_item = cJSON_GetObjectItem(pid, "ReceiveHeader");
 
                         curr_pid->parameters->name = name_item && name_item->valuestring ? strdup(name_item->valuestring) : NULL;
-                        curr_pid->parameters->period = period_item && period_item->valuestring ? atoi(period_item->valuestring) : 10000;
+                        curr_pid->parameters->period = (period_item && period_item->valuestring && strlen(period_item->valuestring) > 0) ? atoi(period_item->valuestring) :
+                                                       (cJSON_IsNumber(period_item) ? period_item->valueint : all_pids->cycle);
                         curr_pid->parameters->destination = send_to_item && send_to_item->valuestring ? strdup(send_to_item->valuestring) : NULL;
                         curr_pid->parameters->destination_type = type_item && type_item->valuestring ? 
                             (strcmp(type_item->valuestring, "MQTT_Topic") == 0 ? DEST_MQTT_TOPIC :
@@ -2250,13 +2256,16 @@ all_pids_t* load_all_pids(void){
                                             (strcmp(sensor_type_item->valuestring, "binary") == 0 ? BINARY_SENSOR : SENSOR) : SENSOR;
 
                                     cJSON* min_item = cJSON_GetObjectItem(param, "min");
-                                    curr_pid->parameters[param_index].min = (min_item && min_item->valuestring && strlen(min_item->valuestring) > 0) ?  atof(min_item->valuestring) : FLT_MAX;
+                                    curr_pid->parameters[param_index].min = (min_item && min_item->valuestring && strlen(min_item->valuestring) > 0) ? atof(min_item->valuestring) :
+                                                                            (cJSON_IsNumber(min_item) ? (float)min_item->valuedouble : FLT_MAX);
 
                                     cJSON* max_item = cJSON_GetObjectItem(param, "max");
-                                    curr_pid->parameters[param_index].max = (max_item && max_item->valuestring && strlen(max_item->valuestring) > 0) ?  atof(max_item->valuestring) : FLT_MAX;
+                                    curr_pid->parameters[param_index].max = (max_item && max_item->valuestring && strlen(max_item->valuestring) > 0) ? atof(max_item->valuestring) :
+                                                                            (cJSON_IsNumber(max_item) ? (float)max_item->valuedouble : FLT_MAX);
 
                                     cJSON* period_item = cJSON_GetObjectItem(param, "period");
-                                    curr_pid->parameters[param_index].period = period_item && period_item->valuestring ? atof(period_item->valuestring) : FLT_MAX;
+                                    curr_pid->parameters[param_index].period = (period_item && period_item->valuestring && strlen(period_item->valuestring) > 0) ? (uint32_t)atoi(period_item->valuestring) :
+                                                                               (cJSON_IsNumber(period_item) ? (uint32_t)period_item->valueint : all_pids->cycle);
 
                                     cJSON* send_to_item = cJSON_GetObjectItem(param, "send_to");
                                     curr_pid->parameters[param_index].destination = send_to_item && send_to_item->valuestring ? strdup(send_to_item->valuestring) : strdup("none");
