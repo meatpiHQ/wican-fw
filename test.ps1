@@ -15,7 +15,7 @@
 # land in test-reports\logs\<run>\ (gitignored).
 #
 param(
-    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'bleram', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'profilee2e', 'slcan', 'j2534auto', 'j2534std', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'wgcycle', 'tspublic', 'tlschain', 'habackfill', 'garage', 'espnleasy', 'espnlapn', 'usbgps', 'usbdetach', 'abrp', 'backup', 'fwupdate', 'espnlota', 'logclock', 'sdformat', 'obdfw', 'canselftest', 'attpstore', 'obdbringup', 'sleepword', 'connections', 'stackaudit', 'dwc2', 'logsinks', 'release', 'all', 'list')]
+    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'bleram', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'profilee2e', 'slcan', 'j2534auto', 'j2534std', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'wgcycle', 'tspublic', 'tlschain', 'habackfill', 'garage', 'espnleasy', 'espnlapn', 'usbgps', 'usbdetach', 'abrp', 'backup', 'fwupdate', 'espnlota', 'logclock', 'sdformat', 'obdfw', 'canselftest', 'attpstore', 'obdbringup', 'sleepword', 'sleeptrig', 'connections', 'stackaudit', 'dwc2', 'logsinks', 'release', 'all', 'list')]
     [string]$What,
     [Parameter(Position = 1)][string]$Component,
     [ValidateSet('6.0.2', '6.1')][string]$Idf = '6.1',  # the ESP-IDF the build stages use (6.1 since 6.0.0-beta.5, 2026-10-27; 6.0.2 stays installed; build.ps1 -Idf has the same table)
@@ -38,6 +38,14 @@ param(
     [switch]$Flash,
     [switch]$NoReport,
     [switch]$SkipBenchCheck,  # bypass the physical-bench preflight
+    [switch]$UartSilence,     # sleeptrig stage: add the 25 min UART-silence leg
+                              # (longer than the chip's stored 1200 s timeout)
+    [switch]$ProvisionLeg,    # sleeptrig stage: add the provisioning leg (a
+                              # hidden setting change provisions nothing, a
+                              # control switched on provisions the controls
+                              # off; 3 planned restarts, ~5 EEPROM writes)
+    [switch]$OnlyProvision,   # sleeptrig stage: that leg alone, the voltage
+                              # legs skipped (no PPSW writes, no PSU moves)
     [switch]$NoConsole,       # PC bench stages: do not open the DUT's console
                               # port beside the run (Start-ConsoleTail)
     [switch]$Factory,         # backup stage: run b9 too, a REAL factory reset of
@@ -958,6 +966,7 @@ function Show-Inventory {
     Write-Host '  attpstore  - the OBD chip''s protocol store (issue #1023, 2026-11-01): the chip memorises every protocol switch a request answers on into its EEPROM-backed store, RAM-only ATTP or not, and the Audi MEB profile flipped it seven times per poll cycle; the driver now sends ATM0 at the bring-up and ahead of every switch on the request path. The store read back through an ATZ: as found after a test-a-PID switch with an answer (the engine), after a planned restart and an app-path switch (the bring-up''s ATM0), the app''s ATZ answered as a warm start with the ATM0 hidden behind it (one prompt, nothing shifted, a second sooner) and the app path''s own switch after its ATZ no longer writing (the canary) (1 planned restart; the simulator flipped between 11-bit and 29-bit ids, 2 to 6 simulator restarts, ~3 min; on an image without the fix the two legs read the other protocol: the reproduction)'
     Write-Host '  obdbringup - the OBD chip''s bring-up (2026-11-02, Ali): the warm start (chip_soft_reset sends ATWS instead of ATZ: the MIC3624''s ATZ answer began with junk bytes in 5 of 16 probes and a NUL among them made every third software restart log "soft reset not confirmed" and pay a reset pulse plus 1.5 s; ATWS answers clean in 40 ms) and the PP 0F guard (the bring-up reads ATPPS and writes PP 0F back only when it is not 95 or off: STSLCS does not report it). N planned restarts each read "chip awake; warm start (ATWS)", "started ... memory off", no "not confirmed", the bring-up under 1.5 s, ATDPN back on the stored protocol; then ATPP 0F OFF through the wire probe, a restart that logs the restore and reads 0F:95 N with pp_restores 1, and one more restart with the guard quiet (5 planned restarts, 3 EEPROM writes of PP 0F, ~3 min; --skip-pp drops the fault leg)'
     Write-Host '  sleepword  - the OBD chip''s sleep word and the PPSW repair (2026-11-07, Ali, after the sleep-path review against 4.52p): obd_chip_sleep(true) sends STSLEEP0 (the documented ST sleep command, what 4.x sent at every sleep entry and re-sleep) and pulls the PowerEn pin behind it, the nap re-sleep waits 1.5 s after its reset pulse before the word, and the bring-up''s VTPPSW10 is acknowledged, settled 600 ms and read back as 10 before the reset pulse. A healthy `sleep test` on the console must log "chip asleep by command" before "components down", zero re-sleeps and a power_wake; then VTPPSW2F through the wire probe (the pin cannot sleep the chip: a rising edge wakes, nothing sleeps; the digits are x = wake, y = sleep, 0F is a LOW-level WAKE and FF is refused), STSLEEP0 over the probe answered OK with a prompt and an ATI 3 s later unanswered (the command sleep holds while the device is awake), then `sleep test`: zero re-sleeps (the command sleep holds through the naps), the timed wake instead of the recovery reboot, the boot''s "PPSW is 2F, setting to 10" and "PPSW reads 10 after the write", VTPPSWS 10 after (2 planned wakes, 2 EEPROM writes of the PPSW cell, ~2.5 min; --skip-ppsw drops the stand-in; the bench holds COM254 itself: no console tail; on an image before 2026-11-07 the stand-in reads six re-sleeps, an E line and internal_recovery: the reproduction)'
+    Write-Host '  sleeptrig  - the OBD chip''s own sleep triggers, switched off: the stored thresholds have no effect (2026-11-07, Ali, before they are dropped from the provisioning): STSLCS reads the four controls OFF; the PSU at 12.5 V (under the stored <13.20 V sleep threshold) for 170 s with the chip awake, its own ATRV under the threshold throughout, ATI answers after; VTPPSW2F (the pin cannot wake the chip) + STSLEEP0 at 13.0 V, ATI silent, the PSU at 14.0 V (over the stored >13.50 V wake threshold) 30 s, ATI silent twice, a planned restart wakes the chip and repairs PPSW; -UartSilence adds 25 min of UART silence (over the stored 1200 s) with ATI answering after; -ProvisionLeg adds the provisioning after the change (obd_chip wake_voltage_mv 13000 and back: two reboots, no provisioning, STSLCS as found; STSLVL on, off over the probe then a restart: "provisioning sleep config: a control is on", the four controls OFF again, the stored thresholds untouched); STSLCS line for line as found at the end (1 planned restart, 2 EEPROM writes of the PPSW cell, ~6 min; ~31 with the UART leg; +3 restarts and ~5 writes with the provisioning leg; needs the OWON PSU on the PC)'
     Write-Host '  connections - the Connections page bridges and their jacks (2026-10-29, the field report of 2026-10-28): a bridge and its new TCP server in one submit, the server taken away under the bridge (one W line, no fault, the reason on /api/bridges, the list still saves: before the fix "unknown endpoint" refused every save and a boot_errors fault latched at every start), then the real page in Chrome: nothing staged on open, the stranded row with the missing server named and removable, a new connection made from the card (5 to 6 planned restarts, ~5 min)'
     Write-Host '  usbdetach  - a warm restart in the USB device role drops off the bus first (2026-10-17): the DUT cabled to this PC as a USB NCM device (one planned restart when it was host), warm restarts with the link up: gone from the PC within 5 s of each request (2.2 to 2.4 s measured), back, the link answers, software resets only; the internal heap before and after; the DUT stays in the device role (restore: python tools\testbench\usb\usb_detach_bench.py --only d4 --restore-host, a PSU power cycle inside) (~6 min)'
     Write-Host '  abrp       - the ABRP rows against the real Iternio API (2026-10-13): the key checked from the PC, host routes on the Pi for the run, the key as a query parameter / as the Authorization header / a wrong key, the counters over the window, the Test button, get_telemetry as the witness with a user token in internal/abrp_credentials.json (PARTIAL without one: the 401 refusals only), restore (2 planned restarts, ~5 min)'
@@ -1850,6 +1859,33 @@ try {
                     Save-StageLog 'obd_sleep_word' $out
                     if (-not ($out | Select-String -Quiet 'OBD SLEEP WORD PASS')) { throw 'no OBD SLEEP WORD PASS (the DUT on the bench AP? the chip up? COM254 free and the USB-C on the PC? an image before 2026-11-07 has no sleep word: six re-sleeps and a recovery reboot on the stand-in)' }
                 } finally {
+                    if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
+                }
+            }
+        }
+        'sleeptrig' {
+            # The OBD chip's own sleep triggers, switched off (2026-11-07,
+            # Ali): the thresholds the bring-up stores (STSLVLW/STSLVLS,
+            # STSLUIT) must have no effect while STSLVL and STSLU are off,
+            # before they are dropped from the provisioning. PC-side through
+            # the tunnel with the OWON PSU on the PC; the console tail beside
+            # it for the boot lines; one planned restart.
+            Invoke-Stage 'OBD chip sleep triggers' {
+                $py = $script:BenchPy
+                $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", $BenchHost)
+                $con = Start-ConsoleTail 'obd_sleep_triggers'
+                try {
+                    Start-Sleep -Seconds 3
+                    if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (port 18081 busy?)" }
+                    $extra = @()
+                    if ($UartSilence) { $extra += @('--uart-silence', '25') }
+                    if ($ProvisionLeg) { $extra += @('--provision-leg') }
+                    if ($OnlyProvision) { $extra += @('--only-provision') }
+                    $out = & $py -u "$repo\tools\testbench\obd\obd_sleep_triggers_bench.py" --dut localhost:18081 --psu-port auto @extra 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    Save-StageLog 'obd_sleep_triggers' $out
+                    if (-not ($out | Select-String -Quiet 'OBD SLEEP TRIGGERS PASS')) { throw 'no OBD SLEEP TRIGGERS PASS (the PSU on the PC? sleep enabled with its defaults so the device stays awake through the 12.5 V leg? the chip up?)' }
+                } finally {
+                    Stop-ConsoleTail $con
                     if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
                 }
             }
