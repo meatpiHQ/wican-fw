@@ -2279,6 +2279,7 @@ static void autopid_webhook_task(void *pvParameters)
     (void)pvParameters;
 
     uint64_t last_post_time = 0;
+    uint64_t first_connect_time = 0;
     bool first_post_done = false;
     uint64_t last_wifi_status_time = 0;
     char *prev_autopid_snapshot = NULL;
@@ -2350,13 +2351,17 @@ static void autopid_webhook_task(void *pvParameters)
 
                 uint64_t now = (uint64_t)(esp_timer_get_time() / 1000000ULL);
                 uint32_t interval_sec = (webhook_cfg.interval > 0) ? (uint32_t)webhook_cfg.interval : 60;
+                if (first_connect_time == 0)
+                {
+                    first_connect_time = now;
+                }
 
                 // Post as soon as STA connects after boot instead of waiting a full
                 // interval of uptime: on a device powered with the ignition, the
                 // first report races the vehicle out of Wi-Fi range. Wait briefly
                 // for the first AutoPID poll sweep to finish so the initial post
                 // carries OBD readings instead of an empty autopid_data object.
-                if (!first_post_done && !first_sweep_done && now < 15)
+                if (!first_post_done && !first_sweep_done && (now - first_connect_time) < 15)
                 {
                     vTaskDelay(pdMS_TO_TICKS(250));
                     continue;
