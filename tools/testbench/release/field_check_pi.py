@@ -177,6 +177,21 @@ while time.time() - t0 < 400:
         log("the DUT stopped answering (restarting into the new image) after %.0f s" % (time.time() - t0))
         break
     job = fu.get("job") or {}
+    if not job and last_state:
+        # the restart happened inside one poll gap (the 2026-11-08 unit was
+        # back in 9 s, no offline window seen; the poll may even miss the
+        # "rebooting" state): the new image answers with no job record; its
+        # version is the proof
+        try:
+            _s, _b = get("/api/info", 6)
+            v_now = json.loads(_b).get("fw_version", "")
+        except Exception:
+            v_now = ""
+        if v_now == TO_V:
+            gone = True
+            log("the DUT restarted into %s inside one poll (no offline window seen) after %.0f s"
+                % (TO_V, time.time() - t0))
+            break
     st = json.dumps({k: job.get(k) for k in ("state", "received", "total", "error", "version") if k in job})
     if st != last_state:
         log("job: %s" % st)
