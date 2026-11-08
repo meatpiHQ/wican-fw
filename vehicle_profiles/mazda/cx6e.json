@@ -1,0 +1,104 @@
+{
+  "car_model": "Mazda: CX-6e",
+  "init": "ATSP6;ATAT1;ATST96;ATSH7A1;ATFCSH7A1;ATFCSD300000;ATFCSM1;",
+  "pids": [
+    {
+      "pid": "22F1AF",
+      "pid_init": "ATSH7E2;",
+      "parameters": {
+        "SOC": "[B4:B5]/10"
+      }
+    },
+    {
+      "pid": "22F1AE",
+      "pid_init": "ATSH7E2;",
+      "parameters": {
+        "ODOMETER": "[B4:B7]/10"
+      }
+    },
+    {
+      "pid": "22F1AB",
+      "pid_init": "ATSH7E2;",
+      "parameters": {
+        "OUTSIDE_TEMPERATURE": "B4/2-40"
+      }
+    },
+    {
+      "pid": "22F1B4",
+      "pid_init": "ATSH7E2;",
+      "parameters": {
+        "DM_R_RPM": "[B4:B5]-25000"
+      }
+    },
+    {
+      "pid": "22F228",
+      "pid_init": "ATSH7A1;",
+      "parameters": {
+        "HV_V": "[B4:B5]/10"
+      }
+    },
+    {
+      "pid": "22F229",
+      "pid_init": "ATSH7A1;",
+      "parameters": {
+        "HV_A": "[B4:B5]/10-600"
+      }
+    },
+    {
+      "pid": "22F22F",
+      "pid_init": "ATSH7A1;",
+      "parameters": {
+        "SOC_D": "B4"
+      }
+    },
+    {
+      "pid": "22F250",
+      "pid_init": "ATSH7A1;",
+      "parameters": {
+        "HV_C_V_MAX": "[B4:B5]/1000"
+      }
+    },
+    {
+      "pid": "22F251",
+      "pid_init": "ATSH7A1;",
+      "parameters": {
+        "HV_C_V_MIN": "[B4:B5]/1000"
+      }
+    },
+    {
+      "pid": "22F252",
+      "pid_init": "ATSH7A1;",
+      "parameters": {
+        "HV_T_MAX": "B4-40"
+      }
+    },
+    {
+      "pid": "22F253",
+      "pid_init": "ATSH7A1;",
+      "parameters": {
+        "HV_T_MIN": "B4-40"
+      }
+    },
+    {
+      "pid": "22F25B",
+      "pid_init": "ATSH7A1;",
+      "parameters": {
+        "CHARGING_R_A": "[B4:B5]/10"
+      }
+    },
+    {
+      "pid": "22F25C",
+      "pid_init": "ATSH7A1;",
+      "parameters": {
+        "CHARGING": "(B4:0)*(1-B4:1)"
+      }
+    },
+    {
+      "pid": "22FD00",
+      "pid_init": "ATSH780;",
+      "parameters": {
+        "SPEED": "[B4:B5]*0.05625"
+      }
+    }
+  ]
+}
