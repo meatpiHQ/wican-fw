@@ -101,6 +101,15 @@
       "class": "power"
     }
   },
+  "CHARGE_PLUG_STATE": {
+    "description": "Charge plug state. Renault Zoe: 0 no plug, 2 plug connected, 4 plug connected and button pressed, 6 two plugs, 7 unavailable (car asleep)",
+    "settings": {
+      "unit": "",
+      "class": "none",
+      "min": "0",
+      "max": "7"
+    }
+  },
   "CHARGING": {
     "description": "Is EV Charging",
     "settings": {
@@ -2104,6 +2113,15 @@
       "class": "none"
     }
   },
+  "HV_ENERGY_AVAILABLE": {
+    "description": "Usable energy left in the HV battery",
+    "settings": {
+      "unit": "kWh",
+      "class": "energy_storage",
+      "min": "0",
+      "max": "200"
+    }
+  },
   "HV_H_1": {
     "description": "Battery Heater 1 Temperature",
     "settings": {
@@ -2528,6 +2546,15 @@
     "settings": {
       "unit": "A",
       "class": "current"
+    }
+  },
+  "LV_DCDC_STATE": {
+    "description": "DC-DC converter state. Renault Zoe: 0 standby, 1 awake not active, 2 awake and active",
+    "settings": {
+      "unit": "",
+      "class": "none",
+      "min": "0",
+      "max": "3"
     }
   },
   "LV_SOC": {

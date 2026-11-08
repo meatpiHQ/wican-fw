@@ -57,6 +57,41 @@
       "parameters": {
         "BATT_TEMP": "B4 - 40"
       }
+    },
+    {
+      "pid": "22200E",
+      "pid_init": "ATSH7E4;ATCRA7EC;",
+      "parameters": {
+        "IGNITION": "B4 & 1"
+      }
+    },
+    {
+      "pid": "2233EA",
+      "pid_init": "ATSH7E4;ATCRA7EC;",
+      "parameters": {
+        "CHARGE_PLUG_STATE": "B4 & 7"
+      }
+    },
+    {
+      "pid": "22302A",
+      "pid_init": "ATSH7E4;ATCRA7EC;",
+      "parameters": {
+        "LV_DCDC_STATE": "B4 & 3"
+      }
+    },
+    {
+      "pid": "22320C",
+      "pid_init": "ATSH7E4;ATCRA7EC;",
+      "parameters": {
+        "HV_ENERGY_AVAILABLE": "[B4:B5] * 0.005"
+      }
+    },
+    {
+      "pid": "2233B1",
+      "pid_init": "ATSH7E4;ATCRA7EC;",
+      "parameters": {
+        "OUTSIDE_TEMPERATURE": "B4 - 40"
+      }
     }
   ]
 }
