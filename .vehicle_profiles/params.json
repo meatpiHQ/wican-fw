@@ -126,6 +126,60 @@
       "max": "200"
     }
   },
+  "CHRYSLER_ENGINE_OIL_PRES": {
+    "description": "Chrysler engine oil pressure (PCM DID 022A).",
+    "settings": {
+      "unit": "psi",
+      "class": "pressure",
+      "min": "0",
+      "max": "148"
+    }
+  },
+  "CHRYSLER_FUEL_CHARGE_CYL1_EST": {
+    "description": "Chrysler cylinder 1 required fuel charge (PCM DID 02B2). mg/charge units are inferred from Chrysler scan-tool references, not factory-confirmed for this DID; this is a requested quantity, not direct fuel flow.",
+    "settings": {
+      "unit": "mg/charge",
+      "class": "none",
+      "min": "0",
+      "max": "1023.984375"
+    }
+  },
+  "CHRYSLER_FUEL_MASS_CYL1_EST": {
+    "description": "Chrysler cylinder 1 fuel mass (PCM DID 0255). mg/charge units are inferred from Chrysler scan-tool references, not factory-confirmed for this DID; this is not a direct fuel-flow reading.",
+    "settings": {
+      "unit": "mg/charge",
+      "class": "none",
+      "min": "0",
+      "max": "1023.984375"
+    }
+  },
+  "CHRYSLER_INJ_PW_CYL1": {
+    "description": "Chrysler cylinder 1 injector pulse width (PCM DID 0234).",
+    "settings": {
+      "unit": "ms",
+      "class": "duration",
+      "min": "0",
+      "max": "4294967.295"
+    }
+  },
+  "CHRYSLER_VVT_OIL_PRES": {
+    "description": "Chrysler variable valve timing oil pressure (PCM DID 069E).",
+    "settings": {
+      "unit": "kPa",
+      "class": "pressure",
+      "min": "0",
+      "max": "1020"
+    }
+  },
+  "CHRYSLER_VVT_OIL_TEMP": {
+    "description": "Chrysler variable valve timing oil temperature (PCM DID 069F).",
+    "settings": {
+      "unit": "°C",
+      "class": "temperature",
+      "min": "-64",
+      "max": "191"
+    }
+  },
   "CO2": {
     "description": "CO2 Concentration",
     "settings": {
