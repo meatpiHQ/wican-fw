@@ -1,4 +1,76 @@
 {
+  "ENGINE_LOAD": {
+    "description": "Calculated Engine Load",
+    "settings": {
+      "unit": "%",
+      "class": "none",
+      "min": "0",
+      "max": "100"
+    }
+  },
+  "TIMING_ADVANCE": {
+    "description": "Timing Advance (Bank 1)",
+    "settings": {
+      "unit": "°",
+      "class": "none",
+      "min": "-64",
+      "max": "64"
+    }
+  },
+  "LTFT": {
+    "description": "Long Term Fuel Trim (Bank 1)",
+    "settings": {
+      "unit": "%",
+      "class": "none",
+      "min": "-100",
+      "max": "99.2"
+    }
+  },
+  "STFT_B2": {
+    "description": "Short Term Fuel Trim (Bank 2)",
+    "settings": {
+      "unit": "%",
+      "class": "none",
+      "min": "-100",
+      "max": "99.2"
+    }
+  },
+  "LTFT_B2": {
+    "description": "Long Term Fuel Trim (Bank 2)",
+    "settings": {
+      "unit": "%",
+      "class": "none",
+      "min": "-100",
+      "max": "99.2"
+    }
+  },
+  "BARO_PRESSURE": {
+    "description": "Barometric Pressure",
+    "settings": {
+      "unit": "kPa",
+      "class": "pressure",
+      "min": "0",
+      "max": "255"
+    }
+  },
+  "MODULE_VOLTAGE": {
+    "description": "Control Module Voltage",
+    "settings": {
+      "unit": "V",
+      "class": "voltage",
+      "min": "0",
+      "max": "65"
+    }
+  },
+  "RUN_TIME": {
+    "description": "Run Time Since Engine Start",
+    "settings": {
+      "unit": "seconds",
+      "class": "none",
+      "min": "0",
+      "max": "65535"
+    }
+  },
   "AC_COMP": {
     "description": "AC Compressor (ON/OFF)",
     "settings": {
