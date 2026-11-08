@@ -15,7 +15,7 @@
 # land in test-reports\logs\<run>\ (gitignored).
 #
 param(
-    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'bleram', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'profilee2e', 'slcan', 'j2534auto', 'j2534std', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'wgcycle', 'tspublic', 'tlschain', 'habackfill', 'garage', 'espnleasy', 'espnlapn', 'usbgps', 'usbdetach', 'abrp', 'backup', 'fwupdate', 'espnlota', 'logclock', 'sdformat', 'obdfw', 'canselftest', 'attpstore', 'obdbringup', 'sleepword', 'sleeptrig', 'connections', 'stackaudit', 'dwc2', 'logsinks', 'release', 'all', 'list')]
+    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'bleram', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'profilee2e', 'slcan', 'j2534auto', 'j2534std', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'wgcycle', 'tspublic', 'tlschain', 'habackfill', 'garage', 'espnleasy', 'espnlapn', 'usbgps', 'usbdetach', 'abrp', 'backup', 'fwupdate', 'espnlota', 'logclock', 'sdformat', 'obdfw', 'chipprompt', 'destnets', 'canselftest', 'attpstore', 'obdbringup', 'sleepword', 'sleeptrig', 'connections', 'stackaudit', 'dwc2', 'logsinks', 'release', 'all', 'list')]
     [string]$What,
     [Parameter(Position = 1)][string]$Component,
     [ValidateSet('6.0.2', '6.1')][string]$Idf = '6.1',  # the ESP-IDF the build stages use (6.1 since 6.0.0-beta.5, 2026-10-27; 6.0.2 stays installed; build.ps1 -Idf has the same table)
@@ -962,6 +962,8 @@ function Show-Inventory {
     Write-Host '  usbgps     - a USB GPS receiver is read by default (issue #978): the console switch off, the receiver read as NMEA from boot, the fix when the sky allows, gps_ in autopid and the HA push, the USB GPS receiver switch off = ignored, back on; then the USB page card, the switches and the Status row in Chrome (3 to 4 planned restarts, ~6 min)'
     Write-Host '  sdformat   - the SD card format from the API (2026-10-25): the slot as found, an unreadable card named by what it holds with a quiet log (W line, no E line), the refusals (no phrase, a wrong phrase, a mounted card), the format behind the phrase and the mount after it with a file round trip, the boot after, then the real page in Chrome; the format legs need a card WiCAN cannot read in the slot and the switch -SdFormat (it erases the card), PARTIAL otherwise (0 to 1 planned restart, ~3 min)'
     Write-Host '  obdfw      - the OBD chip firmware update (issue #1023, 2026-10-28; no forced rewrite since 2026-11-01): the packaged image and the current list on /api/obd_chip, the console command, force refused (400, the console), a POST on a chip at the packaged version = nothing to do, the same image and an older image from a file = nothing to do, the .22 image uploaded as V2.3.99.txt written (the version is the file name: the chip on .22, fw.outdated), a restart whose start-up update leaves the .22 chip alone, the packaged update lifting it (3557 records, the fresh bring-up, the version), a file stream cut by a restart recovered by the next boot (the chip answers at 115200 in download mode), and a sleep test typed mid-stream that waits for the update (3 planned restarts + 1 sleep/wake, ~8 min; -SkipSleep drops the sleep leg)'
+    Write-Host '  chipprompt - the OBD chip firmware prompt of Quick Setup''s vehicle step (2026-11-08): the chip put on V2.3.22 (the image under a higher file name), the step in Chrome through the bench''s own tunnel: the popup with both versions and one button, Detect disabled, Update and continue, the progress popup with the records written while the API sees the stream, Done, the chip on the packaged version; then the closed-popup banner leg with Update now (two chip writes, ~4 min; node + Playwright + Chrome on this PC)'
+    Write-Host '  destnets   - the networks a sender is active on (2026-11-08): one HTTP destination and the Home Assistant webhook restricted to another network wait (on_network false, the laps counted as network skips, nothing at the Pi''s receiver, the ring''s line), restricted to the station''s own network they deliver; five planned restarts, the settings back as found (~5 min; the receiver on rpi001 over ssh)'
     Write-Host '  canselftest - the CAN self-test and the chip diagnostics (issue #1023, 2026-10-28): the OBD chip asks 010C and the ESP32 answers as ECU 7EF over the shared bus, PASS with the simulator broadcast as found and flipped, the chip configuration report, the wire tools on a healthy chip, the cached version on /api/obd_chip, and with obd_chip_manager/obd_fw/V2.3.22.txt in the components tree the chip written to V2.3.22 (the image uploaded as V2.3.99.txt) and lifted back by the packaged update, force refused (fw.outdated, the warning a chip left on .22 gets), then with AutoPID polling the simulator car a self-test and the proof that polling, the CAN node and the chip carry on as before, the chip without echo (0 to 2 planned DUT restarts: AutoPID switched on for that leg when it is off and put back; 1 to 2 simulator restarts, ~6 min)'
     Write-Host '  attpstore  - the OBD chip''s protocol store (issue #1023, 2026-11-01): the chip memorises every protocol switch a request answers on into its EEPROM-backed store, RAM-only ATTP or not, and the Audi MEB profile flipped it seven times per poll cycle; the driver now sends ATM0 at the bring-up and ahead of every switch on the request path. The store read back through an ATZ: as found after a test-a-PID switch with an answer (the engine), after a planned restart and an app-path switch (the bring-up''s ATM0), the app''s ATZ answered as a warm start with the ATM0 hidden behind it (one prompt, nothing shifted, a second sooner) and the app path''s own switch after its ATZ no longer writing (the canary) (1 planned restart; the simulator flipped between 11-bit and 29-bit ids, 2 to 6 simulator restarts, ~3 min; on an image without the fix the two legs read the other protocol: the reproduction)'
     Write-Host '  obdbringup - the OBD chip''s bring-up (2026-11-02, Ali): the warm start (chip_soft_reset sends ATWS instead of ATZ: the MIC3624''s ATZ answer began with junk bytes in 5 of 16 probes and a NUL among them made every third software restart log "soft reset not confirmed" and pay a reset pulse plus 1.5 s; ATWS answers clean in 40 ms) and the PP 0F guard (the bring-up reads ATPPS and writes PP 0F back only when it is not 95 or off: STSLCS does not report it). N planned restarts each read "chip awake; warm start (ATWS)", "started ... memory off", no "not confirmed", the bring-up under 1.5 s, ATDPN back on the stored protocol; then ATPP 0F OFF through the wire probe, a restart that logs the restore and reads 0F:95 N with pp_restores 1, and one more restart with the guard quiet (5 planned restarts, 3 EEPROM writes of PP 0F, ~3 min; --skip-pp drops the fault leg)'
@@ -1743,6 +1745,43 @@ try {
                 $out = Invoke-Bench "cd ~/wican && python3 -u tools/testbench/obd/obd_fw_bench.py $DutIp$benchArgs"
                 Save-StageLog 'obd_fw' $out
                 if (-not ($out | Select-String -Quiet 'OBD FW PASS')) { throw 'no OBD FW PASS (the DUT on the bench AP? the ws_cli bridge? auto_update on?)' }
+            }
+        }
+        'chipprompt' {
+            # The OBD chip firmware prompt of Quick Setup's vehicle step
+            # (2026-11-08): the chip put on V2.3.22 (the V2.3.22 image under
+            # a higher file name), the step opened in Chrome through the
+            # bench's own tunnel to the DUT, the popup, Update and continue,
+            # the progress, Done, the chip on the packaged version; then the
+            # closed-popup banner leg. Node + Playwright + Chrome on this PC
+            # (the Playwright devDependency of tools/webui_preview).
+            Invoke-Stage 'OBD chip firmware prompt' {
+                $outDir = Join-Path $script:logDir 'chip_prompt'
+                $out = & node "$repo\tools\testbench\obd\chip_prompt_bench.mjs" $outDir --dut $DutIp --legs prompt,banner,status 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                Save-StageLog 'chip_prompt' $out
+                if (-not ($out | Select-String -Quiet 'CHIP PROMPT PASS')) { throw 'no CHIP PROMPT PASS (the DUT on the bench AP? Chrome and the Playwright devDependency of tools/webui_preview? the V2.3.22 image in the components tree?)' }
+            }
+        }
+        'destnets' {
+            # The networks a sender is active on (2026-11-08, Ali): a
+            # destination and the Home Assistant webhook restricted to a
+            # network the station is not on wait (on_network false, the laps
+            # counted as network skips, nothing at the receiver, the ring's
+            # line), restricted to the station's own network they deliver;
+            # the Pi's receiver over ssh, five planned restarts, the settings
+            # back as found. PC-side through the tunnel.
+            Invoke-Stage 'Destinations and webhook: active on' {
+                $py = $script:BenchPy
+                $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", $BenchHost)
+                try {
+                    Start-Sleep -Seconds 3
+                    if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (port 18081 busy?)" }
+                    $out = & $py -u "$repo\tools\testbench\system\dest_networks_bench.py" --dut localhost:18081 --pi $BenchHost --pi-ip 10.42.1.1 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    Save-StageLog 'dest_networks' $out
+                    if (-not ($out | Select-String -Quiet 'DEST NETWORKS PASS')) { throw 'no DEST NETWORKS PASS (the DUT on the bench AP? the Pi reachable over ssh? port 8199 on the Pi free, or the main destinations receiver up?)' }
+                } finally {
+                    if ($tunnel -and -not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
+                }
             }
         }
         'canselftest' {
