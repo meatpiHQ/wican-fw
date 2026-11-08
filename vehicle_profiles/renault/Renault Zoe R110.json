@@ -29,7 +29,7 @@
     {
       "pid": "222004",
       "parameters": {
-        "HV_V": "[B3:B4] * 0.5"
+        "HV_V": "[B4:B5] * 0.5"
       }
     },
     {
@@ -41,7 +41,7 @@
     {
       "pid": "22339D",
       "parameters": {
-        "CHARGER_CONNECTED": "B3 & 1"
+        "CHARGER_CONNECTED": "B4 & 1"
       }
     },
     {
