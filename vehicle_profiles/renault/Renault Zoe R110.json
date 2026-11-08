@@ -106,6 +106,14 @@
       "parameters": {
         "AC_CHARGE_POWER": "[B4:B5] - 20000"
       }
+    },
+    {
+      "pid": "2103",
+      "pid_init": "ATSH79B;ATFCSH79B;ATFCSD300000;ATFCSM1;ATCRA7BB;",
+      "parameters": {
+        "HV_C_V_MAX": "(B15*256+B17)*0.01",
+        "HV_C_V_MIN": "[B18:B19]*0.01"
+      }
     }
   ]
 }
