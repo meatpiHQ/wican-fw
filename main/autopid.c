@@ -2268,14 +2268,16 @@ all_pids_t* load_all_pids(void){
                                 int param_count = cJSON_GetArraySize(params);
                                 curr_pid->parameters_count = param_count;  // Set the count
                                 curr_pid->parameters = (parameter_t*)calloc(param_count, sizeof(parameter_t));
+                                for (int p = 0; p < param_count; p++)
+                                {
+                                    curr_pid->parameters[p].period = all_pids->cycle;
+                                    curr_pid->parameters[p].timer = 0;
+                                    curr_pid->parameters[p].value = FLT_MAX;
+                                }
                                 cJSON* param;
                                 int param_index = 0;
                                 cJSON_ArrayForEach(param, params) 
                                 {
-                                    curr_pid->parameters[param_index].period = all_pids->cycle;
-                                    curr_pid->parameters[param_index].timer = 0;
-                                    curr_pid->parameters[param_index].value = FLT_MAX;
-
                                     cJSON* name_item = cJSON_GetObjectItem(param, "name");
                                     curr_pid->parameters[param_index].name = name_item ? strdup(name_item->valuestring) : NULL;
 
