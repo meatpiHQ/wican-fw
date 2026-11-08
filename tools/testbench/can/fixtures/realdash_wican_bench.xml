@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- RealDash CAN description for the bench dash player
+     (tools/testbench/can/dash_player.py): import it in RealDash under the
+     connection's settings, "XML file". Values are little-endian, the RealDash
+     default. Target ids: 37 = engine RPM, 81 = vehicle speed (km/h),
+     14 = engine coolant temperature (C). The counter frame 0x103 is not
+     mapped (it is for the bench's loss check). -->
+<RealDashCAN version="2">
+  <frames>
+    <frame id="0x100">
+      <value targetId="37" offset="0" length="2" />
+    </frame>
+    <frame id="0x101">
+      <value targetId="81" offset="0" length="1" />
+    </frame>
+    <frame id="0x102">
+      <value targetId="14" offset="0" length="1" />
+    </frame>
+  </frames>
+</RealDashCAN>
