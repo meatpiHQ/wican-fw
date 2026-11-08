@@ -92,6 +92,20 @@
       "parameters": {
         "OUTSIDE_TEMPERATURE": "B4 - 40"
       }
+    },
+    {
+      "pid": "225063",
+      "pid_init": "ATSH792;ATFCSH792;ATFCSD300000;ATFCSM1;ATCRA793;",
+      "parameters": {
+        "CHARGER_STATE": "B4"
+      }
+    },
+    {
+      "pid": "22504A",
+      "pid_init": "ATSH792;ATFCSH792;ATFCSD300000;ATFCSM1;ATCRA793;",
+      "parameters": {
+        "AC_CHARGE_POWER": "[B4:B5] - 20000"
+      }
     }
   ]
 }

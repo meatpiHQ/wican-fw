@@ -43,6 +43,7 @@
             "type": "object",
             "propertyNames": {
               "enum": [
+                "AC_CHARGE_POWER",
                 "AC_COMP",
                 "AC_C_C",
                 "AC_C_V",
@@ -56,6 +57,7 @@
                 "CAPACITOR",
                 "CHARGER_CONNECTED",
                 "CHARGER_DC_PWR",
+                "CHARGER_STATE",
                 "CHARGE_PLUG_STATE",
                 "CHARGING",
                 "CHARGING_DC",
