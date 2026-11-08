@@ -1,6 +1,6 @@
 {
   "car_model": "Toyota: Tacoma 2016-2023 (3rd gen, 2GR-FKS 3.5L)",
-  "comment": "Verified on a 2019 Tacoma (2GR-FKS 3.5L V6). Seven standard mode-01 PIDs plus odometer (standard PID A6) are read via functional OBD on 7DF->7E8; physical 7E0 does not respond on this truck, so they use the functional header (ATSH7DF) and must not use ATSH7E0;ATCRA7E8; as the Corolla/Sienna profiles do. Fuel level uses the combination meter (7C0 21 29, B3/2 litres) because standard 01 2F is not supported here; cross-checked against the dash gauge.",
+  "comment": "Verified on a 2019 Tacoma (2GR-FKS 3.5L V6). Standard mode-01 PIDs plus odometer (PID A6) are read via functional OBD on 7DF->7E8; physical 7E0 does not respond on this truck, so they use the functional header (ATSH7DF) and must not use ATSH7E0;ATCRA7E8; as the Corolla/Sienna profiles do. This lists the supported standard PIDs that map to a parameter name in params.json; the truck also supports timing advance (010E), engine load (0104), long-term and bank-2 fuel trims, O2 sensors, catalyst temps, barometric pressure and control-module voltage, but those have no parameter name in this repo so are left to the firmware's generic standard discovery. Fuel level uses the combination meter (7C0 21 29, B3/2 litres) because standard 01 2F is not supported here; cross-checked against the dash gauge.",
   "init": "ATSP6;ATST96;ATSH7DF;",
   "pids": [
     {
@@ -28,6 +28,12 @@
       }
     },
     {
+      "pid": "01461",
+      "parameters": {
+        "OUTSIDE_TEMPERATURE": "B3-40"
+      }
+    },
+    {
       "pid": "01111",
       "parameters": {
         "THROTTLE": "B3/2.55"
@@ -43,6 +49,12 @@
       "pid": "01061",
       "parameters": {
         "STFT": "(B3/1.28)-100"
+      }
+    },
+    {
+      "pid": "01031",
+      "parameters": {
+        "FUEL_SYS_STAT": "[B3:B4]"
       }
     },
     {
