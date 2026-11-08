@@ -541,6 +541,9 @@
        },
        "full_first": {
         "type": "boolean"
+       },
+       "networks": {
+        "type": "string"
        }
       },
       "required": [
@@ -562,7 +565,8 @@
       "cert_set": "",
       "car_model": "",
       "retain": true,
-      "full_first": true
+      "full_first": true,
+      "networks": ""
      }
     },
     "cli": {
@@ -877,6 +881,7 @@
    "gzip": false,
    "manual_override": false,
    "cert_set": "",
+   "networks": "",
    "cli": true
   },
   "schema": {
@@ -909,6 +914,9 @@
      "type": "boolean"
     },
     "cert_set": {
+     "type": "string"
+    },
+    "networks": {
      "type": "string"
     },
     "cli": {
@@ -2126,9 +2134,9 @@
   if ((window.__mockPreset || {}).mqtt) ov("mqtt_manager", window.__mockPreset.mqtt);
   ov("ha_webhooks", { enabled: true, url: "http://homeassistant.local:8123/api/webhook/8f4a21be", interval_s: 15 });
   ov("data_destinations", { enabled: true, destinations: [
-    { name: "dest1", type: "mqtt", enabled: true, url: "~/autopid", period_s: 5, auth: "none", auth_token: "", auth_name: "", basic_username: "", basic_password: "", api_key: "", query: "", cert_set: "", car_model: "", retain: true, full_first: true },
-    { name: "cloud", type: "https", enabled: true, url: "https://telemetry.example.com/wican", period_s: 30, auth: "bearer", auth_token: "", auth_name: "", basic_username: "", basic_password: "", api_key: "", query: "src=wican", cert_set: "homeca", car_model: "", retain: true, full_first: true },
-    { name: "abrp", type: "abrp", enabled: false, url: "", period_s: 10, auth: "api_key_query", auth_token: "", auth_name: "", basic_username: "", basic_password: "", api_key: "", query: "", cert_set: "", car_model: "hyundai:ioniq5:22:77", retain: true, full_first: true },
+    { name: "dest1", type: "mqtt", enabled: true, url: "~/autopid", period_s: 5, auth: "none", auth_token: "", auth_name: "", basic_username: "", basic_password: "", api_key: "", query: "", cert_set: "", car_model: "", retain: true, full_first: true, networks: "" },
+    { name: "cloud", type: "https", enabled: true, url: "https://telemetry.example.com/wican", period_s: 30, auth: "bearer", auth_token: "", auth_name: "", basic_username: "", basic_password: "", api_key: "", query: "src=wican", cert_set: "homeca", car_model: "", retain: true, full_first: true, networks: "HomeWiFi,Garage" },
+    { name: "abrp", type: "abrp", enabled: true, url: "", period_s: 10, auth: "api_key_query", auth_token: "", auth_name: "", basic_username: "", basic_password: "", api_key: "", query: "", cert_set: "", car_model: "hyundai:ioniq5:22:77", retain: true, full_first: true, networks: "Garage" },
   ] });
   ov("autopid", { enabled: true, vehicle: "Corolla 2021" });
   if ((window.__mockPreset || {}).j1939Active === true) ov("j1939", { enabled: true, mode: "active" });
@@ -2169,7 +2177,8 @@
       sleep_v: (sm.sleep_mv || 13100) / 1000, wake_v: (sm.wake_mv || 13200) / 1000, naps: 0,
       pending: sp ? sp.cause : "none", sleep_in_s: left, critical_v: 11.9, critical_s: 300,
       hold_s: hold, holds_left: 3 - state.holds, holds_max: 3,
-      activity_s: sp && state.logReadUntil > Date.now() ? Math.ceil((state.logReadUntil - Date.now()) / 1000) : 0 };
+      activity_s: sp && state.logReadUntil > Date.now() ? Math.ceil((state.logReadUntil - Date.now()) / 1000) : 0,
+      activity_why: sp && state.logReadUntil > Date.now() ? "log" : "" };
   };
   /* what /api/usb, /api/espnetlink, /api/usb/acm and /api/gps answer for the USB
      scene state.usb names (Quick Setup's USB step, 2026-10-07): "none",
@@ -2692,7 +2701,7 @@
       if (t.result === "no_ip") { o.channel = 6; o.took_ms = 10000; }
       return J(o);
     },
-    "/api/wifi/status": () => J({ enabled: true, sta_connected: state.staConnected !== false, ip: state.staConnected !== false ? "10.42.0.62" : "", ap_started: true, ap_default_password: state.apDefaultPassword === true, clients: 0, ap_ip: "192.168.0.10", dns: ["10.42.0.1", "1.1.1.1"],
+    "/api/wifi/status": () => J({ enabled: true, sta_connected: state.staConnected !== false, ssid: state.staConnected !== false ? "HomeWiFi" : "", ip: state.staConnected !== false ? "10.42.0.62" : "", ap_started: true, ap_default_password: state.apDefaultPassword === true, clients: 0, ap_ip: "192.168.0.10", dns: ["10.42.0.1", "1.1.1.1"],
       sta_attempt: { ssid: "HomeWiFi", reason: 204, fail_count: 3, deprioritised: true } }),
     /* the ABRP coverage of the live snapshot (2026-10-13): which Iternio fields the
        parameter names provide, which planning fields are missing and the name that
@@ -2700,12 +2709,18 @@
     "/api/destinations/abrp": () => J({ present: ["elevation", "heading", "lat", "lon", "speed", "utc"],
       missing: [{ field: "soc", parameter: "SOC" }, { field: "power", parameter: "HV_W" }, { field: "is_charging", parameter: "CHARGING" },
         { field: "is_dcfc", parameter: "CHARGING_DC" }, { field: "is_parked", parameter: "PARK_BRAKE" }], period_floor_s: 5, request_gap_ms: 2500 }),
-    "/api/destinations": () => J({ enabled: S.data_destinations.values.enabled !== false, running: true, network: true, mqtt: true, abrp_pacer: { gap_ms: 2500, waits: 12, waited_ms: 7400, last_request_age_s: 3 },
+    /* `ssid`, `networks`, `on_network`, `skipped_network` since 2026-11-08 (Active on): the mock's station is on HomeWiFi */
+    "/api/destinations": () => J({ enabled: S.data_destinations.values.enabled !== false, running: true, network: true, mqtt: true, ssid: "HomeWiFi", abrp_pacer: { gap_ms: 2500, waits: 12, waited_ms: 7400, last_request_age_s: 3 },
       destinations: (S.data_destinations.values.destinations || []).map((d, i) => ({ name: d.name, type: d.type, enabled: d.enabled !== false, url: d.url, period_s: d.period_s, auth: d.auth,
+        networks: d.networks || "", on_network: !d.networks || String(d.networks).split(",").map((s) => s.trim()).includes("HomeWiFi"),
+        skipped_network: (!d.networks || String(d.networks).split(",").map((s) => s.trim()).includes("HomeWiFi")) ? 0 : 9,
         has_token: i === 1, has_api_key: false, cert_set: d.cert_set, success: i === 0 ? 412 : 0, fail: i === 1 ? 3 : 0, skipped_offline: 0, consecutive_failures: i === 1 ? 3 : 0,
         backoff_s: i === 1 ? 10 : 0, next_in_s: 4, last_status: i === 1 ? 503 : (i === 0 ? 0 : 0), last_error: i === 1 ? "http=503" : "", last_error_time: i === 1 ? new Date().toISOString() : "",
         last_ok_time: i === 0 ? new Date().toISOString() : "", full_sent: i === 1 })) }),
-    "/api/webhook": () => J({ url: state.webhookUrl !== undefined ? state.webhookUrl : S.ha_webhooks.values.url, enabled: true, interval: 15, manual_override: false, data_mode: "changed", gzip: false, status: "ok", last_post: new Date().toISOString(), retries: 0, success_count: 512, fail_count: 3, last_error: "", last_error_time: "" }),
+    "/api/webhook": () => J({ url: state.webhookUrl !== undefined ? state.webhookUrl : S.ha_webhooks.values.url, enabled: true, interval: 15, manual_override: false, data_mode: "changed", gzip: false,
+      /* Active on (2026-11-08): the station is on HomeWiFi */
+      networks: S.ha_webhooks.values.networks || "", on_network: !S.ha_webhooks.values.networks || String(S.ha_webhooks.values.networks).split(",").map((s) => s.trim()).includes("HomeWiFi"),
+      status: "ok", last_post: new Date().toISOString(), retries: 0, success_count: 512, fail_count: 3, last_error: "", last_error_time: "" }),
     /* `network` + `paused` since 2026-10-11 (issue #976); a probe presets the state through __mockPreset.vpn */
     "/api/vpn": () => J({ state: "connected", type: "wireguard", endpoint: "vpn.example.com:51820", network: "HomeWiFi", paused: false, routes: ["10.66.0.0/24"], ts_ip: "", ts_peers: 0, derp: false, reason: "", connects: 1, failures: 0, uptime_s: 8040, ...((window.__mockPreset || {}).vpn || {}) }),
     "/api/usb": () => J(usbScene() ? usbScene().usb : { enabled: true, device_present: true, host_active: true, eth_connected: true, driver: "cdc_ncm", ip: "192.168.7.2", attaches: 1 }),
@@ -2746,12 +2761,22 @@
        their POSTs. fw.chip keeps the chip's own words (MIC3624 V2.3.24):
        the page names the version alone (Ali, 2026-11-01) */
     "/api/obd_chip": () => { const d = (window.__mockPreset && window.__mockPreset.diag) || {}; const down = !!d.down;
-      return J({ ready: !down, claim: "none", client_idle_ms: 4294967295, baud: down ? 0 : 2000000,
+      /* the update job (2026-11-08, the Quick Setup prompt): a POST starts a
+         stream of 3557 records over diag.updateMs (3000 by default), then the
+         chip is away for a second (its fresh bring-up) and reads the packaged
+         version; diag.updateFail = "ESP_ERR_TIMEOUT" ends the stream at record
+         1248 with that error and the chip stays on V2.3.22 */
+      const job = state.diagJob; const el = job ? Date.now() - job.t0 : -1; const ms = typeof d.updateMs === "number" ? d.updateMs : 3000;
+      const streaming = !!job && el < ms; const restarting = !!job && !d.updateFail && el >= ms && el < ms + 1000; const lifted = !!job && !d.updateFail && el >= ms;
+      const chip22 = !!d.chip22 && !lifted;
+      return J({ ready: !down && !restarting, claim: streaming ? "exclusive" : "none", client_idle_ms: 4294967295, baud: down ? 0 : 2000000,
         eeprom_guard: { rewrites: 0, blocked: 0, protocol_saves: 0, memory_off: 1 },
         uart: { rx_bytes: 18, rx_chunks: 1, rx_max_chunk: 18, rx_overflows: 0, rx_buffered: down ? 34 : 0, tx_bytes: 212 },
-        fw: { builtin: "V2.3.24", current: "V2.3.22, V2.3.24", chip: down ? "" : (d.chip22 ? "MIC3624 V2.3.22" : "MIC3624 V2.3.24"),
-          outdated: !down && !!d.chip22,
-          update: d.updating ? { running: true, lines: 1500, total: 3557, source: "builtin V2.3.24", done: false, last: "" }
+        fw: { builtin: "V2.3.24", current: "V2.3.22, V2.3.24", chip: down ? "" : (chip22 ? "MIC3624 V2.3.22" : "MIC3624 V2.3.24"),
+          outdated: !down && chip22,
+          update: streaming ? { running: true, lines: Math.round(3557 * el / ms), total: 3557, source: "builtin V2.3.24", done: false, last: "" }
+                : (job && d.updateFail) ? { running: false, lines: 1248, total: 3557, source: "builtin V2.3.24", done: true, last: d.updateFail }
+                : d.updating ? { running: true, lines: 1500, total: 3557, source: "builtin V2.3.24", done: false, last: "" }
                              : { running: false, lines: 3557, total: 3557, source: "builtin V2.3.24", done: true, last: "ESP_OK" } },
         bringup: { wire: down ? [{ baud: 2000000, bytes: 0, prompt: false, hex: "" }, { baud: 115200, bytes: 2, prompt: false, hex: "FC 00" }] : [] },
         subscribers: [{ idx: 0, name: "bridge", dropped: 0, queued: 0, depth: 64 }] }); },
@@ -3042,6 +3067,10 @@
          probe proves the page never sends it */
       if (body && body.force) { state.diagForced = (state.diagForced || 0) + 1; return J({ error: "force is not supported: the chip is written only when the image is newer than its firmware" }, 400); }
       state.diagUpdates = (state.diagUpdates || 0) + 1;
+      /* the job (2026-11-08): one at a time, animated by GET /api/obd_chip */
+      { const d = (window.__mockPreset && window.__mockPreset.diag) || {}; const ms = typeof d.updateMs === "number" ? d.updateMs : 3000;
+        if (state.diagJob && Date.now() - state.diagJob.t0 < ms) return J({ error: "update already running" }, 409);
+        state.diagJob = { t0: Date.now() }; }
       return J({ started: true, source: (body && body.path) || "builtin" }, 202);
     }
     if (method === "POST" && path === "/api/obd_chip/probe") {
@@ -3857,6 +3886,54 @@ input[type="range"]:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 4px var
 .chip.warn{background:var(--warning-tint);color:var(--warning)}.chip.warn .d{background:var(--warning)}
 .chip.crit{background:var(--danger-tint);color:var(--danger)}.chip.crit .d{background:var(--danger)}
 .chip.info{background:var(--primary-tint);color:var(--primary)}.chip.info .d{background:var(--primary)}
+/* Automate > Data destinations (2026-11-08): the rows align every control on
+   the input line, the row's facts hang under its URL, the options are a panel */
+.dest-hdr,.dest-row{display:grid;grid-template-columns:44px 96px minmax(0,1fr) 84px 176px 190px;gap:10px;padding:0 6px}
+.dest-hdr{padding-bottom:8px;font-size:11px;font-weight:800;letter-spacing:.05em;color:var(--text-3);text-transform:uppercase}
+.dest-row{align-items:start;padding:8px 6px;border-top:1px solid var(--border)}
+.dest-row .dest-cell{min-height:37px;display:flex;align-items:center;min-width:0}
+.dest-row .dest-url{display:flex;flex-direction:column;min-width:0}
+.dest-sub{color:var(--text-2);font-size:11.5px;margin-top:3px;display:flex;gap:6px;align-items:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dest-sub i{font-style:normal;color:var(--text-3)}
+.dest-row .btn.on{background:var(--primary-tint);color:var(--primary)}
+.dest-panel{margin:0 6px 12px 54px;padding:6px 18px 14px;border:1px solid var(--border);border-radius:10px;background:var(--surface-2)}
+.dest-panel .frow{grid-template-columns:150px minmax(0,1fr);padding:8px 0;border-bottom:1px solid var(--border)}
+.dest-panel .frow:last-child{border-bottom:0}
+.dest-panel .frow input,.dest-panel .frow select{background:var(--surface);max-width:420px}
+.dest-kv{display:grid;grid-template-columns:auto auto auto auto;gap:4px 22px;font-size:12.5px;padding-top:6px}
+.dest-kv b{color:var(--text-2);font-weight:600}
+/* the networks a sender is active on: a dropdown with check boxes (Ali, 2026-11-08) */
+.netdd{position:relative;display:inline-block;width:100%;min-width:220px;max-width:420px}
+.netdd>button{display:flex;align-items:center;gap:10px;width:100%;padding:8px 11px;border:1px solid var(--border);border-radius:9px;background:var(--surface);font:inherit;font-size:13px;color:var(--text);cursor:pointer;text-align:left}
+.netdd>button>span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.netdd>button svg{width:14px;height:14px;color:var(--text-2);flex:none}
+.netdd.open>button{border-color:var(--primary);box-shadow:0 0 0 3px var(--focus)}
+.netdd .pop{display:none;position:absolute;left:0;top:calc(100% + 4px);width:100%;min-width:260px;box-sizing:border-box;padding:6px;border:1px solid var(--border-strong);border-radius:10px;background:var(--surface);box-shadow:var(--shadow-lg);z-index:20;flex-direction:column;gap:2px}
+.netdd.open .pop{display:flex}
+.netdd .pop label{display:flex;gap:10px;align-items:center;font-size:13px;padding:7px 8px;border-radius:7px;cursor:pointer;margin:0}
+.netdd .pop label:hover{background:var(--surface-2)}
+.netdd .pop input{width:15px;height:15px;margin:0;accent-color:var(--primary);flex:none}
+.netdd .pop .tag{font-size:11px;color:var(--text-2);margin-left:auto;white-space:nowrap}
+.netdd .pop .sep{height:1px;background:var(--border);margin:4px 2px}
+.netdd .pop .gone{color:var(--text-3);text-decoration:line-through}
+/* the large one-button popups (Quick Setup's, and the OBD chip firmware
+   prompt the Status page shows too since 2026-11-08): moved here from the
+   wizard chunk */
+.qs-pop-modal{max-width:580px;padding:26px 28px 24px}
+.qs-pop{display:flex;gap:18px;align-items:flex-start}
+.qs-pop .ci{width:56px;height:56px;border-radius:50%;display:grid;place-items:center;background:var(--success);color:#fff;flex:none}
+.qs-pop .ci svg{width:30px;height:30px;stroke-width:3}
+.qs-pop .ci.info{background:var(--primary)}
+.qs-pop h3{margin:0 0 10px;font-size:21px;line-height:1.25}
+.qs-pop p{margin:0 0 10px;font-size:15px;line-height:1.55}
+.qs-pop p.help{font-size:14px;margin-top:4px}
+.qs-pop code{font-size:14px;padding:2px 7px;border-radius:5px;background:var(--surface-2)}
+.qs-pop-modal .acts{margin-top:8px}
+.qs-pop-modal .acts .btn{padding:12px 20px;font-size:15px}
+.qs-pop-modal .acts .btn svg{width:18px;height:18px}
+.qs-spin{width:18px;height:18px;border:2.5px solid var(--border-strong);border-top-color:var(--primary);border-radius:50%;animation:qsspin .8s linear infinite;flex:none;margin:0 auto}
+@keyframes qsspin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.qs-spin{animation:none}}
 
 /* tables */
 .tbl{width:100%;border-collapse:collapse;font-size:13px}
@@ -4372,7 +4449,7 @@ function sleepHoldText(){
   const st=sleepSoon.st;if(!st||typeof st.holds_left!=="number")return"";
   /* a log read in progress (the Home Assistant backfill, the dashboard's
      history) pushes the countdown out a minute at a time (2026-11-06) */
-  const act=st.activity_s>0?"Kept awake while the log is being read. ":"";
+  const act=st.activity_s>0?(st.activity_why==="chip_update"?"Kept awake while the OBD chip firmware is updated. ":"Kept awake while the log is being read. "):"";
   if(st.hold_s>0)return act+"Kept awake on your request ("+st.holds_left+" of "+st.holds_max+" holds left). ";
   return act+(st.holds_left===0?"Kept awake "+st.holds_max+" times: no further extension. ":"");
 }
@@ -4871,7 +4948,7 @@ const LABELS={
   dtc_uds_ext:"UDS extended IDs",dtc_uds_mask:"UDS status mask",
   /* ha_webhooks */
   "data_destinations.enabled":"Destinations","data_destinations.destinations":"Destinations",
-  "ha_webhooks.url":"Webhook URL",url2:"Failover URL",interval_s:"Push interval (s)",data_mode:"Data to push",gzip:"Gzip compression",
+  "ha_webhooks.url":"Webhook URL",url2:"Failover URL",interval_s:"Push interval (s)",data_mode:"Data to push",gzip:"Gzip compression",networks:"Active on",
   manual_override:"Manual URL override",
   /* imu_manager / interface_manager */
   smd:"Significant motion detection",wom:"Wake on motion",smd_sensitivity:"Motion sensitivity",wom_threshold:"Wake threshold",
@@ -4917,6 +4994,8 @@ const LABELS={
 };
 const HELP={
   cli:"Register this component's commands on the serial console.",
+  /* ha_webhooks (2026-11-08): the generated row's text; the page swaps the input for the networks dropdown */
+  "ha_webhooks.networks":"The WiFi networks the pushes go out on: All networks, or only the ticked ones (the list under Settings > WiFi). Home Assistant usually lives on the home network; with a VPN it is reachable from anywhere, so keep All networks then.",
   /* fw_update (2026-10-18) */
   "fw_update.enabled":"The device reads the MeatPi release list 90 s after it is online and then on the interval, and shows what is new here and in Home Assistant. Nothing installs by itself. Off: Check now and Update still work.",
   "fw_update.channel":"Stable is what everyone gets. Beta sees release candidates too, alfa every test build. A channel never offers a downgrade.",
@@ -5226,6 +5305,151 @@ async function certSetPicker(rows,component,values){
   else row.append(h("div",{class:"help"},"Manage certificate sets under System → Certificates."));
   return rows;
 }
+/* The networks a sender is active on (2026-11-08; the data destinations and
+   the Home Assistant webhook store it as `networks`, a comma-separated list
+   of station network names, "" = all). Ali: "a drop down list popup with
+   checkboxes": a button that reads like a select (All networks, or the
+   ticked names) opens a list under it: All networks first, then every
+   station network under Settings > WiFi (the main one and the backups, the
+   connected one marked), then any stored name that is not configured any
+   more (struck through, so a sender that never sends explains itself).
+   Ticking a network clears All; unticking the last one puts All back. */
+const splitNets=s=>String(s||"").split(",").map(x=>x.trim()).filter(Boolean);
+const joinNets=a=>a.join(",");
+async function wifiNetworkNames(){
+  const out={names:[],current:""};
+  try{const w=await api("/api/settings/wifi_manager");const v=w&&w.values?w.values:w;
+    if(v&&v.sta_ssid)out.names.push({ssid:v.sta_ssid,role:"main network"});
+    for(let i=1;i<=5;i++){const s=v&&v["fallback"+i+"_ssid"];if(s)out.names.push({ssid:s,role:"backup "+i});}}catch{}
+  try{const st=await tryGet("/api/wifi/status");out.current=(st&&(st.ssid||(st.sta_connected&&st.sta_attempt&&st.sta_attempt.ssid)))||"";}catch{}
+  return out;
+}
+function networkPicker(value,onchange,info){
+  const nets=(info&&info.names)||[],current=(info&&info.current)||"";
+  let picked=splitNets(value);
+  const wrap=h("div",{class:"netdd"});
+  const label=h("span",{},"");
+  const btn=h("button",{type:"button","aria-haspopup":"listbox","aria-expanded":"false",onclick:e=>{e.stopPropagation();const on=!wrap.classList.contains("open");
+    document.querySelectorAll(".netdd.open").forEach(x=>{x.classList.remove("open");});wrap.classList.toggle("open",on);btn.setAttribute("aria-expanded",on?"true":"false");}},label,ic("down"));
+  const pop=h("div",{class:"pop",role:"listbox",onclick:e=>e.stopPropagation()});
+  const paint=()=>{
+    label.textContent=picked.length?picked.join(", "):"All networks";
+    pop.replaceChildren();
+    const row=(ssid,tag,gone)=>{const inp=h("input",{type:"checkbox",checked:ssid===null?!picked.length:picked.includes(ssid),onchange:()=>{
+        if(ssid===null)picked=[];else picked=inp.checked?[...picked.filter(x=>x!==ssid),ssid]:picked.filter(x=>x!==ssid);
+        onchange(joinNets(picked));paint();}});
+      return h("label",{},inp,h("span",{class:gone?"gone":""},ssid===null?"All networks":ssid),tag?h("span",{class:"tag"},tag):null);};
+    pop.append(row(null,"",false),h("div",{class:"sep"}));
+    nets.forEach(n=>pop.append(row(n.ssid,n.role+(n.ssid===current?" · connected now":""),false)));
+    picked.filter(p=>!nets.some(n=>n.ssid===p)).forEach(p=>pop.append(row(p,"not configured any more",true)));
+    if(!nets.length)pop.append(h("div",{class:"help",style:"padding:6px 8px"},"No station network configured yet: Settings > WiFi."));};
+  paint();
+  wrap.append(btn,pop);
+  /* a tap anywhere else closes it; the listener leaves with the picker */
+  const off=()=>{if(!wrap.isConnected&&wrap.dataset.shown){document.removeEventListener("click",off);return;}if(wrap.isConnected)wrap.dataset.shown="1";wrap.classList.remove("open");btn.setAttribute("aria-expanded","false");};
+  document.addEventListener("click",off);
+  wrap.load=v=>{picked=splitNets(v);paint();};
+  return wrap;
+}
+/* Swap a settingsForm `networks` text input for the dropdown (the Home
+   Assistant card). Shares the form's staged values object like certSetPicker. */
+async function networksRowPicker(rows,component,values,info){
+  const row=rows.find(r=>r.dataset&&r.dataset.key==="networks");if(!row)return rows;
+  const pk=networkPicker(values.networks||"",v=>{values.networks=v;store.stage(component,values);},info||await wifiNetworkNames());
+  row.querySelector(".ctl").replaceChildren(pk);
+  row.load=v=>pk.load(v);
+  return rows;
+}
+/* The OBD chip firmware prompt (2026-11-08, Ali). On chip firmware V2.3.22
+   the warm start the bring-up sends kills the chip's automatic protocol
+   search until a power cycle, so the vehicle detection and every app's
+   ATSP0 fail to find the car; the device carries V2.3.24 (6.0.0-beta.5 had
+   written .22 onto .24 chips). Shared by Quick Setup's vehicle step
+   (setup.js) and the Status page (a device set up before never re-runs the
+   wizard): the popup with one button, the job (the Maintenance card's:
+   POST /api/obd_chip/update, GET /api/obd_chip for the records written, then
+   the chip's own restart) with its progress in a popup that a tap beside it
+   does not close, the Done popup, and the banner with the same offer.
+   WiCAN stays awake meanwhile (the sleep entry waits for the job). */
+const chipFw={
+  verOf:s=>{const m=/V\d+\.\d+\.\d+/.exec(s||"");return m?m[0]:"";},
+  outdated:st=>!!(st&&st.ready&&st.fw&&st.fw.outdated),
+  now(st){return this.verOf(st&&st.fw&&st.fw.chip)||"an older version";},
+  builtin(st){return (st&&st.fw&&st.fw.builtin)||"the packaged version";},
+  pop(){const m=document.querySelector("#modal-root .modal");if(m)m.classList.add("qs-pop-modal");return m;},
+  /* the offer: one button (Ali: "OK or continue"); a tap beside it closes it */
+  prompt(st,onStart){
+    const lbl=t=>h("b",{style:"font-weight:600;color:var(--text-2)"},t);
+    modal({title:null,body:h("div",{class:"qs-pop"},h("span",{class:"ci info"},ic("cpu")),
+      h("div",{style:"min-width:0"},h("h3",{},"The OBD chip needs a firmware update"),
+        h("p",{},"The chip in this WiCAN runs firmware "+this.now(st)+". On that version the automatic protocol search stops working after a restart, so apps and the vehicle detection cannot find the car until the device is unplugged. This WiCAN carries "+this.builtin(st)+", which does not have the fault."),
+        h("div",{style:"display:grid;grid-template-columns:auto auto;gap:6px 24px;margin:4px 0 12px;padding:12px 14px;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;width:max-content;font-size:13.5px"},
+          lbl("Chip firmware now"),h("code",{},this.now(st)),lbl("After the update"),h("code",{},this.builtin(st)),lbl("Takes"),h("span",{},"about 20 seconds")),
+        h("p",{class:"help"},"Leave WiCAN plugged in and the ignition on. Your settings are not touched; apps lose the chip meanwhile, and WiCAN stays awake until it is done."))),
+      actions:[{label:"Update and continue",kind:"pri",fn:onStart}]});
+    const m=this.pop();if(m){const b=m.querySelector(".acts button.pri");if(b)b.prepend(ic("refresh"));}
+  },
+  /* the banner with the same offer; cs = {state, err, tries} of the caller */
+  banner(st,cs,onClick,id){
+    const failed=cs.state==="failed";
+    return h("div",{class:"banner "+(failed?"crit":"warn"),id,style:"display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:12px"},ic("alert"),
+      h("div",{},...(failed
+        ?[h("b",{},"The chip firmware update did not finish. "),"The attempt ended with "+cs.err+". Try again: an interrupted write is completed by the next attempt."+(cs.tries>=2?" If it fails again, unplug WiCAN for ten seconds, plug it back in and try once more.":"")+" The chip still runs "+this.now(st)+"; its automatic protocol search stays broken until it is on "+this.builtin(st)+"."]
+        :[h("b",{},"The OBD chip needs a firmware update. "),"The chip runs "+this.now(st)+", this WiCAN carries "+this.builtin(st)+". On "+this.now(st)+" the automatic protocol search stops working after a restart, so the vehicle detection and every app would fail to find the car. About 20 seconds; WiCAN stays awake meanwhile."])),
+      cs.state==="running"?chip("Updating…","info"):h("button",{class:"btn pri sm",type:"button",onclick:onClick},ic("refresh"),failed?"Try again":"Update now"));
+  },
+  /* the job with its progress popup; resolves {ok:true, st} or {ok:false, why} */
+  async run(st0){
+    const builtin=this.builtin(st0);
+    const bar=h("i",{style:"display:block;height:100%;width:0;background:var(--primary);border-radius:6px;transition:width .3s"});
+    const line=h("span",{},"Starting the update…"),pct=h("span",{class:"mono",style:"font-weight:600"},"");
+    const stepEl=h("div",{style:"display:flex;gap:18px;flex-wrap:wrap;align-items:center;font-size:12.5px;margin:10px 0 4px"});
+    const steps=k=>{const row=(t,s)=>h("span",{style:"display:inline-flex;align-items:center;gap:7px;color:"+(s==="run"?"var(--primary);font-weight:600":"var(--text-2)")},
+        h("span",{style:"width:9px;height:9px;border-radius:50%;display:inline-block;background:"+(s==="done"?"var(--success)":s==="run"?"var(--primary)":"var(--border-strong)")}),t);
+      stepEl.replaceChildren(row("Chip checked",k>0?"done":"run"),row("Writing "+builtin,k>1?"done":k===1?"run":""),row("Chip restarts",k>2?"done":k===2?"run":""));};
+    steps(0);
+    const body=h("div",{class:"qs-pop"},h("span",{class:"ci info"},h("span",{class:"qs-spin",style:"width:28px;height:28px;border-width:3px;border-color:rgba(255,255,255,.35);border-top-color:#fff;margin:0"})),
+      h("div",{style:"min-width:0;flex:1"},h("h3",{},"Updating the OBD chip firmware"),
+        h("div",{style:"display:flex;justify-content:space-between;font-size:13.5px;color:var(--text-2)"},line,pct),
+        h("div",{style:"height:10px;background:var(--surface-3);border-radius:6px;overflow:hidden;margin:6px 0 8px"},bar),
+        stepEl,
+        h("p",{class:"help"},"About 20 seconds in all. Do not unplug WiCAN and leave the ignition on. The chip restarts by itself at the end and this page continues.")));
+    const close=modal({title:null,body,actions:[]});
+    document.getElementById("modal-root").onclick=null;   /* no closing by a tap beside it while the chip is written */
+    this.pop();
+    const t0=Date.now();let seen=false;
+    /* the job's state before this run: a run too short for the 1 s poll to
+       catch "running" still shows as a changed result */
+    const up0=(st0&&st0.fw&&st0.fw.update)||{};
+    try{await api("/api/obd_chip/update",{method:"POST",body:{}});}
+    catch(e){if(!/409/.test(e.message)){close();return {ok:false,why:e.message};}}
+    for(;;){
+      await new Promise(r=>setTimeout(r,1000));
+      const s=await tryGet("/api/obd_chip");
+      if(!s){if(Date.now()-t0>90000){close();return {ok:false,why:"WiCAN did not answer"};}continue;}
+      const up=(s.fw&&s.fw.update)||{};
+      if(up.running){seen=true;const p=up.total?Math.round(up.lines/up.total*100):0;
+        line.replaceChildren("Writing the image: ",h("b",{class:"mono"},fmt.num(up.lines))," of ",h("span",{class:"mono"},fmt.num(up.total))," records");pct.textContent=p+"%";bar.style.width=p+"%";steps(1);continue;}
+      const ended=seen||(up.done&&(up.lines!==up0.lines||up.last!==up0.last||up.done!==up0.done));
+      if(!ended&&Date.now()-t0<8000)continue;   /* the job has a few seconds to start */
+      if(ended&&up.done&&up.last&&up.last!=="ESP_OK"){close();return {ok:false,why:up.last+(up.lines&&up.lines<up.total?" at record "+fmt.num(up.lines)+" of "+fmt.num(up.total):"")};}
+      /* the stream is done: the chip comes back through a fresh bring-up */
+      steps(2);line.textContent="The chip restarts";pct.textContent="100%";bar.style.width="100%";
+      if(s.ready&&s.fw&&!s.fw.outdated){steps(3);close();return {ok:true,st:s};}
+      if(!ended&&s.fw&&s.fw.outdated&&Date.now()-t0>20000){close();return {ok:false,why:"the update did not start"};}
+      if(Date.now()-t0>150000){close();return {ok:false,why:"the chip did not come back after the update"};}
+    }
+  },
+  /* Done: one button; onContinue null on the Status page */
+  done(st,onContinue){
+    modal({title:null,body:h("div",{class:"qs-pop"},h("span",{class:"ci"},ic("check")),
+      h("div",{},h("h3",{},"OBD chip updated to "+this.builtin(st)),
+        h("p",{},"Every record was written and the chip restarted. It answers again at full speed, and its automatic protocol search works on this firmware."),
+        h("p",{class:"help"},onContinue?"Nothing else changed. Continue with the vehicle detection.":"Nothing else changed. Apps that use the automatic protocol find the car again."))),
+      actions:[{label:"Continue",kind:"pri",fn:onContinue||null}]});
+    this.pop();
+  }
+};
 /* Map a standard wg-quick .conf onto the vpn_manager keys (client-side,
    like the legacy UI). Returns the number of recognized fields. */
 function importWgConf(text,vals){
@@ -5587,7 +5811,31 @@ PAGES.status=async(view)=>{
   const cardsEl=h("div",{class:"tiles"});
   const colsEl=h("div",{class:"cols2"});
   const hintEl=h("div",{}); /* Quick Setup pointer while vehicle data is off */
-  p.append(cardsEl,hintEl,colsEl);
+  /* the OBD chip firmware prompt (2026-11-08, Ali): a device set up before
+     never re-runs Quick Setup, so the Status page carries the same banner
+     and popup; the banner whenever the chip is outdated, the popup once per
+     browser session */
+  const chipEl=h("div",{});
+  p.append(cardsEl,chipEl,hintEl,colsEl);
+  const cs={state:"unknown",err:"",tries:0};let chipSt=null;
+  const chipKey="wican-chip-prompted-"+((conn.info&&conn.info.device_id)||"");
+  const paintChip=()=>chipEl.replaceChildren(chipFw.outdated(chipSt)&&cs.state!=="done"?chipFw.banner(chipSt,cs,startChip,"chip-fw-banner"):null);
+  async function startChip(){
+    if(cs.state==="running")return;
+    cs.state="running";cs.err="";paintChip();
+    const r=await chipFw.run(chipSt);
+    if(!r.ok){cs.state="failed";cs.err=r.why;cs.tries++;paintChip();return;}
+    chipSt=r.st;cs.state="done";paintChip();chipFw.done(r.st,null);
+  }
+  async function chipCheck(){
+    if(cs.state==="running")return;
+    const s=await tryGet("/api/obd_chip");if(!s)return;
+    chipSt=s;paintChip();
+    if(chipFw.outdated(s)&&cs.state==="unknown"){
+      let seen=false;try{seen=sessionStorage.getItem(chipKey)==="1";}catch(_){}
+      if(!seen){try{sessionStorage.setItem(chipKey,"1");}catch(_){}chipFw.prompt(s,startChip);}
+    }
+  }
   /* this boot's cause is fixed for the whole boot, fetched once, not every refresh */
   const hist=await tryGet("/api/restart/history");
   /* whether MQTT is enabled at all (2026-11-03): "Off" read as disabled while a
@@ -5652,6 +5900,7 @@ PAGES.status=async(view)=>{
         ["SD card",sdRowValue(b.sdcard_mounted?"Mounted":"Not mounted")],
         ["Internal RAM free",st.memory?fmt.bytes(st.memory.internal.free):"-"],
         ["Die temperature",st.temp_c!=null?st.temp_c.toFixed(1)+" °C":"-"]])));
+    chipCheck();
   }
   await refresh();const t=setInterval(()=>{if(conn.state==="online")refresh();},4000);return()=>clearInterval(t);
 };
@@ -6203,12 +6452,15 @@ PAGES.automate=async(view,sub)=>{
     paneBeh.append(card("Automate settings","zap",...body,
       note("","Values land on the Dashboard and flow to rules, the logger and the data destinations. Which PIDs are polled is set on the Parameters tab.")));
   }catch(e){avErr=e.message;paneBeh.append(banner("crit","alert","AutoPID: "+e.message));}
+  /* the station networks, for the Active on dropdowns of the Home Assistant
+     card and the destinations (2026-11-08) */
+  const wifiNames=await wifiNetworkNames();
   /* 2. Home Assistant */
   try{
     const haVals=await api("/api/settings/ha_webhooks");
-    const haRows=await certSetPicker(
+    const haRows=await networksRowPicker(await certSetPicker(
       await settingsForm("ha_webhooks",null,{values:haVals,
-        advancedExcept:["enabled","interval_s","data_mode","gzip"]}),"ha_webhooks",haVals);
+        advancedExcept:["enabled","interval_s","data_mode","gzip","networks"]}),"ha_webhooks",haVals),"ha_webhooks",haVals,wifiNames);
     const statsEl=h("div",{class:"rowflex",style:"flex-wrap:wrap;gap:8px;margin-top:10px"});
     const paint=async()=>{const wh=await tryGet("/api/webhook");if(!wh)return;
       const bad=wh.status&&wh.status!=="ok"&&wh.status!=="disabled";
@@ -6216,6 +6468,9 @@ PAGES.automate=async(view,sub)=>{
         chip("OK: "+fmt.num(wh.success_count||0),"ok"),
         chip("Fail: "+fmt.num(wh.fail_count||0),(wh.fail_count||0)>0?"crit":""),
         chip("Status: "+(wh.status||"-"),bad?"crit":(wh.status==="ok"?"ok":"")),
+        /* Active on (2026-11-08): the pushes wait while the station is not on a selected network */
+        ...(wh.on_network===false?[chip("Waiting for "+(splitNets(wh.networks).join(", ")||"its networks"),"warn"),
+          h("span",{class:"help",style:"flex-basis:100%"},"Not on a selected network"+(wifiNames.current?" (on "+wifiNames.current+" now)":" (no WiFi network now)")+": pushes resume when WiCAN is back on one. Nothing is counted as a failure meanwhile.")]:[]),
         ...(wh.status==="rejected"?[h("span",{class:"help",style:"color:var(--crit)"},"Home Assistant rejected this device's identity: pushes are paused until it re-registers.")]:[]),
         wh.url?h("span",{class:"help",style:"overflow-wrap:anywhere"},"URL: ",h("b",{class:"mono",style:"color:var(--text)"},wh.url)):h("span",{class:"help"},"Not registered: the HA integration registers itself when it discovers the device"));};
     await paint();
@@ -6271,7 +6526,15 @@ PAGES.automate=async(view,sub)=>{
      + live counters from GET /api/destinations. Types: MQTT topic, HTTP,
      HTTPS (with a cert_manager set), ABRP telemetry. Older destinations
      that this page used to create as event_manager timer rules can be
-     imported once. */
+     imported once. Reworked 2026-11-08 (Ali's review of the screenshots):
+     one status chip per row, in a fixed column, with a fixed vocabulary
+     (Not applied yet, Paused, Sending, Failing, Waiting for ...); the row's
+     facts as a muted line under its topic or URL; Options as a named
+     button; the options as a panel of their own, starting with the networks
+     the row is active on (`networks`, a dropdown with check boxes) and
+     ending with the delivery counters; the Links row explaining itself
+     while a link is down; a restart notice while a saved table is not
+     running yet. */
   try{
     const dv=await api("/api/settings/data_destinations");delete dv.degraded;delete dv.pending_reboot;
     dv.destinations=Array.isArray(dv.destinations)?dv.destinations:[];
@@ -6284,26 +6547,50 @@ PAGES.automate=async(view,sub)=>{
     const ABRP_AUTHS=[["api_key_query","api_key query parameter (default)"],["api_key_header","Authorization: APIKEY header"]];
     const PH={mqtt:"~/autopid",http:"http://host/path",https:"https://host/path",abrp:"https://api.iternio.com/1/tlm/send (default)"};
     const live={};  /* name -> counters from /api/destinations */
+    const link={known:false,enabled:true,network:true,mqtt:true,ssid:""};  /* the last poll's link state */
     const expanded=new Set();
     const listEl=h("div",{});
     const newName=()=>{let i=1;while(dv.destinations.some(d=>d.name==="dest"+i))i++;return "dest"+i;};
-    const blank=()=>({name:newName(),type:"mqtt",enabled:true,url:"~/autopid",period_s:5,auth:"none",auth_token:"",auth_name:"",basic_username:"",basic_password:"",api_key:"",query:"",cert_set:"",car_model:"",retain:true,full_first:true});
-    const statusChip=d=>{const l=live[d.name];
-      if(!l)return h("span",{class:"help",title:"Not on the device yet: apply and restart"},"new");
-      if(l.consecutive_failures>0)return chip("Fail "+fmt.num(l.fail)+(l.backoff_s?" · wait "+l.backoff_s+"s":""),"crit");
-      if(l.skipped_offline>0&&!l.success)return chip("Offline "+fmt.num(l.skipped_offline),"warn");
-      return chip("OK "+fmt.num(l.success)+(l.fail?" · Fail "+fmt.num(l.fail):""),l.success?"ok":"");};
+    const blank=()=>({name:newName(),type:"mqtt",enabled:true,url:"~/autopid",period_s:5,auth:"none",auth_token:"",auth_name:"",basic_username:"",basic_password:"",api_key:"",query:"",cert_set:"",car_model:"",retain:true,full_first:true,networks:""});
+    const chipT=(t,k,title)=>{const c=chip(t,k);if(title)c.title=title;return c;};
+    const netWords=s=>{const n=splitNets(s);return n.length?n.join(", "):"its networks";};
+    /* one chip, one place, one dot, a fixed vocabulary (Ali, 2026-10-07: a
+       pill whose place or words move from row to row reads as noise) */
+    const statusChip=d=>{
+      const l=live[d.name];
+      if(!l)return chipT("Not applied yet","","Apply Configuration and restart: the device runs the saved table");
+      if(link.enabled===false)return chipT("Destinations paused","","The master switch is off");
+      if(l.enabled===false)return chipT("Paused","","This row's switch is off");
+      if(l.on_network===false)return chipT("Waiting for "+netWords(l.networks),"warn","Active on "+netWords(l.networks)+" only; WiCAN is on "+(link.ssid||"no WiFi network")+" now. Nothing counts as a failure meanwhile.");
+      if(l.consecutive_failures>0)return chipT("Failing"+(l.backoff_s?" · retry in "+l.backoff_s+" s":""),"crit",(l.last_error?"Last error: "+l.last_error+". ":"")+fmt.num(l.fail)+" failed in all");
+      const up=d.type==="mqtt"?link.mqtt:link.network;
+      if(link.known&&up===false)return chipT(d.type==="mqtt"?"Waiting for the broker":"Waiting for network","warn","Nothing counts as a failure while the link is down");
+      if(l.success)return chipT("Sending · "+fmt.num(l.success)+(l.fail?" · "+fmt.num(l.fail)+" failed":""),"ok",(l.last_ok_time?"Last OK "+l.last_ok_time+". ":"")+(l.next_in_s!=null?"Next in "+l.next_in_s+" s":""));
+      return chipT("Waiting for the first send","",l.next_in_s!=null?"Next in "+l.next_in_s+" s":"");};
+    /* the row's facts, muted, under its topic or URL */
+    const subLine=d=>{
+      const parts=[];const n=splitNets(d.networks);parts.push(n.length?"Only on "+n.join(", "):"All networks");
+      if(d.type==="mqtt")parts.push(d.retain!==false?"retained":"not retained");
+      else if(d.type==="abrp"){if(d.car_model)parts.push("car "+d.car_model);}
+      else{const a=d.auth||"none";if(a==="bearer")parts.push("bearer token");else if(a==="basic")parts.push("basic auth");else if(a!=="none")parts.push("API key");
+        if(d.cert_set)parts.push("certificate set "+d.cert_set);if(d.full_first!==false)parts.push("config and status on the first push");}
+      const el=h("div",{class:"dest-sub"});parts.forEach((p,i)=>{if(i)el.append(h("i",{},"·"));el.append(h("span",{},p));});return el;};
     const secretInput=(d,key,has,ph)=>{
       const inp=h("input",{type:"password",autocomplete:"new-password",value:d[key]||"",placeholder:has?"stored, leave blank to keep":ph,
         oninput:e=>{d[key]=e.target.value;stageIt();}});
       return h("div",{class:"rowflex"},h("div",{class:"grow"},inp),h("button",{class:"btn sm gh",type:"button",title:"Show / hide",onclick:()=>inp.type=inp.type==="password"?"text":"password"},"show"));};
     const frow=(label,ctl,help)=>h("div",{class:"frow"},h("label",{},label),h("div",{class:"ctl"},ctl),help?h("div",{class:"help"},help):null);
     const sel=(opts,cur,onchange)=>h("select",{onchange:e=>onchange(e.target.value)},...opts.map(([v,t])=>h("option",{value:v,selected:cur===v},t)));
+    const rowEls={};   /* name -> {status, sub}: repainted without a rebuild */
+    const repaintRow=d=>{const r=rowEls[d.name];if(!r)return;r.status.replaceChildren(statusChip(d));const ns=subLine(d);r.sub.replaceWith(ns);r.sub=ns;};
     const details=d=>{
       const l=live[d.name]||{};
       const rows=[];
+      /* the networks the row is active on come first: the one choice every type has */
+      rows.push(frow("Active on",networkPicker(d.networks||"",v=>{d.networks=v;stageIt();repaintRow(d);},wifiNames),
+        "The WiFi networks this destination sends on (the list under Settings > WiFi; All networks is the default). With no WiFi (the ESPNetLink or USB Ethernet alone) a restricted destination waits."));
       if(d.type==="mqtt"){
-        rows.push(frow("Retained",switchCtl(d.retain!==false,v=>{d.retain=v;stageIt();},{sm:true}),"A retained message gives a new subscriber the last snapshot at once."));
+        rows.push(frow("Retained",switchCtl(d.retain!==false,v=>{d.retain=v;stageIt();repaintRow(d);},{sm:true}),"A retained message gives a new subscriber the last snapshot at once."));
       }else if(d.type==="abrp"){
         rows.push(frow("ABRP user token",secretInput(d,"auth_token",l.has_token,"from the ABRP app: the vehicle's live data setup, Generic"),"Required. Identifies your car in A Better Routeplanner: the token shown by the Generic option of the vehicle's live data setup."));
         rows.push(frow("ABRP API key",secretInput(d,"api_key",l.has_api_key,"your Iternio Telemetry API key"),"Your own key from Iternio (free for telemetry, contact@iternio.com); it identifies the application and allows 2 requests per second. Sent as the api_key query parameter, or as an Authorization: APIKEY header below."));
@@ -6314,7 +6601,7 @@ PAGES.automate=async(view,sub)=>{
             miss.length?h("span",{},h("b",{},"Missing for route planning: "),miss.map(m=>m.field+" (name a parameter "+m.parameter+")").join(", "),". Values pass through unchanged, in ABRP's units."):h("b",{},"All of ABRP's main fields are provided."));});
         rows.push(frow("ABRP fields",cov,"ABRP rows send every 5 s at least and this device starts ABRP requests at least 2.5 s apart, the Test button included (Iternio's limit is 2 per second per key)."));
         rows.push(frow("API key placement",sel(ABRP_AUTHS,d.auth==="api_key_header"?"api_key_header":"api_key_query",v=>{d.auth=v;d.auth_name="";stageIt();})));
-        rows.push(frow("Car model",h("input",{value:d.car_model||"",placeholder:"e.g. hyundai:ioniq5:22:77",oninput:e=>{d.car_model=e.target.value;stageIt();}}),"ABRP's car_model id (optional). Sent in every telemetry record."));
+        rows.push(frow("Car model",h("input",{value:d.car_model||"",placeholder:"e.g. hyundai:ioniq5:22:77",oninput:e=>{d.car_model=e.target.value;stageIt();repaintRow(d);}}),"ABRP's car_model id (optional). Sent in every telemetry record."));
         rows.push(frow("Certificate set",sel([["","Built-in CA bundle"],...certSets.map(n=>[n,n])],d.cert_set||"",v=>{d.cert_set=v;stageIt();}),"Only for a private ABRP-compatible endpoint; api.iternio.com uses the built-in bundle."));
         rows.push(frow("Extra query",h("input",{class:"mono",value:d.query||"",placeholder:"k=v&k2=v2",oninput:e=>{d.query=e.target.value;stageIt();}})));
       }else{
@@ -6328,17 +6615,24 @@ PAGES.automate=async(view,sub)=>{
           rows.push(frow("Username",h("input",{value:d.basic_username||"",oninput:e=>{d.basic_username=e.target.value;stageIt();}})));
           rows.push(frow("Password",secretInput(d,"basic_password",l.has_token,"password")));}
         rows.push(frow("Extra query",h("input",{class:"mono",value:d.query||"",placeholder:"k=v&k2=v2",oninput:e=>{d.query=e.target.value;stageIt();}}),"Appended to the URL on every request."));
-        if(d.type==="https")rows.push(frow("Certificate set",sel([["","Built-in CA bundle"],...certSets.map(n=>[n,n])],d.cert_set||"",v=>{d.cert_set=v;stageIt();}),
+        if(d.type==="https")rows.push(frow("Certificate set",sel([["","Built-in CA bundle"],...certSets.map(n=>[n,n])],d.cert_set||"",v=>{d.cert_set=v;stageIt();repaintRow(d);}),
           "A set with a CA verifies a private server; add a client certificate and key for mutual TLS. Manage sets under System → Certificates."));
-        rows.push(frow("First push",switchCtl(d.full_first!==false,v=>{d.full_first=v;stageIt();},{sm:true,yes:"Config + status + data",no:"Data only"}),
+        rows.push(frow("First push",switchCtl(d.full_first!==false,v=>{d.full_first=v;stageIt();repaintRow(d);},{sm:true,yes:"Config + status + data",no:"Data only"}),
           "With the first option the first successful push also carries the PID tables and a device status block, so the receiver knows what it gets; every later push is {\"autopid_data\": {...}}."));
       }
+      /* the delivery counters, from the device: what the status chip sums up */
       const st=live[d.name];
-      const stat=st?h("div",{class:"help",style:"margin-top:6px"},
-        "OK "+fmt.num(st.success)+" · Fail "+fmt.num(st.fail)+" · Offline skips "+fmt.num(st.skipped_offline)+
-        (st.backoff_s?" · backing off "+st.backoff_s+" s":"")+(st.next_in_s!=null?" · next in "+st.next_in_s+" s":"")+
-        (st.last_ok_time?" · last OK "+st.last_ok_time:"")+(st.last_error?" · last error: "+st.last_error+(st.last_error_time?" ("+st.last_error_time+")":""):"")):null;
-      return h("div",{class:"dest-details",style:"grid-column:1/-1;padding:4px 6px 10px 70px"},...rows,stat);
+      const kv=st?h("div",{class:"dest-kv"},
+        h("b",{},"Sent"),h("span",{},fmt.num(st.success)),
+        h("b",{},"Failed"),h("span",{},fmt.num(st.fail)+(st.consecutive_failures?" · "+st.consecutive_failures+" in a row":"")+(st.backoff_s?" · backing off "+st.backoff_s+" s":"")),
+        h("b",{},"Skipped, offline"),h("span",{},fmt.num(st.skipped_offline)),
+        h("b",{},"Skipped, other network"),h("span",{},fmt.num(st.skipped_network||0)),
+        h("b",{},"Last OK"),h("span",{class:"mono"},st.last_ok_time||"-"),
+        h("b",{},"Last error"),h("span",{},st.last_error?st.last_error+(st.last_error_time?" ("+st.last_error_time+")":""):"-"),
+        ...(st.next_in_s!=null?[h("b",{},"Next"),h("span",{},"in "+st.next_in_s+" s")]:[]))
+        :h("div",{class:"help"},"Not on the device yet: Apply Configuration and restart, then the counters show here.");
+      rows.push(frow("Delivery",kv));
+      return h("div",{class:"dest-panel"},...rows);
     };
     const testOne=async(d,btn)=>{
       if(!live[d.name])return toast("Apply Configuration and restart first: the device tests the saved table","warn");
@@ -6348,39 +6642,62 @@ PAGES.automate=async(view,sub)=>{
         await pollStats();}
       catch(e){toast(d.name+": "+e.message,"err");}
       btn.disabled=false;btn.textContent=was;};
-    const GRID="display:grid;grid-template-columns:64px 100px 1fr 90px 120px 120px;gap:10px;align-items:center";
     const rebuild=()=>{
       listEl.replaceChildren(
-        h("div",{class:"scroll"},h("div",{style:"min-width:720px"},
-          h("div",{style:GRID+";padding:0 6px 8px;font-size:11px;font-weight:800;letter-spacing:.05em;color:var(--text-3);text-transform:uppercase"},
-            h("span",{},"On"),h("span",{},"Type"),h("span",{},"Topic or URL"),h("span",{},"Every (s)"),h("span",{},"Status"),h("span",{})),
+        h("div",{class:"scroll"},h("div",{style:"min-width:760px"},
+          h("div",{class:"dest-hdr"},h("span",{},"On"),h("span",{},"Type"),h("span",{},"Topic or URL"),h("span",{},"Every"),h("span",{},"Status"),h("span",{})),
           ...dv.destinations.flatMap(d=>{
-            const caret=h("button",{class:"btn sm gh",title:"Options",onclick:()=>{if(expanded.has(d.name))expanded.delete(d.name);else expanded.add(d.name);rebuild();}},expanded.has(d.name)?"▾":"▸");
-            const testBtn=h("button",{class:"btn sm gh",title:"Deliver once now (uses the saved table)",onclick:e=>testOne(d,e.currentTarget)},"Test");
-            const row=h("div",{style:GRID+";padding:6px;border-top:1px solid var(--border)"},
-              switchCtl(d.enabled!==false,v=>{d.enabled=v;stageIt();},{sm:true,noText:true,title:"Pause this destination without deleting it"}),
-              sel(TYPES,d.type||"mqtt",v=>{d.type=v;if(v==="mqtt"&&!/^~\//.test(d.url||"")&&!(d.url||"").includes("/"))d.url="~/autopid";
-                if(v!=="mqtt"&&/^~\//.test(d.url||""))d.url="";if(v==="abrp"&&(d.auth||"none")==="none")d.auth="api_key_query";if(v==="abrp"&&(d.period_s||5)<5)d.period_s=5;if(v!=="abrp"&&d.auth==="api_key_query"&&!d.auth_token)d.auth="none";stageIt();rebuild();}),
-              h("input",{class:"mono","data-dest-url":d.name,value:d.url||"",placeholder:PH[d.type]||"",title:d.type==="abrp"?"Leave empty for Iternio's endpoint":"",oninput:e=>{d.url=e.target.value;stageIt();}}),
-              h("input",{class:"mono",type:"number",min:d.type==="abrp"?5:1,max:86400,value:d.period_s||5,title:d.type==="abrp"?"Publish period in seconds (ABRP: 5 at least, Iternio takes one point per 5 s)":"Publish period in seconds (minimum 1)",onchange:e=>{const lo=d.type==="abrp"?5:1;d.period_s=Math.min(86400,Math.max(lo,Math.round(Number(e.target.value)||lo)));e.target.value=d.period_s;stageIt();}}),
-              h("div",{"data-dest-status":d.name},statusChip(d)),
-              h("div",{class:"rowflex",style:"gap:4px;justify-content:flex-end"},caret,testBtn,
-                h("button",{class:"btn sm gh danger",title:"Remove destination",onclick:()=>{dv.destinations=dv.destinations.filter(x=>x!==d);expanded.delete(d.name);stageIt();rebuild();}},ic("trash"))));
-            return expanded.has(d.name)?[row,details(d)]:[row];}),
+            const open=expanded.has(d.name);
+            const optBtn=h("button",{class:"btn sm gh"+(open?" on":""),type:"button","aria-expanded":open?"true":"false",title:"Authentication, certificate set, the networks it is active on, the delivery counters",onclick:()=>{if(open)expanded.delete(d.name);else expanded.add(d.name);rebuild();}},"Options",ic(open?"up":"down"));
+            const testBtn=h("button",{class:"btn sm gh",type:"button","data-dest-test":d.name,title:live[d.name]?"Deliver once now (uses the saved table)":"Runs after the restart: the device tests the saved table",disabled:!live[d.name],onclick:e=>testOne(d,e.currentTarget)},"Test");
+            const status=h("div",{class:"dest-cell","data-dest-status":d.name},statusChip(d));
+            const sub=subLine(d);
+            rowEls[d.name]={status,sub};
+            const row=h("div",{class:"dest-row"},
+              h("div",{class:"dest-cell"},switchCtl(d.enabled!==false,v=>{d.enabled=v;stageIt();},{sm:true,noText:true,title:"Pause this destination without deleting it"})),
+              h("div",{class:"dest-cell"},sel(TYPES,d.type||"mqtt",v=>{d.type=v;if(v==="mqtt"&&!/^~\//.test(d.url||"")&&!(d.url||"").includes("/"))d.url="~/autopid";
+                if(v!=="mqtt"&&/^~\//.test(d.url||""))d.url="";if(v==="abrp"&&(d.auth||"none")==="none")d.auth="api_key_query";if(v==="abrp"&&(d.period_s||5)<5)d.period_s=5;if(v!=="abrp"&&d.auth==="api_key_query"&&!d.auth_token)d.auth="none";stageIt();rebuild();})),
+              h("div",{class:"dest-url"},h("input",{class:"mono","data-dest-url":d.name,value:d.url||"",placeholder:PH[d.type]||"",title:d.type==="abrp"?"Leave empty for Iternio's endpoint":"",oninput:e=>{d.url=e.target.value;stageIt();}}),sub),
+              h("div",{class:"dest-cell",style:"gap:5px"},h("input",{class:"mono",type:"number",min:d.type==="abrp"?5:1,max:86400,value:d.period_s||5,style:"width:58px;text-align:right",title:d.type==="abrp"?"Publish period in seconds (ABRP: 5 at least, Iternio takes one point per 5 s)":"Publish period in seconds (minimum 1)",onchange:e=>{const lo=d.type==="abrp"?5:1;d.period_s=Math.min(86400,Math.max(lo,Math.round(Number(e.target.value)||lo)));e.target.value=d.period_s;stageIt();}}),h("span",{class:"help"},"s")),
+              status,
+              h("div",{class:"dest-cell",style:"gap:4px;justify-content:flex-end"},optBtn,testBtn,
+                h("button",{class:"btn sm gh danger",type:"button",title:"Remove destination",onclick:()=>{dv.destinations=dv.destinations.filter(x=>x!==d);expanded.delete(d.name);delete rowEls[d.name];stageIt();rebuild();paintLinks();}},ic("trash"))));
+            return open?[row,details(d)]:[row];}),
           dv.destinations.length?null:h("div",{class:"empty"},"No destinations: cyclic pushes of the live parameter set to MQTT, HTTP, HTTPS or ABRP"))));
       addBtn.disabled=dv.destinations.length>=maxItems;
     };
     const addBtn=h("button",{class:"btn pri sm",onclick:()=>{if(dv.destinations.length>=maxItems)return toast("Up to "+maxItems+" destinations","warn");
-      const d=blank();dv.destinations.push(d);expanded.add(d.name);stageIt();rebuild();}},ic("plus"),"Add Destination");
+      const d=blank();dv.destinations.push(d);expanded.add(d.name);stageIt();rebuild();paintLinks();}},ic("plus"),"Add destination");
+    /* the links the rows need: chips in a fixed place, a banner that says
+       what waits and why while one is down */
+    const linkEl=h("div",{class:"rowflex",style:"flex-wrap:wrap;gap:8px"});
+    const linkNote=h("div",{});
+    const paintLinks=()=>{
+      const anyMqtt=dv.destinations.some(d=>d.type==="mqtt");
+      linkEl.replaceChildren(link.enabled===false?chip("Destinations paused",""):null,
+        link.network?chip("Network up"+(link.ssid?": "+link.ssid:""),"ok"):chip("No network","warn"),
+        anyMqtt?(link.mqtt?chip("MQTT connected","ok"):chip("MQTT not connected","warn")):null);
+      const why=[];
+      if(!link.network)why.push(h("b",{},"WiCAN is not on a network, so every destination waits. "),"HTTP, HTTPS and ABRP rows need WiFi, the ESPNetLink or USB Ethernet; MQTT rows also need the broker. ");
+      else if(anyMqtt&&!link.mqtt)why.push(h("b",{},"The MQTT broker is not connected, so the MQTT rows wait. "),"Settings > MQTT has the broker and its state. ");
+      if(why.length)why.push("The sends resume by themselves and nothing here counts as a failure.");
+      const b=why.length?banner("warn","alert",...why):null;if(b)b.style.marginTop="8px";
+      linkNote.replaceChildren(b);};
+    /* a saved table that is not running yet (reboot-to-apply): say so here,
+       where the rows read Not applied yet, not only in the sidebar */
+    const pendEl=h("div",{});
+    const paintPend=()=>{const p=(conn.settings||[]).some(c=>c.name==="data_destinations"&&c.pending_reboot);
+      const b=p?banner("warn","alert",h("span",{},"A saved destination table is not running yet: destinations start after a restart. The rows marked ",h("b",{},"Not applied yet")," wait for it. "),
+        h("a",{href:"#",onclick:async e=>{e.preventDefault();if(await confirmModal("Restart WiCAN now?","Reboot"))restartNow();}},"Restart now")):null;
+      if(b)b.style.marginBottom="12px";pendEl.replaceChildren(b);};
     /* live counters: every 5 s while the page is open */
     const pollStats=async()=>{const r=await tryGet("/api/destinations");if(!r)return;
       for(const k of Object.keys(live))delete live[k];
       for(const e of (r.destinations||[]))live[e.name]=e;
+      link.known=true;link.enabled=r.enabled!==false;link.network=!!r.network;link.mqtt=!!r.mqtt;link.ssid=r.ssid||wifiNames.current||"";
       for(const el of listEl.querySelectorAll("[data-dest-status]")){const d=dv.destinations.find(x=>x.name===el.dataset.destStatus);if(d)el.replaceChildren(statusChip(d));}
-      linkEl.replaceChildren(r.enabled===false?chip("Destinations off",""):null,
-        chip(r.network?"Network up":"No network",r.network?"ok":"warn"),
-        dv.destinations.some(d=>d.type==="mqtt")?chip(r.mqtt?"MQTT connected":"MQTT not connected",r.mqtt?"ok":"warn"):null);};
-    const linkEl=h("div",{class:"rowflex",style:"flex-wrap:wrap;gap:8px"});
+      for(const b of listEl.querySelectorAll("button[data-dest-test]")){b.disabled=!live[b.dataset.destTest];}
+      paintLinks();paintPend();};
     await pollStats();
     destTimer=setInterval(()=>{if(conn.state==="online")pollStats();},5000);
     rebuild();
@@ -6397,14 +6714,15 @@ PAGES.automate=async(view,sub)=>{
             dv.destinations.push(Object.assign(blank(),{name,type:mq?"mqtt":((r.with&&r.with.url||"").startsWith("https://")?"https":"http"),
               url:mq?(r.with&&r.with.topic||"~/autopid"):(r.with&&r.with.url||""),period_s:t?t.period_s:5,enabled:r.enabled!==false,full_first:false}));}
           ev.rules=(ev.rules||[]).filter(r=>!isDest(r.name));ev.timers=(ev.timers||[]).filter(t=>!isDest(t.name));
-          store.stage("event_manager",ev);stageIt();legacyEl.remove();rebuild();toast("Imported: Apply Configuration to save both","ok");}},"Import and remove the rules"));
+          store.stage("event_manager",ev);stageIt();legacyEl.remove();rebuild();paintLinks();toast("Imported: Apply Configuration to save both","ok");}},"Import and remove the rules"));
     }catch{}
     paneDest.append(cardTools("Data Destinations","send",[addBtn],
+      pendEl,
       h("div",{class:"frow"},h("label",{},"Destinations"),h("div",{class:"ctl"},switchCtl(dv.enabled!==false,v=>{dv.enabled=v;stageIt();},{yes:"Enabled",no:"Paused"})),
         h("div",{class:"help"},"Master switch. Each row below has its own switch.")),
-      h("div",{class:"frow"},h("label",{},"Links"),h("div",{class:"ctl"},linkEl)),
+      h("div",{class:"frow"},h("label",{},"Links"),h("div",{class:"ctl"},linkEl,linkNote),h("div",{class:"help"},"What the rows need to send. While a link is down the rows wait; nothing counts as a failure.")),
       legacyEl,listEl,
-      note("","Each destination sends the live parameter set on its own cycle. MQTT: a topic, ~ expands to this device's base topic. HTTP and HTTPS: a JSON POST with optional authentication, extra query parameters and, for HTTPS, a certificate set from System → Certificates. ABRP: telemetry for A Better Routeplanner (the user token from the ABRP app plus your own Iternio API key; 5 s at least, requests at least 2.5 s apart; the vehicle's parameters reach ABRP by name: SOC, HV_W, SPEED, CHARGING, the row's options list what is missing). A failing endpoint is retried with a growing interval; a lost network only pauses the sends. Changes apply after a restart; Test uses the table the device is running.")));
+      note("","Each destination sends the live parameter set on its own cycle: MQTT to a topic (~ is this device's base topic), HTTP and HTTPS as a JSON POST, ABRP as telemetry for A Better Routeplanner (the user token from the ABRP app plus your own Iternio API key; 5 s at least, requests at least 2.5 s apart; the vehicle's parameters reach ABRP by name: SOC, HV_W, SPEED, CHARGING, the row's options list what is missing). Options holds the authentication, the certificate set, the networks a destination is active on and its delivery counters. A failing endpoint is retried with a growing interval; a lost network only pauses the sends. Changes apply after a restart; Test uses the table the device is running.")));
   }catch(e){paneDest.append(banner("crit","alert","Destinations: "+e.message));}
   /* 4. parameters: the big editor card gets its own tab */
   const paramsCard=h("div",{});paneParams.append(paramsCard);
@@ -10685,10 +11003,13 @@ const W={cur:null,use:"ha",agree:[false,false,false],haInstalled:false,mdataOk:f
   scan:"idle",scanStatus:null,scanResult:null,stdPick:null,stdDefault:[],
   vehPhase:null,veh:null,vehName:"",profChoice:null,profCar:null,profList:undefined,carChoice:"detect",vehNameAuto:false,
   poll:{rate:5,rateCustom:3,minEvent:1,pause:"sleep",pauseV:12.5,pauseAll:false,std:true,specific:true,dtc:false,dtcMin:60},pollSeeded:false,
+  /* the OBD chip's firmware prompt on the vehicle step (2026-11-08):
+     unknown | running | failed | done, the last error, the attempts */
+  chip:{state:"unknown",err:"",tries:0},
   /* step 10, battery and sleep: the live trace, the two readings, the chosen pair */
   pwr:{phase:"idle",trace:[],base:null,charging:null,resting:null,tC:0,tD:0,tR:0,sleep:13.1,wake:13.2,touched:false,narrow:false,measured:false,skipped:false,misses:0}};
 /* device documents fetched while the wizard is open */
-const D={wifi:null,mqtt:null,dest:null,autopid:null,autopidSchema:null,cfg:null,vehicle:null,vehicles:null,webhook:null,wifiStatus:null,sleep:undefined,sleepSchema:undefined,usbhost:undefined,espnl:undefined,acm:undefined};
+const D={chip:null,wifi:null,mqtt:null,dest:null,autopid:null,autopidSchema:null,cfg:null,vehicle:null,vehicles:null,webhook:null,wifiStatus:null,sleep:undefined,sleepSchema:undefined,usbhost:undefined,espnl:undefined,acm:undefined};
 
 const CSS=`
 .qs{display:grid;grid-template-columns:232px minmax(0,1fr);background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);overflow:hidden;min-height:560px}
@@ -10775,18 +11096,7 @@ const CSS=`
 .qs-rv .v{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px;font-size:14px}
 .qs-rv .d2{color:var(--text-2);font-size:12.5px;line-height:1.55}
 .qs-rv .d2 i{font-style:normal;color:var(--text-3);padding:0 7px}
-.qs-pop-modal{max-width:580px;padding:26px 28px 24px}
-.qs-pop{display:flex;gap:18px;align-items:flex-start}
-.qs-pop .ci{width:56px;height:56px;border-radius:50%;display:grid;place-items:center;background:var(--success);color:#fff;flex:none}
-.qs-pop .ci svg{width:30px;height:30px;stroke-width:3}
-.qs-pop .ci.info{background:var(--primary)}
-.qs-pop h3{margin:0 0 10px;font-size:21px;line-height:1.25}
-.qs-pop p{margin:0 0 10px;font-size:15px;line-height:1.55}
-.qs-pop p.help{font-size:14px;margin-top:4px}
-.qs-pop code{font-size:14px;padding:2px 7px;border-radius:5px;background:var(--surface-2)}
-.qs-pop-modal .acts{margin-top:8px}
-.qs-pop-modal .acts .btn{padding:12px 20px;font-size:15px}
-.qs-pop-modal .acts .btn svg{width:18px;height:18px}
+/* the popup rules (.qs-pop, .qs-pop-modal, .qs-spin) live in index.html since 2026-11-08: the Status page shows the chip firmware popup too */
 .qs-steps{display:flex;flex-direction:column;gap:12px;counter-reset:s;margin:0;padding:0}
 .qs-steps li{display:grid;grid-template-columns:26px minmax(0,1fr);gap:2px 12px;align-items:start;list-style:none}
 .qs-steps li::before{counter-increment:s;content:counter(s);grid-column:1;grid-row:1;width:24px;height:24px;border-radius:50%;background:var(--primary);color:var(--on-primary);display:grid;place-items:center;font-size:12px;font-weight:700;margin-top:1px}
@@ -10800,9 +11110,6 @@ const CSS=`
 .qs-check.ok .ci{background:var(--success-tint);color:var(--success)}
 .qs-check.warn .ci{background:var(--warning-tint);color:var(--warning)}
 .qs-check.crit .ci{background:var(--danger-tint);color:var(--danger)}
-.qs-spin{width:18px;height:18px;border:2.5px solid var(--border-strong);border-top-color:var(--primary);border-radius:50%;animation:qsspin .8s linear infinite;flex:none;margin:0 auto}
-@keyframes qsspin{to{transform:rotate(360deg)}}
-@media (prefers-reduced-motion:reduce){.qs-spin{animation:none}}
 .qs-link{display:flex;flex-direction:column;gap:10px;padding:18px 20px;border:1px solid color-mix(in srgb,var(--primary) 35%,transparent);border-radius:12px;background:var(--primary-tint)}
 .qs-link .url{font-family:var(--mono);font-size:15px;font-weight:600;overflow-wrap:anywhere;color:var(--text);user-select:all;-webkit-user-select:all}
 .qs-link .alt{margin:0;color:var(--text-2);font-size:13px;line-height:1.5}
@@ -11794,6 +12101,7 @@ const fmtAge=ts=>{if(!ts)return "";const d=Math.round(Date.now()/1000)-ts;if(d<0
 SCREENS.vehicle=async()=>{
   if(!D.autopid){D.autopid=strip(await tryGet("/api/settings/autopid"));D.autopidSchema=await tryGet("/api/settings/autopid/schema");}
   D.vehicles=await tryGet("/api/autopid/vehicles"); /* null = firmware without the store */
+  D.chip=await tryGet("/api/obd_chip");   /* the chip's firmware against the device's image (2026-11-08) */
   const maxName=(D.autopidSchema&&D.autopidSchema.properties&&D.autopidSchema.properties.vehicle&&D.autopidSchema.properties.vehicle.maxLength)||63;
   const err=h("div",{});
   const body=h("div",{class:"qs-body"});
@@ -11838,10 +12146,35 @@ SCREENS.vehicle=async()=>{
     try{await api("/api/autopid/vehicles/"+encodeURIComponent(e.key)+"/merge",{method:"POST",body:{into}});toast("Folded in","ok");D.vehicles=await tryGet("/api/autopid/vehicles");render();}
     catch(ex){toast(ex.message,"err");}
   }
+  /* The OBD chip's firmware (2026-11-08, Ali). On chip firmware V2.3.22 the
+     warm start the bring-up sends kills the chip's automatic protocol search
+     until the device is unplugged (the finding of 2026-11-08): the detection
+     here, and every app's ATSP0, cannot find the car. This device carries
+     V2.3.24, which does not have the fault. So the step asks for the update
+     before anything else: the page's shared flow (chipFw in index.html: the
+     popup with one button, the job with its progress, Done, the banner),
+     the same the Status page shows a device that was set up before. Closed
+     by a tap beside it, the offer stays as the banner and Detect waits for
+     the chip. WiCAN stays awake meanwhile (the sleep entry waits for the
+     job). */
+  const chipOld=()=>chipFw.outdated(D.chip)&&W.chip.state!=="done";
+  function chipFailed(why){W.chip.state="failed";W.chip.err=why;W.chip.tries++;render();}
+  async function startChipUpdate(){
+    if(W.chip.state==="running")return;
+    W.chip.state="running";W.chip.err="";render();
+    const r=await chipFw.run(D.chip);
+    if(!r.ok){chipFailed(r.why);return;}
+    D.chip=r.st;W.chip.state="done";render();
+    chipFw.done(r.st,()=>render());
+  }
   const render=()=>{
     const out=[];
     const v=W.veh;
     const phase=W.vehPhase;
+    if(chipOld()){
+      /* the offer stays on the step (the popup closed, or an attempt failed) */
+      out.push(chipFw.banner(D.chip,W.chip,startChipUpdate,"qs-chip-banner"));
+    }
     if(phase==="idle"||phase==="noanswer"){
       /* 1. which car (2026-10-26, discussion #1018, Ali: the profile before
          the probe): a published profile, or no profile and detection as
@@ -11863,11 +12196,11 @@ SCREENS.vehicle=async()=>{
       out.push(sub("2. Detect the vehicle"));
       if(phase==="noanswer")out.push(banner("warn","alert",h("b",{},"The car did not answer. "),
         (W.scanStatus&&W.scanStatus.error?W.scanStatus.error+". ":"")+"Usually the ignition is off or the plug is not seated. Turn the ignition on (an EV in ready mode) and try again. You can also skip: WiCAN detects the car by itself the first time it answers, and the Status page tells you when it has."));
-      const detBtn=btn(phase==="noanswer"?"Try again":"Detect my vehicle",startDetect,"pri",{icon:"refresh",disabled:!(W.plugged&&W.ignition)});
-      const ack=(key,id,title,text)=>h("label",{class:"qs-agree"},h("input",{type:"checkbox",id,checked:W[key],onchange:e=>{W[key]=e.target.checked;detBtn.disabled=!(W.plugged&&W.ignition);}}),h("div",{},h("b",{},title),h("span",{},text)));
+      const detBtn=btn(phase==="noanswer"?"Try again":"Detect my vehicle",startDetect,"pri",{icon:"refresh",disabled:!(W.plugged&&W.ignition)||chipOld()});
+      const ack=(key,id,title,text)=>h("label",{class:"qs-agree"},h("input",{type:"checkbox",id,checked:W[key],onchange:e=>{W[key]=e.target.checked;detBtn.disabled=!(W.plugged&&W.ignition)||chipOld();}}),h("div",{},h("b",{},title),h("span",{},text)));
       out.push(ack("plugged","qs-plugged","WiCAN is plugged into the OBD port","Under the dashboard, driver side on most cars."));
       out.push(ack("ignition","qs-ignition","Ignition is on","The engine can stay off. On an EV, \"ready\" mode."));
-      out.push(h("div",{},detBtn));
+      out.push(h("div",{class:"rowflex",style:"gap:12px"},detBtn,chipOld()?chip("Update the chip first","warn"):null));
       out.push(note("",W.carChoice==="profile"&&W.profCar
         ?"About 10 to 20 s. WiCAN pins the protocol the profile expects, reads the VIN and the standard PIDs, and sends the profile's first requests. A car that answers no standard request is still confirmed by those and stored under the name above."
         :"About 15 to 30 s. WiCAN learns the protocol, reads the VIN and finds the standard PIDs, then remembers all of it under this vehicle. Plug it into another car later and it tells the cars apart."));
@@ -12069,6 +12402,10 @@ SCREENS.vehicle=async()=>{
   if(W.vehPhase===undefined||W.vehPhase===null)W.vehPhase="idle";
   if(W.vehPhase==="result")await loadProfiles();
   render();
+  /* the chip's firmware first (2026-11-08): the popup once, on an
+     untouched chip; after a closed popup or a failed attempt the banner
+     carries the same button */
+  if(chipOld()&&W.chip.state==="unknown")chipFw.prompt(D.chip,startChipUpdate);
   return screen("Your vehicle","Say which car it is, then WiCAN detects it: the OBD protocol, the VIN and the standard PIDs it supports, with the profile's own requests for a car that answers nothing standard. Everything is stored under the car, so moving WiCAN between cars just works.",
     [body],
     [back("checks"),grow(),btn("Skip for now",()=>{W.noVeh=true;go("done");},"gh sm"),finish]);

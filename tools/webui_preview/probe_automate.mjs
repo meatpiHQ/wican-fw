@@ -62,7 +62,7 @@ const check = (n, ok) => { console.log((ok ? "PASS " : "FAIL ") + n); if (!ok) p
   await expandAll();
   check("expression column present after expand", !!d().querySelector('input[placeholder="(B3*256+B4)/4"]'));
   check("unit column present after expand", !!d().querySelector('input[placeholder="rpm"]'));
-  check("destinations cycle in seconds", d().body.textContent.includes("Every (s)"));
+  check("destinations cycle in seconds (the Every column, 2026-11-08)", !!d().querySelector(".dest-hdr") && /Every/.test(d().querySelector(".dest-hdr").textContent) && /Status/.test(d().querySelector(".dest-hdr").textContent));
   check("destinations enable switch + type select", (() => {
     const dest = cards.find((c) => /destinations/i.test((c.querySelector("h3") || {}).textContent));
     return dest && dest.querySelectorAll(".switch").length >= 2 && dest.querySelectorAll("select").length >= 3 &&

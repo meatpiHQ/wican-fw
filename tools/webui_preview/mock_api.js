@@ -20,9 +20,9 @@
   if ((window.__mockPreset || {}).mqtt) ov("mqtt_manager", window.__mockPreset.mqtt);
   ov("ha_webhooks", { enabled: true, url: "http://homeassistant.local:8123/api/webhook/8f4a21be", interval_s: 15 });
   ov("data_destinations", { enabled: true, destinations: [
-    { name: "dest1", type: "mqtt", enabled: true, url: "~/autopid", period_s: 5, auth: "none", auth_token: "", auth_name: "", basic_username: "", basic_password: "", api_key: "", query: "", cert_set: "", car_model: "", retain: true, full_first: true },
-    { name: "cloud", type: "https", enabled: true, url: "https://telemetry.example.com/wican", period_s: 30, auth: "bearer", auth_token: "", auth_name: "", basic_username: "", basic_password: "", api_key: "", query: "src=wican", cert_set: "homeca", car_model: "", retain: true, full_first: true },
-    { name: "abrp", type: "abrp", enabled: false, url: "", period_s: 10, auth: "api_key_query", auth_token: "", auth_name: "", basic_username: "", basic_password: "", api_key: "", query: "", cert_set: "", car_model: "hyundai:ioniq5:22:77", retain: true, full_first: true },
+    { name: "dest1", type: "mqtt", enabled: true, url: "~/autopid", period_s: 5, auth: "none", auth_token: "", auth_name: "", basic_username: "", basic_password: "", api_key: "", query: "", cert_set: "", car_model: "", retain: true, full_first: true, networks: "" },
+    { name: "cloud", type: "https", enabled: true, url: "https://telemetry.example.com/wican", period_s: 30, auth: "bearer", auth_token: "", auth_name: "", basic_username: "", basic_password: "", api_key: "", query: "src=wican", cert_set: "homeca", car_model: "", retain: true, full_first: true, networks: "HomeWiFi,Garage" },
+    { name: "abrp", type: "abrp", enabled: true, url: "", period_s: 10, auth: "api_key_query", auth_token: "", auth_name: "", basic_username: "", basic_password: "", api_key: "", query: "", cert_set: "", car_model: "hyundai:ioniq5:22:77", retain: true, full_first: true, networks: "Garage" },
   ] });
   ov("autopid", { enabled: true, vehicle: "Corolla 2021" });
   if ((window.__mockPreset || {}).j1939Active === true) ov("j1939", { enabled: true, mode: "active" });
@@ -63,7 +63,8 @@
       sleep_v: (sm.sleep_mv || 13100) / 1000, wake_v: (sm.wake_mv || 13200) / 1000, naps: 0,
       pending: sp ? sp.cause : "none", sleep_in_s: left, critical_v: 11.9, critical_s: 300,
       hold_s: hold, holds_left: 3 - state.holds, holds_max: 3,
-      activity_s: sp && state.logReadUntil > Date.now() ? Math.ceil((state.logReadUntil - Date.now()) / 1000) : 0 };
+      activity_s: sp && state.logReadUntil > Date.now() ? Math.ceil((state.logReadUntil - Date.now()) / 1000) : 0,
+      activity_why: sp && state.logReadUntil > Date.now() ? "log" : "" };
   };
   /* what /api/usb, /api/espnetlink, /api/usb/acm and /api/gps answer for the USB
      scene state.usb names (Quick Setup's USB step, 2026-10-07): "none",
@@ -586,7 +587,7 @@
       if (t.result === "no_ip") { o.channel = 6; o.took_ms = 10000; }
       return J(o);
     },
-    "/api/wifi/status": () => J({ enabled: true, sta_connected: state.staConnected !== false, ip: state.staConnected !== false ? "10.42.0.62" : "", ap_started: true, ap_default_password: state.apDefaultPassword === true, clients: 0, ap_ip: "192.168.0.10", dns: ["10.42.0.1", "1.1.1.1"],
+    "/api/wifi/status": () => J({ enabled: true, sta_connected: state.staConnected !== false, ssid: state.staConnected !== false ? "HomeWiFi" : "", ip: state.staConnected !== false ? "10.42.0.62" : "", ap_started: true, ap_default_password: state.apDefaultPassword === true, clients: 0, ap_ip: "192.168.0.10", dns: ["10.42.0.1", "1.1.1.1"],
       sta_attempt: { ssid: "HomeWiFi", reason: 204, fail_count: 3, deprioritised: true } }),
     /* the ABRP coverage of the live snapshot (2026-10-13): which Iternio fields the
        parameter names provide, which planning fields are missing and the name that
@@ -594,12 +595,18 @@
     "/api/destinations/abrp": () => J({ present: ["elevation", "heading", "lat", "lon", "speed", "utc"],
       missing: [{ field: "soc", parameter: "SOC" }, { field: "power", parameter: "HV_W" }, { field: "is_charging", parameter: "CHARGING" },
         { field: "is_dcfc", parameter: "CHARGING_DC" }, { field: "is_parked", parameter: "PARK_BRAKE" }], period_floor_s: 5, request_gap_ms: 2500 }),
-    "/api/destinations": () => J({ enabled: S.data_destinations.values.enabled !== false, running: true, network: true, mqtt: true, abrp_pacer: { gap_ms: 2500, waits: 12, waited_ms: 7400, last_request_age_s: 3 },
+    /* `ssid`, `networks`, `on_network`, `skipped_network` since 2026-11-08 (Active on): the mock's station is on HomeWiFi */
+    "/api/destinations": () => J({ enabled: S.data_destinations.values.enabled !== false, running: true, network: true, mqtt: true, ssid: "HomeWiFi", abrp_pacer: { gap_ms: 2500, waits: 12, waited_ms: 7400, last_request_age_s: 3 },
       destinations: (S.data_destinations.values.destinations || []).map((d, i) => ({ name: d.name, type: d.type, enabled: d.enabled !== false, url: d.url, period_s: d.period_s, auth: d.auth,
+        networks: d.networks || "", on_network: !d.networks || String(d.networks).split(",").map((s) => s.trim()).includes("HomeWiFi"),
+        skipped_network: (!d.networks || String(d.networks).split(",").map((s) => s.trim()).includes("HomeWiFi")) ? 0 : 9,
         has_token: i === 1, has_api_key: false, cert_set: d.cert_set, success: i === 0 ? 412 : 0, fail: i === 1 ? 3 : 0, skipped_offline: 0, consecutive_failures: i === 1 ? 3 : 0,
         backoff_s: i === 1 ? 10 : 0, next_in_s: 4, last_status: i === 1 ? 503 : (i === 0 ? 0 : 0), last_error: i === 1 ? "http=503" : "", last_error_time: i === 1 ? new Date().toISOString() : "",
         last_ok_time: i === 0 ? new Date().toISOString() : "", full_sent: i === 1 })) }),
-    "/api/webhook": () => J({ url: state.webhookUrl !== undefined ? state.webhookUrl : S.ha_webhooks.values.url, enabled: true, interval: 15, manual_override: false, data_mode: "changed", gzip: false, status: "ok", last_post: new Date().toISOString(), retries: 0, success_count: 512, fail_count: 3, last_error: "", last_error_time: "" }),
+    "/api/webhook": () => J({ url: state.webhookUrl !== undefined ? state.webhookUrl : S.ha_webhooks.values.url, enabled: true, interval: 15, manual_override: false, data_mode: "changed", gzip: false,
+      /* Active on (2026-11-08): the station is on HomeWiFi */
+      networks: S.ha_webhooks.values.networks || "", on_network: !S.ha_webhooks.values.networks || String(S.ha_webhooks.values.networks).split(",").map((s) => s.trim()).includes("HomeWiFi"),
+      status: "ok", last_post: new Date().toISOString(), retries: 0, success_count: 512, fail_count: 3, last_error: "", last_error_time: "" }),
     /* `network` + `paused` since 2026-10-11 (issue #976); a probe presets the state through __mockPreset.vpn */
     "/api/vpn": () => J({ state: "connected", type: "wireguard", endpoint: "vpn.example.com:51820", network: "HomeWiFi", paused: false, routes: ["10.66.0.0/24"], ts_ip: "", ts_peers: 0, derp: false, reason: "", connects: 1, failures: 0, uptime_s: 8040, ...((window.__mockPreset || {}).vpn || {}) }),
     "/api/usb": () => J(usbScene() ? usbScene().usb : { enabled: true, device_present: true, host_active: true, eth_connected: true, driver: "cdc_ncm", ip: "192.168.7.2", attaches: 1 }),
@@ -640,12 +647,22 @@
        their POSTs. fw.chip keeps the chip's own words (MIC3624 V2.3.24):
        the page names the version alone (Ali, 2026-11-01) */
     "/api/obd_chip": () => { const d = (window.__mockPreset && window.__mockPreset.diag) || {}; const down = !!d.down;
-      return J({ ready: !down, claim: "none", client_idle_ms: 4294967295, baud: down ? 0 : 2000000,
+      /* the update job (2026-11-08, the Quick Setup prompt): a POST starts a
+         stream of 3557 records over diag.updateMs (3000 by default), then the
+         chip is away for a second (its fresh bring-up) and reads the packaged
+         version; diag.updateFail = "ESP_ERR_TIMEOUT" ends the stream at record
+         1248 with that error and the chip stays on V2.3.22 */
+      const job = state.diagJob; const el = job ? Date.now() - job.t0 : -1; const ms = typeof d.updateMs === "number" ? d.updateMs : 3000;
+      const streaming = !!job && el < ms; const restarting = !!job && !d.updateFail && el >= ms && el < ms + 1000; const lifted = !!job && !d.updateFail && el >= ms;
+      const chip22 = !!d.chip22 && !lifted;
+      return J({ ready: !down && !restarting, claim: streaming ? "exclusive" : "none", client_idle_ms: 4294967295, baud: down ? 0 : 2000000,
         eeprom_guard: { rewrites: 0, blocked: 0, protocol_saves: 0, memory_off: 1 },
         uart: { rx_bytes: 18, rx_chunks: 1, rx_max_chunk: 18, rx_overflows: 0, rx_buffered: down ? 34 : 0, tx_bytes: 212 },
-        fw: { builtin: "V2.3.24", current: "V2.3.22, V2.3.24", chip: down ? "" : (d.chip22 ? "MIC3624 V2.3.22" : "MIC3624 V2.3.24"),
-          outdated: !down && !!d.chip22,
-          update: d.updating ? { running: true, lines: 1500, total: 3557, source: "builtin V2.3.24", done: false, last: "" }
+        fw: { builtin: "V2.3.24", current: "V2.3.22, V2.3.24", chip: down ? "" : (chip22 ? "MIC3624 V2.3.22" : "MIC3624 V2.3.24"),
+          outdated: !down && chip22,
+          update: streaming ? { running: true, lines: Math.round(3557 * el / ms), total: 3557, source: "builtin V2.3.24", done: false, last: "" }
+                : (job && d.updateFail) ? { running: false, lines: 1248, total: 3557, source: "builtin V2.3.24", done: true, last: d.updateFail }
+                : d.updating ? { running: true, lines: 1500, total: 3557, source: "builtin V2.3.24", done: false, last: "" }
                              : { running: false, lines: 3557, total: 3557, source: "builtin V2.3.24", done: true, last: "ESP_OK" } },
         bringup: { wire: down ? [{ baud: 2000000, bytes: 0, prompt: false, hex: "" }, { baud: 115200, bytes: 2, prompt: false, hex: "FC 00" }] : [] },
         subscribers: [{ idx: 0, name: "bridge", dropped: 0, queued: 0, depth: 64 }] }); },
@@ -936,6 +953,10 @@
          probe proves the page never sends it */
       if (body && body.force) { state.diagForced = (state.diagForced || 0) + 1; return J({ error: "force is not supported: the chip is written only when the image is newer than its firmware" }, 400); }
       state.diagUpdates = (state.diagUpdates || 0) + 1;
+      /* the job (2026-11-08): one at a time, animated by GET /api/obd_chip */
+      { const d = (window.__mockPreset && window.__mockPreset.diag) || {}; const ms = typeof d.updateMs === "number" ? d.updateMs : 3000;
+        if (state.diagJob && Date.now() - state.diagJob.t0 < ms) return J({ error: "update already running" }, 409);
+        state.diagJob = { t0: Date.now() }; }
       return J({ started: true, source: (body && body.path) || "builtin" }, 202);
     }
     if (method === "POST" && path === "/api/obd_chip/probe") {

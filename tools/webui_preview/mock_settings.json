@@ -537,6 +537,9 @@
        },
        "full_first": {
         "type": "boolean"
+       },
+       "networks": {
+        "type": "string"
        }
       },
       "required": [
@@ -558,7 +561,8 @@
       "cert_set": "",
       "car_model": "",
       "retain": true,
-      "full_first": true
+      "full_first": true,
+      "networks": ""
      }
     },
     "cli": {
@@ -873,6 +877,7 @@
    "gzip": false,
    "manual_override": false,
    "cert_set": "",
+   "networks": "",
    "cli": true
   },
   "schema": {
@@ -905,6 +910,9 @@
      "type": "boolean"
     },
     "cert_set": {
+     "type": "string"
+    },
+    "networks": {
      "type": "string"
     },
     "cli": {
