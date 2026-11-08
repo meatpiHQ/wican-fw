@@ -1,6 +1,6 @@
 {
   "car_model": "Toyota: Tacoma 2016-2023 (3rd gen, 2GR-FKS 3.5L)",
-  "comment": "Standard OBD-II PIDs verified on a 2019 Tacoma (2GR-FKS 3.5L V6), including the odometer via standard PID A6. On this truck the engine/transmission ECUs answer ONLY functional OBD on 7DF->7E8; physical 7E0 does not respond, so these rows use the functional header (ATSH7DF) and must not use ATSH7E0;ATCRA7E8; as the Corolla/Sienna profiles do. Fuel level is not included yet, see the PR description for a candidate PID that still needs on-vehicle verification.",
+  "comment": "Verified on a 2019 Tacoma (2GR-FKS 3.5L V6). Seven standard mode-01 PIDs plus odometer (standard PID A6) are read via functional OBD on 7DF->7E8; physical 7E0 does not respond on this truck, so they use the functional header (ATSH7DF) and must not use ATSH7E0;ATCRA7E8; as the Corolla/Sienna profiles do. Fuel level uses the combination meter (7C0 21 29, B3/2 litres) because standard 01 2F is not supported here; cross-checked against the dash gauge.",
   "init": "ATSP6;ATST96;ATSH7DF;",
   "pids": [
     {
@@ -49,6 +49,13 @@
       "pid": "01A61",
       "parameters": {
         "ODOMETER": "[B3:B6]/10"
+      }
+    },
+    {
+      "pid": "21291",
+      "pid_init": "ATSH7C0;ATCRA7C8;",
+      "parameters": {
+        "FUEL_L": "B3/2"
       }
     }
   ]
