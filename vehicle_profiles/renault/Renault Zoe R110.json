@@ -1,51 +1,59 @@
 {
   "car_model": "Renault Zoe R110/R90",
-  "init": "ATSP6;",
+  "init": "ATSP6;ATST96;",
   "pids": [
     {
       "pid": "222002",
+      "pid_init": "ATSH7E4;ATCRA7EC;",
       "parameters": {
         "SOC": "[B4:B5]*0.02"
       }
     },
     {
       "pid": "223206",
+      "pid_init": "ATSH7E4;ATCRA7EC;",
       "parameters": {
         "SOH": "B4"
       }
     },
     {
       "pid": "223451",
+      "pid_init": "ATSH7E4;ATCRA7EC;",
       "parameters": {
         "RANGE": "[B4:B5]"
       }
     },
     {
       "pid": "222006",
+      "pid_init": "ATSH7E4;ATCRA7EC;",
       "parameters": {
         "ODOMETER": "[B4:B6]"
       }
     },
     {
       "pid": "222004",
+      "pid_init": "ATSH7E4;ATCRA7EC;",
       "parameters": {
         "HV_V": "[B4:B5] * 0.5"
       }
     },
     {
       "pid": "223204",
+      "pid_init": "ATSH7E4;ATCRA7EC;",
       "parameters": {
         "HV_A": "[B4:B5] * 0.25 - 8192"
       }
     },
     {
       "pid": "22339D",
+      "pid_init": "ATSH7E4;ATCRA7EC;",
       "parameters": {
         "CHARGER_CONNECTED": "B4 & 1"
       }
     },
     {
       "pid": "222001",
+      "pid_init": "ATSH7E4;ATCRA7EC;",
       "parameters": {
         "BATT_TEMP": "B4 - 40"
       }
