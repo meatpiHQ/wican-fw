@@ -64,3 +64,11 @@ their files). The field check from the bench follows in `internal/RELEASE_PROCES
 
 **2026-11-08 18:15 to 18:26 (THE RELEASE IMAGE of 6.0.0-beta.8: tag `v6.0.0p-beta.8` at c73c16b; `build.ps1 -Clean`, ESP-IDF 6.1, image sha256 93257575db008782fe5bb562f65be06ef1b3ceedcedc65b064b83442577c26ac, 4,074,816 B, ELF 493e4b0ef3d8c8f4 archived under internal/elf; the FRESH bench unit 44bd8d73ca79 for the first time):** three runs on the same bytes. 18:15 `RELEASE TEST FAIL` in r0: `psu_answers` (the OWON's first-query false negative, it answered 92 mA by hand right after) and `canonical_mqtt_enabled` / `canonical_can_enabled` (the fresh unit was still on its factory settings). 18:18, with MQTT to the Pi's broker (`mqtt://10.42.1.1:1883`, anonymous) and can_manager on at 500 kbit/s: `RELEASE TEST FAIL` on r5 (`autopid_polls_the_simulator`: 0 params with values) and r6 (`can_frames_flow`: 0 frames in 10 s, over budget) only, 57 of 60 green: the unit's 16 standard AutoPID rows were stored OFF (the std-choice rule), so the test's AutoPID enable polled nothing and the bus stayed silent; the simulator answered a hand 010C with 800 rpm. 18:26, with the 16 rows ticked in `/api/autopid/config` (live): **`RELEASE TEST PASS`, 59 checks, r12 skipped (BLE off in the bench set), 331 s**, r1 flash and boot 79.6 s, r5 7.0 s, r6 20.5 s, OTA upload 52.1 s, heap floor 57,744 B, supply 92 to 93 mA, report `test-reports/2026-11-08_1826_release.md`, record `test-reports/release/93257575...json`. Lesson: a new bench unit needs the canonical set (testing/preflight.md) applied by hand before its first release run; the unit keeps MQTT, CAN and the ticked rows now.
 
+
+**2026-11-09 17:34 (regression for the Tailscale route list and the WireGuard driver's key
+ageing, the uncommitted trees, not a tagged image and no release record): `RELEASE TEST PASS`,
+59 passed, 0 failed, r12 BLE skipped (off in the canonical settings), 329 s**; image sha256
+`13409483...`, ELF `8da296f7c66bb2eb`; 0 error lines at boot, after the OTA upload and at the
+close, 0 flash writes and erases at boot; stack headroom fw_update 11,536 / ha_webhook 6,328 /
+autopid 9,288 B; internal heap floor 58,160 B; supply 49 mA before and after (the PC cable).
+Report `test-reports/2026-11-09_1734_release.md`.

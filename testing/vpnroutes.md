@@ -22,3 +22,8 @@ is the same by construction (the station's network is never in the table). Repor
 every lwIP core call of the tunnel on the tcpip thread): PASS** (76.9 s; both routes
 installed, the routed request from the tunnel, the LAN and far requests from the station,
 the two refusals, the default-route leg; the restarts planned, no E line).
+
+**2026-11-09 17:31 (regression for the WireGuard driver's key ageing and the Tailscale route
+list, ELF `8da296f7c66bb2eb`, the uncommitted trees): `VPN ROUTES PASS`**, 23 checks, 70 s, the
+tunnel connected 2.1 s after the restart, `vpn_state` headroom 3808 B, internal heap floor
+53,664 B. Report `test-reports/2026-11-09_1731_vpnroutes.md`.

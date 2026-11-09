@@ -24,3 +24,9 @@ daemon by hand afterwards (`setsid nohup ...`) reset the P4 and left the DUT in 
 association until the DUT itself reset (the zombie-association trap of `bench-ap-p4`); Ali
 called the P4 broken that afternoon, so the lever legs were not retried. Logs
 `test-reports/logs/2026-11-02_1427_vpnpause/`, `vpn_pause_20261102_1427/`.
+
+**2026-11-09 17:32 (regression for the WireGuard driver's key ageing, ELF `8da296f7c66bb2eb`,
+the uncommitted trees): `VPN PAUSE PASS`**, 19 checks, 92 s, paused 0.1 s after the restart and
+connected 2.2 s after the unmark; p3 and p4 skipped (no ESPNetLink backup slot on the rig that
+day). `vpn_state` headroom 3820 B, internal heap floor 53,648 B. Report
+`test-reports/2026-11-09_1732_vpnpause.md`.
