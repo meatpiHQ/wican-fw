@@ -16,7 +16,7 @@ Models the ISO 14229 reprogramming sequence a real OEM tool drives:
   11 01     ECU reset
   3E 80     tester present (suppressed) throughout
 
-Runs on PCAN_USBBUS2 @ 500k, 11-bit, req 0x7E0 / resp 0x7E8 (matches the
+Runs on PCAN_USBBUS1 @ 500k, 11-bit, req 0x7E0 / resp 0x7E8 (matches the
 other bench ECUs). Pick a failure to inject with --scenario; the UDS
 state machine is a pure class so `--selftest` validates every scenario
 with an in-process loopback (no PCAN needed).
@@ -358,9 +358,9 @@ def run_pcan(duration, scenario, req_id=0x7E0, resp_id=0x7E8):
     import can
 
     REQ, RESP = req_id, resp_id
-    bus = can.Bus(interface="pcan", channel="PCAN_USBBUS2", bitrate=500000)
+    bus = can.Bus(interface="pcan", channel="PCAN_USBBUS1", bitrate=500000)
     ecu = ReflashEcu(scenario)
-    print(f"Reflash ECU on PCAN_USBBUS2: req 0x{REQ:03X} -> 0x{RESP:03X}, "
+    print(f"Reflash ECU on PCAN_USBBUS1: req 0x{REQ:03X} -> 0x{RESP:03X}, "
           f"scenario '{scenario}'")
 
     def send_isotp(payload):

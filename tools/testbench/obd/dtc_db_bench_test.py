@@ -27,7 +27,7 @@ import urllib.request
 import urllib.error
 
 DUT = sys.argv[1] if len(sys.argv) > 1 else "192.168.82.1"
-PCAN = sys.argv[2] if len(sys.argv) > 2 else "PCAN_USBBUS2"
+PCAN = sys.argv[2] if len(sys.argv) > 2 else "PCAN_USBBUS1"
 BASE = "http://" + DUT
 PY = sys.executable
 

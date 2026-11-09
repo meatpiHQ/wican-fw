@@ -27,7 +27,7 @@ Legs (each check prints PASS/FAIL; the verdict is the last line):
      and unexpected resets unchanged.
 
   python j2534_auto_baud_bench.py --dut localhost:18081 --j2534 localhost:18534
-         --slcan localhost:18333 [--pcan PCAN_USBBUS2]
+         --slcan localhost:18333 [--pcan PCAN_USBBUS1]
 test.ps1 j2534auto holds the tunnel (ports 80, 6809 and 3333 of the DUT) and
 the console. Needs python-can on the PC (the IDF venv) and the simulator
 answering 7DF on the bench bus.
@@ -219,7 +219,7 @@ def main():
     ap.add_argument("--dut", default="localhost:18081")
     ap.add_argument("--j2534", default="localhost:18534")
     ap.add_argument("--slcan", default="localhost:18333")
-    ap.add_argument("--pcan", default="PCAN_USBBUS2")
+    ap.add_argument("--pcan", default="PCAN_USBBUS1")
     a = ap.parse_args()
 
     dut = Dut(a.dut)

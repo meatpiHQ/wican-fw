@@ -24,7 +24,7 @@ What it does on the bus (29-bit, 250k or 500k):
     asking. A listener that never asks sees them only this way,
   - faults for the negative legs (--fault, see FAULTS).
 
-  python pcan_j1939_truck.py [secs] [--pcan PCAN_USBBUS2] [--bitrate 250]
+  python pcan_j1939_truck.py [secs] [--pcan PCAN_USBBUS1] [--bitrate 250]
         [--sa 0x00] [--vin 1WCANJ1939TRUCK01] [--dtcs 110-0-5,3226-4-1]
         [--prev 100-1-2] [--lamps mil=1,awl=1] [--set rpm=1800,speed_kmh=60]
         [--period-ms N] [--count N] [--twin 0x11] [--contend 0xF9:win]
@@ -605,7 +605,7 @@ def selftest():
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("secs", nargs="?", type=float, default=120)
-    ap.add_argument("--pcan", default="PCAN_USBBUS2")
+    ap.add_argument("--pcan", default="PCAN_USBBUS1")
     ap.add_argument("--bitrate", type=int, default=250, choices=(250, 500))
     ap.add_argument("--sa", default="0x00")
     ap.add_argument("--vin", default="1WCANJ1939TRUCK01")

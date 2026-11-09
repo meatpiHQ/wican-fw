@@ -2,7 +2,7 @@
 
 Command: `python tools/testbench/obd/autopid_fp_forget_bench.py [--dut localhost:18081]` (PC, the DUT through an ssh tunnel, the simulator through sim_net)
 
-Needs: PC + the ECU simulator (its default profile active, VIN `1WCAN0FW0P0000001`, its car in the vehicle store or learned by the bench); the DUT on the bench AP, the PSU above the sleep voltage; 2026-10-28: a precondition for a folded face on the VIN car: the new-car bench's fold-in had left the fixture car's fingerprint as a face and the detection then recognised it instead of forking (1 car, no fp: entry); PASS again that evening once the face was cleared (46 checks with the precondition)
+Needs: PC + ECU sim v2 (its default profile active, VIN `1WCAN0FW0P0000001`, its car in the vehicle store or learned by the bench); the DUT on the bench AP, the PSU above the sleep voltage; 2026-10-28: a precondition for a folded face on the VIN car: the new-car bench's fold-in had left the fixture car's fingerprint as a face and the detection then recognised it instead of forking (1 car, no fp: entry); PASS again that evening once the face was cleared (46 checks with the precondition)
 
 Moved from the `TESTING.md` test-kinds table on 2026-10-31 (the row's detail cell, whole, as paragraphs). The index row and the other stages: [../TESTING.md](../TESTING.md).
 

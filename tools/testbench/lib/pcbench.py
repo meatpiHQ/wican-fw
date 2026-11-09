@@ -36,10 +36,10 @@ INT_MIN_FREE_B = 20 * 1024
 # park (three runs in a row that crash within ten minutes of their start, and
 # the firmware sleeps instead of starting a fourth time). A bench over HTTP
 # cannot see it; the supply current and the console can.
-GONE_HINT = (" [no answer: if the supply reads about 47 mA (`python "
-             "tools/testbench/lib/owon_psu.py`) and the LED breathes red, the "
+GONE_HINT = (" [no answer: if the supply reads the sleep-level current (`python "
+             "tools/testbench/lib/bench_psu.py`) and the LED breathes red, the "
              "DUT PARKED itself after three crashes in a row: the console log "
-             "has `WICAN PARK`, a PSU power cycle brings it back, and `GET "
+             "has `WICAN PARK`, a power cycle (`bench_psu.py cycle`) brings it back, and `GET "
              "/api/restart/report` then says what crashed. TESTING.md, \"When "
              "the DUT disappears in the middle of a test\"]")
 

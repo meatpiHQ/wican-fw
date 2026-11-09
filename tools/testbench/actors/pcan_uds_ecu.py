@@ -20,7 +20,7 @@ REQ = 0x7E0
 RESP = 0x7E8
 DUR = float(sys.argv[1]) if len(sys.argv) > 1 else 120
 
-bus = can.Bus(interface="pcan", channel="PCAN_USBBUS2", bitrate=500000)
+bus = can.Bus(interface="pcan", channel="PCAN_USBBUS1", bitrate=500000)
 
 
 def send_frame(data):
@@ -74,7 +74,7 @@ def handle(payload):
 
 
 def main():
-    print(f"UDS ECU on PCAN_USBBUS2: req 0x{REQ:03X} -> resp 0x{RESP:03X}")
+    print(f"UDS ECU on PCAN_USBBUS1: req 0x{REQ:03X} -> resp 0x{RESP:03X}")
     rx = {}  # reassembly per (sf/ff)
     end = time.time() + DUR
     ff_buf = b""

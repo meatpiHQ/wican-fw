@@ -1,8 +1,8 @@
 # WiCAN Pro out-of-the-box scenario
 
-Command: `python tools\testbench\wifi\wican_fresh_bench.py --wican COMx --psu COMz`
+Command: `python tools\testbench\wifi\wican_fresh_bench.py --wican COMx --psu auto`
 
-Needs: WiCAN console + PSU + rpi001 (`wtest0` hotspot, `wtest1` free)
+Needs: WiCAN console + the supply (ECU sim v2's OBD pin 16) + rpi001 (`wtest0` hotspot, `wtest1` free)
 
 Moved from the `TESTING.md` test-kinds table on 2026-10-31 (the row's detail cell, whole, as paragraphs). The index row and the other stages: [../TESTING.md](../TESTING.md).
 

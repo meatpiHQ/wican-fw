@@ -24,7 +24,7 @@ stay single-frame (two ECUs streaming FF/CF would fight over the FC).
                          [--permanent P0420] [--resp 0x7E9]
                          [--resp2 0x7EA] [--stored2 U0100]
                          [--pending2 ...] [--permanent2 ...]
-                         [--pcan PCAN_USBBUS2]
+                         [--pcan PCAN_USBBUS1]
 Defaults: 120 s, stored P0420+P0171, pending P0301, permanent empty.
 """
 import argparse
@@ -117,7 +117,7 @@ def main():
     ap.add_argument("--stored2", default="")
     ap.add_argument("--pending2", default="")
     ap.add_argument("--permanent2", default="")
-    ap.add_argument("--pcan", default="PCAN_USBBUS2")
+    ap.add_argument("--pcan", default="PCAN_USBBUS1")
     a = ap.parse_args()
 
     bus = can.Bus(interface="pcan", channel=a.pcan, bitrate=500000)

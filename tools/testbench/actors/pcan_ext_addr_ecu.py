@@ -18,7 +18,7 @@ of what the DUT sent.
   else      -> 7F <svc> 11
 
 usage: pcan_ext_addr_ecu.py [secs] [--addr 0x60] [--tester 0x6F1]
-                            [--odometer 123456] [--pcan PCAN_USBBUS2]
+                            [--odometer 123456] [--pcan PCAN_USBBUS1]
                             [--summary FILE]
 Prints one line per frame it answers (`REQ` / `RSP`) and per functional
 or physical OBD request it witnesses (`BUS`). `--summary FILE` rewrites a
@@ -104,7 +104,7 @@ def main():
     ap.add_argument("--addr", default="0x60")
     ap.add_argument("--tester", default="0x6F1")
     ap.add_argument("--odometer", type=int, default=123456)
-    ap.add_argument("--pcan", default="PCAN_USBBUS2")
+    ap.add_argument("--pcan", default="PCAN_USBBUS1")
     ap.add_argument("--summary", default="")
     a = ap.parse_args()
 

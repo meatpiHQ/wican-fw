@@ -31,7 +31,7 @@ poll (values after --watch seconds), L3 the generator, L4 restore (the
 simulator's level, the tables and the settings).
 
 usage: autopid_bounds_bench.py [--dut localhost:18081] [--watch 20] [--out DIR]
-  Runs on the PC (the simulator at 192.168.8.1 through sim_net); the DUT
+  Runs on the PC (the simulator through sim_net); the DUT
   through an ssh tunnel (`ssh -N -L 18081:10.42.1.194:80 rpi001`) or by
   address.
 Needs: the main firmware on the DUT on the bench AP, the ECU simulator
@@ -50,7 +50,7 @@ sys.path.insert(0, os.path.join(HERE, "..", "lib"))
 import sim_net  # noqa: E402
 
 REPO = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
-SIM = "http://192.168.8.1"
+SIM = sim_net.sim_url()            # ECU sim v2 over its USB network link
 NOISE = "B3*0.3921568692"       # the table's float scale as alfa-04 printed it (B3 since the 2026-10-24 frame of reference)
 
 

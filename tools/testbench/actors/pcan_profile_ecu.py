@@ -19,7 +19,7 @@ script.json:
                    "gap_ms": 50}],
    "cf_gap_ms": 1, "unknown_nrc": "11"}
 
-usage: pcan_profile_ecu.py SCRIPT.json [secs] [--pcan PCAN_USBBUS2]
+usage: pcan_profile_ecu.py SCRIPT.json [secs] [--pcan PCAN_USBBUS1]
                            [--summary FILE]
 Prints one line per request (`REQ`), reply (`RSP`, first frame `FF`,
 flow control seen `FC`) and per 1000 broadcast frames. `--summary FILE`
@@ -238,7 +238,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("script")
     ap.add_argument("secs", nargs="?", type=float, default=600)
-    ap.add_argument("--pcan", default="PCAN_USBBUS2")
+    ap.add_argument("--pcan", default="PCAN_USBBUS1")
     ap.add_argument("--summary", default="")
     a = ap.parse_args()
 

@@ -165,7 +165,7 @@ def battery_leg(ip, psu_port):
     (charging, resting, sleep_v, wake_v) from the DEVICE's readings, or None.
     The supply goes back to its setpoint before the sleep countdown (5 min)
     could matter."""
-    from owon_psu import OwonPsu   # noqa: E402 (lib on sys.path)
+    from bench_psu import open_psu   # noqa: E402 (lib on sys.path; ECU sim v2's OBD pin 16)
 
     def readings(stop, timeout):
         vals, t0 = [], time.time()
@@ -185,7 +185,7 @@ def battery_leg(ip, psu_port):
     def mean(a):
         return sum(a) / len(a)
 
-    with OwonPsu(psu_port) as ps:
+    with open_psu(psu_port) as ps:
         v0 = ps.voltage_setpoint()
         note(f"battery: supply setpoint {v0:.2f} V; playing engine running (14.3 V)")
         try:
@@ -253,7 +253,7 @@ def main():
     ap.add_argument("--no-vehicle", action="store_true")
     a = ap.parse_args()
     wican = bench_ports.resolve(a.wican, "wican_console")
-    psu = bench_ports.resolve(a.psu, "psu")
+    psu = a.psu                      # auto = ECU sim v2's supply (bench_psu)
     note(f"ports: wican={wican} psu={psu}")
 
     # ---- the rig: ONE home hotspot (the twin roams the DUT), broker up ----

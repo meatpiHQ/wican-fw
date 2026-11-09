@@ -2,7 +2,7 @@
 
 Command: `.\test.ps1 habackfill` (= `python tools/testbench/ha/ha_history_backfill_bench.py --dut localhost:18086 --dut-ip <DutIp> --pi rpi001` through an ssh tunnel to the DUT via rpi001; by hand through your own tunnel with `--dut localhost:<port>`; `--only b2,b3` picks legs, b0 and b6 always run; `--psu none` skips the supply part of b5)
 
-Needs: the bench HA on rpi001 (`ha-bench.service`, started by the bench when it is down and stopped at the end then; `--keep-ha` leaves it) with the integration copied from `rpi002:~/workspace/ha-wican` (the `meatpi-multi-device` branch at or after the 2026-11-06 alignment) and `homeassistant.internal_url: http://10.42.1.1:8123` in its configuration.yaml; the DUT on the bench AP running a build with the export counters (2026-11-06); the ECU simulator on the bus answering `010C` at 500 kbit/s; the OWON on its port; `internal/bench_ha_credentials.json` (the bench HA's owner login) or `--ha-user`/`--ha-pass`/`--ha-token`.
+Needs: the bench HA on rpi001 (`ha-bench.service`, started by the bench when it is down and stopped at the end then; `--keep-ha` leaves it) with the integration copied from `rpi002:~/workspace/ha-wican` (the `meatpi-multi-device` branch at or after the 2026-11-06 alignment) and `homeassistant.internal_url: http://10.42.1.1:8123` in its configuration.yaml; the DUT on the bench AP running a build with the export counters (2026-11-06); the ECU simulator on the bus answering `010C` at 500 kbit/s; the ECU sim v2 supply on its port; `internal/bench_ha_credentials.json` (the bench HA's owner login) or `--ha-user`/`--ha-pass`/`--ha-token`.
 
 Index row and the other stages: [../TESTING.md](../TESTING.md).
 

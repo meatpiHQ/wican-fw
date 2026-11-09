@@ -2,7 +2,7 @@
 
 Command: `python tools\testbench\wifi\espnetlink_ttff_bench.py [--n 6] [--bench-ap off\|keep]`
 
-Needs: PSU + rpi001 (wtest1 free, `espnl-client` with the dongle's key) + the paired dongle on the WiCAN's connector + the P4 bench AP daemon for `--bench-ap off`
+Needs: the ECU sim v2 supply + rpi001 (wtest1 free, `espnl-client` with the dongle's key) + the paired dongle on the WiCAN's connector + the P4 bench AP daemon for `--bench-ap off`
 
 Moved from the `TESTING.md` test-kinds table on 2026-10-31 (the row's detail cell, whole, as paragraphs). The index row and the other stages: [../TESTING.md](../TESTING.md).
 

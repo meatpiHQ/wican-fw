@@ -42,14 +42,14 @@ Legs:
      settings had to change), the actor stopped, `0100` answered by the
      simulator again.
 
-usage: autopid_profile_e2e_bench.py [--dut localhost:18081] [--pcan PCAN_USBBUS2]
+usage: autopid_profile_e2e_bench.py [--dut localhost:18081] [--pcan PCAN_USBBUS1]
           [--profiles FILE|URL] [--car "Leaf ZE1 (2018-)"] [--watch 60]
           [--seed 20261021] [--out DIR]
   Runs on the PC (python-can + PCAN); the DUT through an ssh tunnel
   (`ssh -N -L 18081:10.42.1.194:80 rpi001`) or by address. --profiles
   defaults to the published file on GitHub main; a local copy (a checkout's
   vehicle_profiles.json) tests a profile before it is pushed.
-Needs: the main firmware on the DUT on the bench AP, PCAN_USBBUS2 on the
+Needs: the main firmware on the DUT on the bench AP, PCAN_USBBUS1 on the
 DUT bus, the ECU simulator on the bus (it ACKs the actor's frames and
 answers the standard rows), the PSU above the sleep voltage. 11-bit CAN
 profiles (ATSH/ATCRA/ATFCSH with 3 hex digits; a profile that names no
@@ -61,7 +61,7 @@ on the same reply id, and that single frame lands between the real reply's
 frames (2026-10-24, the Niro EV run: 0/20 until it was silenced). Before
 such a run: `curl.exe --interface 192.168.8.2 -X POST -H "Content-Type:
 application/json" -d '{"enabled":true,"response_type":"no_response",
-"trigger":"continuous"}' http://192.168.8.1/api/ecu/errors/22/<DID>` for
+"trigger":"continuous"}' http://10.8.8.1/api/ecu/errors/22/<DID>` for
 every DID of the profile, DELETE the same paths afterwards.
 """
 import json
@@ -436,7 +436,7 @@ def main():
         return 2
     dut = opt("--dut", "localhost:18081")
     base = "http://" + dut.rstrip("/")
-    pcan = opt("--pcan", "PCAN_USBBUS2")
+    pcan = opt("--pcan", "PCAN_USBBUS1")
     profiles = opt("--profiles", apb.PROFILES_URL)
     car_sel = opt("--car", DEFAULT_CAR)
     watch_s = float(opt("--watch", 60))

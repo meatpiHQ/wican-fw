@@ -1,6 +1,6 @@
 # J2534 ISO15765 reflash preamble over native ISO-TP
 
-Command: `python3 tools/testbench/usb/j2534_bench.py <dut_ip> --reflash [--tx 7E2 --rx 7EA]` (ON rpi001) with `python tools/testbench/actors/pcan_reflash_ecu.py 150 --scenario happy [--req 7E2 --resp 7EA]` running on the PC (PCAN_USBBUS2)
+Command: `python3 tools/testbench/usb/j2534_bench.py <dut_ip> --reflash [--tx 7E2 --rx 7EA]` (ON rpi001) with `python tools/testbench/actors/pcan_reflash_ecu.py 150 --scenario happy [--req 7E2 --resp 7EA]` running on the PC (PCAN_USBBUS1)
 
 Needs: main fw on DUT + rpi001 + PCAN on the bus
 

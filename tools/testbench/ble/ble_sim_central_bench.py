@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """BLE throughput with the ECU simulator as the central (ble_central_bench).
 
-The simulator (WiCAN-PRO hardware, USB-NCM at 192.168.8.1) runs the
+The simulator (ECU sim v2, its REST over the USB network link) runs the
 `ble_central_bench` component: a NimBLE central that connects to the DUT,
 tunes the link like esp-idf's throughput_app (MTU 517, DLE 251, 7.5 ms,
 PHY) and runs timed GATT tests. This PC script only drives it over HTTP
@@ -22,7 +22,7 @@ Verdict BLE THROUGHPUT PASS = at 1M: notify >= 300 kbps and write >= 400
 kbps (the reference minus margin), every tunnel transfer ok + exact, 0
 pairing failures; 2M reported. METRIC lines for the benchboard.
 
-Usage: python tools/testbench/ble/ble_sim_central_bench.py [--sim 192.168.8.1]
+Usage: python tools/testbench/ble/ble_sim_central_bench.py [--sim 10.8.8.1]
            [--dut 10.42.1.194] [--phys 1m,2m] [--seconds 60] [--passkey 421337]
 """
 import argparse
@@ -333,7 +333,8 @@ def leg(sim, base, dut, phy, seconds, passkey):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("--sim", default="192.168.8.1")
+    ap.add_argument("--sim", default=sim_net.sim_host(),
+                    help="the simulator's host (found over its USB network link)")
     ap.add_argument("--dut", default="10.42.1.194")
     ap.add_argument("--phys", default="1m,2m")
     ap.add_argument("--seconds", type=int, default=60)

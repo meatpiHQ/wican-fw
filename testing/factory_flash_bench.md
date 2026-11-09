@@ -2,7 +2,7 @@
 
 Command: `python tools/testbench/system/factory_flash_bench.py [--restore] [--backup auto\|<ip>\|none]` (and `--restore-only BACKUP`)
 
-Needs: DUT console + PSU + rpi001 (wtest1 for the restore)
+Needs: DUT console + the supply (ECU sim v2's OBD pin 16) + rpi001 (wtest1 for the restore)
 
 Moved from the `TESTING.md` test-kinds table on 2026-10-31 (the row's detail cell, whole, as paragraphs). The index row and the other stages: [../TESTING.md](../TESTING.md).
 

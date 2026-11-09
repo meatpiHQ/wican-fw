@@ -18,17 +18,19 @@ here via `[project] instruments_dir`.
 ## instrument.toml
 
 ```toml
-label    = "OWON PSU"          # chip text in the UI
+label    = "DUT supply"        # chip text in the UI
 desc     = "car-battery sim"   # tooltip
 optional = true                # absent = grey chip, not a red fault
 doc      = "free-form notes shown in the UI tooltip"
 
 [config]                       # machine-specific knobs, all overridable
-port = "auto"                 # or a COM number in benchboard.local.toml;
-                               # `auto` = tools/testbench/detect_ports.py
+psu = "auto"                  # auto = ECU sim v2's supply over its USB
+                               # network link (lib/sim_net.py finds it); a
+                               # COM number in benchboard.local.toml names
+                               # a legacy OWON instead
 
 [health]                       # side-effect-free health probe
-cmd = "${python} \"${dir}/probe.py\" --port ${port}"
+cmd = "${python} \"${dir}/probe.py\" --psu ${psu}"
 timeout_s = 20
 ```
 
@@ -58,8 +60,14 @@ Create **`benchboard.local.toml`** next to `benchboard.toml` (it is
 gitignored, copy `benchboard.local.example.toml`):
 
 ```toml
+[instruments.ecu_sim.config]
+url = "http://192.168.8.1"     # my ECU sim v2 kept the product default
+                               # address (this bench uses 10.8.8.1; `auto`
+                               # tries both)
+
 [instruments.psu.config]
-port = "COM7"                  # my OWON is on COM7
+psu = "COM7"                   # my rig still has an OWON on COM7 (the
+                               # default `auto` is ECU sim v2's supply)
 
 [instruments.pcan]
 enabled = false                # I don't have a PCAN: hides the chip and

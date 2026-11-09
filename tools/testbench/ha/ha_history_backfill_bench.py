@@ -743,10 +743,8 @@ def main():
         print("== b5 the countdown and the log read")
         if want("b5"):
             if args.psu != "none":
-                from bench_ports import port as bench_port  # noqa: E402
-                from owon_psu import OwonPsu  # noqa: E402
-                port = bench_port("psu") if args.psu == "auto" else args.psu
-                psu = OwonPsu(port)
+                from bench_psu import open_psu  # noqa: E402  (ECU sim v2's OBD pin 16)
+                psu = open_psu(args.psu)
                 psu.meas_voltage()
                 psu.set_voltage(V_SLEEPY)
                 t0 = time.time()

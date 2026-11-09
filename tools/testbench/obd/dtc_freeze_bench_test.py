@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Freeze-frame (OBD mode 02) end-to-end bench: TASK_dtc §14.
 
-Topology: the ECU-sim box (REST at 192.168.8.1 from the PC over its
+Topology: ECU sim v2 (REST from the PC over its
 NCM link) is the vehicle, its mode 02 serves frame 0 while a DTC is
 stored (PID 02 = DTCFRZF, other PIDs = frozen snapshot of the live
 mode-01 value). DUT driven over HTTP via rpi001.
@@ -31,7 +31,7 @@ import sim_net  # noqa: E402  (the simulator's own link on any LAN)
 
 sim_net.install()
 
-SIM = "http://192.168.8.1"
+SIM = sim_net.sim_url()            # ECU sim v2 over its USB network link
 
 fails = []
 

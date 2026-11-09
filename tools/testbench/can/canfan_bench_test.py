@@ -29,7 +29,7 @@ import time
 
 import can
 
-PCAN = sys.argv[1] if len(sys.argv) > 1 else "PCAN_USBBUS2"
+PCAN = sys.argv[1] if len(sys.argv) > 1 else "PCAN_USBBUS1"
 
 fails = []
 

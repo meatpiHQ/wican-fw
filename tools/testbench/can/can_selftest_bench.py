@@ -48,7 +48,7 @@ the OBD chip and CAN self-test cards of System > Maintenance:
   console             (optional, --ws) `can_selftest` on /ws/cli prints the
                       last result's verdict
 
-usage: can_selftest_bench.py [--dut localhost:18081] [--sim http://192.168.8.1]
+usage: can_selftest_bench.py [--dut localhost:18081] [--sim http://10.8.8.1]
                              [--sim-restore asis|on|off] [--skip-flip]
                              [--fw22 <path to V2.3.22.txt>] [--skip-after]
   run on the PC with the DUT through test.ps1's ssh tunnel (the canselftest
@@ -76,7 +76,7 @@ def arg(name, default):
 
 
 DUT = "http://" + arg("--dut", "localhost:18081")
-SIM = arg("--sim", "http://192.168.8.1")
+SIM = sim_net.sim_url(arg("--sim", "auto"))   # ECU sim v2 over its USB network link
 sim_net.install(SIM)
 SIM_RESTORE = arg("--sim-restore", "asis")
 SKIP_FLIP = "--skip-flip" in ARGS

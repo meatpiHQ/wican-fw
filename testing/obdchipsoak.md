@@ -1,8 +1,8 @@
 # OBD chip soak: a field configuration, accelerated, until the chip fails
 
-Command: `python tools\testbench\obd\obd_chip_soak_bench.py [--dut localhost:18081] [--sim http://192.168.8.1] [--psu auto] [--console auto|none] [--config "internal/wican config_2026-10-28.json"] [--out DIR] [--stop-file DIR/STOP] [--rounds N] [--only a,b] [--period-ms 50] [--setup-only] [--no-restore]` (PC, the DUT through an ssh tunnel `ssh -N -L 18081:<dut>:80 rpi001`, the PSU on its FTDI port, the console tailed on the CH344 B channel)
+Command: `python tools\testbench\obd\obd_chip_soak_bench.py [--dut localhost:18081] [--sim http://10.8.8.1] [--psu auto] [--console auto|none] [--config "internal/wican config_2026-10-28.json"] [--out DIR] [--stop-file DIR/STOP] [--rounds N] [--only a,b] [--period-ms 50] [--setup-only] [--no-restore]` (PC, the DUT through an ssh tunnel `ssh -N -L 18081:<dut>:80 rpi001`, the ECU sim v2 supply, the console tailed on the quad UART's channel B)
 
-Needs: main fw on DUT + rpi001 + the ECU simulator on the bus at 500 kbit/s + the `/ws/obd` bridge (ships enabled) + the PSU. The user's configuration file under `internal/` (gitignored). Runs until the chip fails, the stop file appears or Ctrl-C.
+Needs: main fw on DUT + rpi001 + ECU sim v2 on the bus at 500 kbit/s + the `/ws/obd` bridge (ships enabled) + the ECU sim v2 supply. The user's configuration file under `internal/` (gitignored). Runs until the chip fails, the stop file appears or Ctrl-C.
 
 The index row and the other stages: [../TESTING.md](../TESTING.md). The chip's history: `internal/TASK_obd_chip_dead_after_nap.md`, `internal/OBD_CHIP_COMMANDS_V6_VS_V4.md`; the related stages [attpstore.md](attpstore.md), [obdbringup.md](obdbringup.md), [obdfw.md](obdfw.md), [sleepmatrix.md](sleepmatrix.md).
 

@@ -1,9 +1,10 @@
 label = "PCAN"
-desc = "PEAK PCAN-USB on the DUT CAN bus (500k)"
-doc = "python-can 'pcan' interface; probe opens+closes the bus (read-only, no TX)."
+desc = "PEAK PCAN-USB FD, two channels on ECU sim v2's DB9 sockets: channel 1 = J2 (HS CAN, the DUT's bus, 500k), channel 2 = J3 (MS CAN or CH CAN through the simulator's relay)"
+doc = "python-can 'pcan' interface; probe opens+closes the configured channel (read-only, no TX). The benches default to `channel` (the DUT's bus); `j3_channel` is the relay socket (MS CAN at 125k unless `tester relay ch` / POST /api/tester {\"relay_db9\":\"ch\"} on the simulator switches it to CH CAN)."
 
 [config]
-channel = "PCAN_USBBUS2"
+channel = "PCAN_USBBUS1"
+j3_channel = "PCAN_USBBUS2"
 bitrate = 500000
 
 [health]

@@ -2,7 +2,7 @@
 
 Command: `python tools/testbench/obd/autopid_profile_first_bench.py [--dut localhost:18081]` (PC, the DUT through an ssh tunnel, the simulator through sim_net)
 
-Needs: PC + the ECU simulator (its default profile active, its car in the vehicle store or learned by the bench); the DUT on the bench AP, the PSU above the sleep voltage
+Needs: PC + ECU sim v2 (its default profile active, its car in the vehicle store or learned by the bench); the DUT on the bench AP, the PSU above the sleep voltage
 
 Moved from the `TESTING.md` test-kinds table on 2026-10-31 (the row's detail cell, whole, as paragraphs). The index row and the other stages: [../TESTING.md](../TESTING.md).
 

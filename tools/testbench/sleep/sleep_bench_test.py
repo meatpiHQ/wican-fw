@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""Sleep-mode bench: PSU-in-the-loop HIL for sleep_manager.
+"""Sleep-mode bench: supply-in-the-loop HIL for sleep_manager.
 
-Topology (2026-07-20 rig): the OWON P4305 (RS232, `owon_psu.py`, hard
-15.0 V ceiling in driver AND instrument) plays the car battery on the
-DUT's 12 V input; the DUT is observed over HTTP through rpi001 (the DUT
-is a STA on the bench hotspot) and by PSU current readback. The serial
+Topology (2026-11-09 rig): ECU sim v2's programmable OBD pin 16
+(`bench_psu.py`, hard 15.0 V ceiling in the driver) plays the car battery
+on the DUT's 12 V input and reads the DUT's own current at the pin (the
+2026-07-20 rig had an OWON P4305 over RS232 on a harness shared with the
+first simulator box, `owon_psu.py`); the DUT is observed over HTTP through
+rpi001 (the DUT is a STA on the bench hotspot) and by that current. The serial
 console is deliberately NOT used: opening the CH342 console port resets
 the DUT (DTR/RTS auto-reset), and the port itself dies during light
 sleep, current + HTTP are the ground truth. Runs on the dev host; the
@@ -68,12 +70,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "wifi"))
 import bench_ports  # noqa: E402  (COM ports by role, tools/testbench/detect_ports.py)
 
-from owon_psu import OwonPsu   # noqa: E402
+from bench_psu import open_psu   # noqa: E402  (ECU sim v2's OBD pin 16 since 2026-11-09)
 
 V_AWAKE = 14.0    # above wake_v (13.20) even after the harness drop
 V_SLEEPY = 12.5   # below sleep_v (13.10) by the same margin
-AWAKE_A_MIN = 0.050   # awake draw is ~80-110 mA on this rig
-SLEEP_A_MAX = 0.040   # nap-loop average must sit under this
+# the DUT's own current at pin 16 (ECU sim v2 measures the DUT alone; the
+# first rig's supply fed a shared harness and read about 40 mA more)
+AWAKE_A_MIN = 0.030   # awake draw is ~45-55 mA with the PC cable on the USB-C
+SLEEP_A_MAX = 0.005   # Ali, 2026-11-09: 4.2 to 4.6 mA asleep is acceptable; the
+                      # settled median must stay under 5 mA (ECU sim v2 reads the
+                      # DUT alone, 4.2 to 4.6 mA with the PC cable on the USB-C)
+SLEEP_SETTLE_S = 3.0  # the teardown ramp after the entry is detected
 
 fails = []
 
@@ -358,9 +365,9 @@ def main():
         print("console captured on", con.port if hasattr(con, "port") else "the WiCAN console")
     except Exception as e:  # noqa: BLE001
         print(f"NOTE: no console capture ({e}); the wake hold is not timed")
-    psu = OwonPsu(bench_ports.resolve(args.psu_port, "psu", "COM2016"))
-    check("psu_idn", "P4305" in psu.idn, psu.idn)
-    check("psu_volt_ceiling", True, "VOLT:LIM 15.000 programmed")
+    psu = open_psu(args.psu_port)
+    check("psu_idn", bool(psu.idn), psu.idn)
+    check("psu_volt_ceiling", True, "15.0 V ceiling in the bench driver")
     ilim = psu.current_limit()
     check("psu_current_limit", 0.4 <= ilim <= 5.1, f"{ilim:.3f} A")
 
@@ -537,16 +544,18 @@ def main():
                 check_promise("voltage_countdown_kept", c3, t3, console_wall(con, hit))
             else:
                 check("voltage_countdown_kept", False, "no `entering sleep` line on the console")
+        time.sleep(SLEEP_SETTLE_S)      # past the teardown ramp
         s = psu.sample_current(8)
         avg = statistics.mean(s)
+        med = statistics.median(s)
         check("voltage_sleep_current", avg < sleep_gate,
               f"avg {mA(avg)}, min {mA(min(s))}, max {mA(max(s))} "
               f"(awake {mA(awake_a)}, delta {mA(awake_a - avg)})")
-        if awake_a < 0.070:  # clean feed: DUT alone, assert the floor
-            check("voltage_sleep_floor", avg < SLEEP_A_MAX, mA(avg))
-        elif avg >= SLEEP_A_MAX:
-            print(f"NOTE: absolute sleep floor {mA(avg)} not asserted, "
-                  f"shared PSU feed (ECU sim?) adds standing draw")
+        # ECU sim v2 reads the DUT alone at pin 16: the asleep level is held
+        # (the median of the settled window, to a tenth of a milliamp)
+        check("voltage_sleep_floor", med < SLEEP_A_MAX,
+              f"median {med * 1000:.1f} mA, min {min(s) * 1000:.1f}, "
+              f"max {max(s) * 1000:.1f} (limit {SLEEP_A_MAX * 1000:.0f} mA; 4.2 to 4.6 is the accepted level)")
         gone = dut.get("/api/sleep", timeout_s=4)
         check("voltage_sleep_offline", gone is None,
               "HTTP dead while asleep" if gone is None

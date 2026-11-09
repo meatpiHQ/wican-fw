@@ -34,7 +34,7 @@ Legs:
   restore: every setting and the simulator as found.
 
 Verdict: `J1939 PASS`. Run on the PC (IDF venv python; python-can):
-  python j1939_bench.py [host[:port]] [--pcan PCAN_USBBUS2]
+  python j1939_bench.py [host[:port]] [--pcan PCAN_USBBUS1]
                         [--only j1,j4] [--logdir DIR]
 `--only` runs chosen legs and says `J1939 PARTIAL PASS`.
 """
@@ -51,7 +51,7 @@ import j1939_ref as J  # noqa: E402
 from pcbench import Actor, Bench, Dut, Run  # noqa: E402
 
 DUT_HOST = "localhost:8081"
-PCAN = "PCAN_USBBUS2"
+PCAN = "PCAN_USBBUS1"
 ONLY = []
 LOGDIR = tempfile.gettempdir()
 args = sys.argv[1:]

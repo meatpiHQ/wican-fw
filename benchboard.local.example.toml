@@ -4,11 +4,17 @@
 # Full format: tools/testbench/instruments/README.md.
 
 # --- your rig's ports/addresses (override any instrument [config] key) --
+#[instruments.ecu_sim.config]
+#url = "http://192.168.8.1"   # your ECU sim v2's USB network address
+                              # (`auto` tries 10.8.8.1 then 192.168.8.1)
+
 #[instruments.psu.config]
-#port = "COM7"                # where YOUR OWON PSU is
+#psu = "COM7"                 # a legacy OWON on COM7 instead of the
+                              # simulator's supply (`auto`)
 
 #[instruments.pcan.config]
-#channel = "PCAN_USBBUS1"
+#channel = "PCAN_USBBUS2"     # the channel on the simulator's DB9 J2 (the DUT's bus)
+#j3_channel = "PCAN_USBBUS1"  # the channel on DB9 J3 (MS or CH CAN, the relay)
 
 #[instruments.pi.config]
 #ssh = "mypi"                 # your ~/.ssh/config alias for the bench Pi

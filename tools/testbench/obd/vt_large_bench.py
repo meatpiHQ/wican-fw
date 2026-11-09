@@ -34,13 +34,14 @@ import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 import benchlib as bl  # noqa: E402
+import sim_net  # noqa: E402  (where ECU sim v2 answers)
 
 DUT = "localhost:8081"
 DUT_IP = "10.42.1.194"
 TX = "64,512,2048,4064"
 RX = "64,512,2048,4094"
 ECU = "sim"            # sim = the simulator's 7E0/7E8 memory service;
-PCAN = "PCAN_USBBUS2"  # pcan = pcan_memory_ecu.py on 7E4/7EC (this PC)
+PCAN = "PCAN_USBBUS1"  # pcan = pcan_memory_ecu.py on 7E4/7EC (this PC)
 TXID, RXID = "7E0", "7E8"
 CAPTURE_ARGS = ""   # extra vt_large_capture.py flags: "--svc 3D --spaces"
 SERIAL = ""         # "COM39:1000000" = a USB ELM adapter on this PC instead
@@ -69,7 +70,7 @@ while i < len(args):
         SERIAL = args[i + 1]; i += 2
     else:
         DUT = k; i += 1
-SIM = "192.168.8.1"
+SIM = sim_net.sim_host()
 if ECU == "pcan":
     # The chip only assembles multi-frame responses (and sends flow
     # control) for the OBD physical range 7E0-7E7 -> 7E8-7EF: on 740/748 it

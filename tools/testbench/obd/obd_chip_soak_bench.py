@@ -46,7 +46,7 @@ recovery reboot, or the chip report answering 409 twice. Everything else
 (a crash, an unexpected reset, a stray E line, a scenario assertion) is a
 FINDING: logged, counted, the run goes on.
 
-usage: obd_chip_soak_bench.py [--dut localhost:18081] [--sim http://192.168.8.1]
+usage: obd_chip_soak_bench.py [--dut localhost:18081] [--sim http://10.8.8.1]
             [--psu auto|COMxx] [--console auto|COMxx|none]
             [--config "internal/wican config_2026-10-28.json"]
             [--out test-reports/logs/obd_chip_soak_<stamp>] [--stop-file <out>/STOP]
@@ -77,7 +77,7 @@ sys.path.insert(0, os.path.join(HERE, "..", "lib"))
 import bench_bus    # noqa: E402  (the simulator; installs sim_net)
 import bench_ports  # noqa: E402  (COM ports by role)
 import wsmin        # noqa: E402  (the /ws/obd bridge)
-from owon_psu import OwonPsu  # noqa: E402
+from bench_psu import open_psu  # noqa: E402  (ECU sim v2's OBD pin 16)
 
 ARGS = sys.argv[1:]
 
@@ -216,11 +216,7 @@ def proto_digit(dpn):
 class Rig:
     def __init__(self, log):
         self.log = log
-        self.psu = OwonPsu(bench_ports.resolve(PSU_PORT, "psu", "COM50"))
-        try:
-            self.psu.meas_current()  # a cold OWON's first answer is not one
-        except (AssertionError, ValueError):
-            pass
+        self.psu = open_psu(PSU_PORT)
         self.con = None
         self.con_stop = None
         self.ring_seen = set()

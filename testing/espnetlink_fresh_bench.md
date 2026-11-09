@@ -1,8 +1,8 @@
 # ESPNetLink out-of-the-box scenario
 
-Command: `python tools\testbench\wifi\espnetlink_fresh_bench.py --wican COMx --dongle COMy --psu COMz [--mode usb_rndis\|wifi_modem]`
+Command: `python tools\testbench\wifi\espnetlink_fresh_bench.py --wican COMx --dongle COMy --psu auto [--mode usb_rndis\|wifi_modem]`
 
-Needs: both consoles + PSU + rpi001 (`wtest1` free)
+Needs: both consoles + the supply (ECU sim v2's OBD pin 16) + rpi001 (`wtest1` free)
 
 Moved from the `TESTING.md` test-kinds table on 2026-10-31 (the row's detail cell, whole, as paragraphs). The index row and the other stages: [../TESTING.md](../TESTING.md).
 

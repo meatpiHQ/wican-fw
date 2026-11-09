@@ -31,7 +31,7 @@ restore (the simulator answering again, the store as found, the tables
 compared with the save).
 
 usage: autopid_profile_first_bench.py [--dut localhost:18081] [--out DIR]
-  Runs on the PC (the simulator at 192.168.8.1 through sim_net); the DUT
+  Runs on the PC (the simulator through sim_net); the DUT
   through an ssh tunnel (`ssh -N -L 18081:10.42.1.194:80 rpi001`) or by
   address.
 Needs: the main firmware on the DUT on the bench AP, the ECU simulator
@@ -51,7 +51,7 @@ sys.path.insert(0, os.path.join(HERE, "..", "lib"))
 import sim_net  # noqa: E402
 
 REPO = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
-SIM = "http://192.168.8.1"
+SIM = sim_net.sim_url()            # ECU sim v2 over its USB network link
 SIM_VIN = "1WCAN0FW0P0000001"
 PROFILE = "Bench: Generic Petrol Sedan"
 NAME = "Bench profile car"

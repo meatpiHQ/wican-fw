@@ -2,7 +2,7 @@
 
 Command: `python tools/testbench/obd/autopid_bounds_bench.py [--dut localhost:18081] [--watch 20]` (PC, the DUT through an ssh tunnel, the simulator through sim_net)
 
-Needs: PC + the ECU simulator; the DUT on the bench AP, the PSU above the sleep voltage; 2026-10-28: the bench moved to the 2026-10-24 frame of reference (the table hands out B3*100/255 now, the custom rows read B3); on the stale numbering the custom rows read 18.43 (byte 2F, the PID echo), the firmware was right; PASS again that evening on the moved numbering (the raw check takes the printed header)
+Needs: PC + ECU sim v2; the DUT on the bench AP, the PSU above the sleep voltage; 2026-10-28: the bench moved to the 2026-10-24 frame of reference (the table hands out B3*100/255 now, the custom rows read B3); on the stale numbering the custom rows read 18.43 (byte 2F, the PID echo), the firmware was right; PASS again that evening on the moved numbering (the raw check takes the printed header)
 
 Moved from the `TESTING.md` test-kinds table on 2026-10-31 (the row's detail cell, whole, as paragraphs). The index row and the other stages: [../TESTING.md](../TESTING.md).
 

@@ -1,8 +1,8 @@
 # OBD chip protocol store: no write on a protocol switch
 
-Command: `.\test.ps1 attpstore` = `python tools\testbench\obd\attp_store_bench.py --dut localhost:18081 [--sim http://192.168.8.1] [--skip-bringup] [--skip-canary] [--psu COMxx]` (PC, the DUT through the tunnel, the console tailed beside it)
+Command: `.\test.ps1 attpstore` = `python tools\testbench\obd\attp_store_bench.py --dut localhost:18081 [--sim http://10.8.8.1] [--skip-bringup] [--skip-canary] [--psu auto]` (PC, the DUT through the tunnel, the console tailed beside it)
 
-Needs: main fw on DUT + rpi001 + the ECU simulator on the bus at 500 kbit/s + the `/ws/obd` bridge (`br_obd`, the canonical bench settings). AutoPID is switched off for the run when it is on (a planned restart each way).
+Needs: main fw on DUT + rpi001 + ECU sim v2 on the bus at 500 kbit/s + the `/ws/obd` bridge (`br_obd`, the canonical bench settings). AutoPID is switched off for the run when it is on (a planned restart each way).
 
 The index row and the other stages: [../TESTING.md](../TESTING.md). The bench that found the mechanism, the datasheet facts and the fix design: `internal/TASK_obd_chip_protocol_store.md`; the command inventory: `internal/OBD_CHIP_COMMANDS_V6_VS_V4.md`.
 

@@ -59,7 +59,7 @@ REPO = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 sys.path.insert(0, os.path.join(HERE, "..", "lib"))
 sys.path.insert(0, os.path.join(HERE, "..", "wifi"))
 import bench_ports  # noqa: E402
-from owon_psu import OwonPsu  # noqa: E402
+from bench_psu import open_psu  # noqa: E402  (ECU sim v2's OBD pin 16)
 from wican_fresh_bench import Console, ESPTOOL_PY, check, note, fails  # noqa: E402
 
 FACTORY_FS_OFFSET = 0x9EE000
@@ -200,8 +200,8 @@ def main():
     run = time.strftime("%Y%m%d_%H%M")
     logdir = os.path.join(REPO, "test-reports", "logs", f"factory_flash_{run}")
     os.makedirs(logdir, exist_ok=True)
-    wican = bench_ports.resolve(a.wican, "wican_console", "COM254")
-    psu = OwonPsu(bench_ports.resolve(a.psu, "psu", "COM50"))
+    wican = bench_ports.resolve(a.wican, "wican_console", "COM116")
+    psu = open_psu(a.psu)
     try:
         psu.meas_current()
     except (AssertionError, ValueError):

@@ -13,7 +13,7 @@ Point --host/--port at the transport under test:
   WS      : --ws [--ws-path /ws/can]              (needs br can<->ws_can/slcan;
                                                    slcan_ws_test.py sets it up)
 
-  python slcan_perf_test.py --host 192.168.82.1 --secs 5 --pcan PCAN_USBBUS2
+  python slcan_perf_test.py --host 192.168.82.1 --secs 5 --pcan PCAN_USBBUS1
 Needs python-can. Assumes br_slcan (can<->slcan0/slcan) is configured + the
 CAN bus enabled at 500 kbit/s (slcan_bridge_test.py sets this up).
 """
@@ -71,7 +71,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--host", default="192.168.82.1")
     ap.add_argument("--port", type=int, default=3333)
-    ap.add_argument("--pcan", default="PCAN_USBBUS2")
+    ap.add_argument("--pcan", default="PCAN_USBBUS1")
     ap.add_argument("--secs", type=float, default=5.0)
     ap.add_argument("--label", default="USB-NCM")
     ap.add_argument("--ws", action="store_true",

@@ -34,7 +34,7 @@ source, with its own ECU off.
 
 Verdict: `J1939 CONSERVATION PASS`. Run on the PC (IDF venv python;
 python-can, the PCAN on the DUT's bus):
-  python j1939_conservation_test.py [host[:port]] [--pcan PCAN_USBBUS2]
+  python j1939_conservation_test.py [host[:port]] [--pcan PCAN_USBBUS1]
                                     [--n 20000] [--only 250|500]
 """
 import json
@@ -52,7 +52,7 @@ import j1939_ref as J  # noqa: E402
 from pcbench import Bench, Dut, Run  # noqa: E402
 
 DUT_HOST = "localhost:8081"
-PCAN = "PCAN_USBBUS2"
+PCAN = "PCAN_USBBUS1"
 N = 20000
 ONLY = None
 args = sys.argv[1:]

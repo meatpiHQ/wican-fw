@@ -1,9 +1,9 @@
-label = "ECU sim"
-desc = "2nd WiCAN Pro as ECU simulator, REST at 192.168.8.1 over the PC USB NCM link"
-doc = "Feeds the DUT CAN bus with OBD responses; REST API sets DTCs/PIDs."
+label = "ECU sim v2"
+desc = "ECU sim v2: the OBD-II car on the DUT's bus, its REST over the PC's USB network link (http://10.8.8.1 on this bench)"
+doc = "Answers OBD and UDS on the HS CAN the DUT sits on (its OBD socket and DB9 J2) and mirrors the ECU set on the other interfaces (DB9 J3 = MS CAN or CH CAN through its relay; single-wire CAN, K-line, J1850 on the socket). REST sets DTCs/PIDs, bitrate and id format per interface (lib/bench_bus.py). It also powers the DUT: see the `psu` instrument. `auto` = lib/sim_net.py finds it (WICAN_SIM_URL, 10.8.8.1, 192.168.8.1)."
 
 [config]
-url = "http://192.168.8.1/"
+url = "auto"
 
 [health]
 cmd = "${python} \"${dir}/probe.py\" --url ${url}"

@@ -2,7 +2,7 @@
 
 Command: `.\test.ps1 sleepmatrix`
 
-Needs: PSU + rpi001 (+ betty for the VPN legs)
+Needs: the ECU sim v2 supply + rpi001 (+ betty for the VPN legs)
 
 Moved from the `TESTING.md` test-kinds table on 2026-10-31 (the row's detail cell, whole, as paragraphs). The index row and the other stages: [../TESTING.md](../TESTING.md).
 

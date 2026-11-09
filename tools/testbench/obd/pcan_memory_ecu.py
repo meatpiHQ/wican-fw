@@ -16,7 +16,7 @@ are standards-checked on the PC side.
   0x3E TesterPresent        -> 7E 00
   anything else             -> NRC 0x11
 
-usage: pcan_memory_ecu.py [--pcan PCAN_USBBUS2] [--rxid 0x7E4] [--txid 0x7EC]
+usage: pcan_memory_ecu.py [--pcan PCAN_USBBUS1] [--rxid 0x7E4] [--txid 0x7EC]
                           [--secs 120] [--stmin 0] [--bs 0]
 Prints one `ECU {json}` line per request served and `ECU DONE {stats}`.
 Run it on the PC with the v6.0.2 IDF venv python (python-can + isotp).
@@ -95,7 +95,7 @@ def handle(req, stats):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--pcan", default="PCAN_USBBUS2")
+    ap.add_argument("--pcan", default="PCAN_USBBUS1")
     ap.add_argument("--rxid", default="0x7E4")
     ap.add_argument("--txid", default="0x7EC")
     ap.add_argument("--secs", type=float, default=120)

@@ -462,13 +462,10 @@ def main():
     psu_setpoint = None
     if any(l in legs for l in ("g1", "g7", "g8")) and a.psu != "none":
         try:
-            import bench_ports  # noqa: E402
-            from owon_psu import OwonPsu  # noqa: E402
-            pport = bench_ports.resolve(a.psu, "psu", "")
-            if pport:
-                psu = OwonPsu(pport)
-                psu_setpoint = psu.voltage_setpoint()
-        except Exception as e:  # noqa: BLE001
+            from bench_psu import open_psu  # noqa: E402  (ECU sim v2's OBD pin 16)
+            psu = open_psu(a.psu)
+            psu_setpoint = psu.voltage_setpoint()
+        except (Exception, SystemExit) as e:  # noqa: BLE001
             print("psu: unavailable:", e)
     print("psu: " + (f"on, setpoint {psu_setpoint:.2f} V" if psu
                      else "off (g1 uses a planned restart; g7/g8 skip)"),
@@ -967,7 +964,11 @@ def main():
             time.sleep(5)
             psu.set_voltage(14.0)
             t1 = time.time()
-            awake = psu.wait_current(lambda i: i > sleep_a + 0.060, timeout_s=90)
+            # halfway back to the awake reading (ECU sim v2 reads the DUT
+            # alone: about 49 mA awake and 4.6 mA asleep without the dongle,
+            # so a fixed 60 mA step would never be met there)
+            wake_gate = sleep_a + max(0.020, 0.5 * (awake_a - sleep_a))
+            awake = psu.wait_current(lambda i: i > wake_gate, timeout_s=90)
             run.check(f"{name}_awake_on_the_wake_voltage", awake is not None,
                       f"{(awake or 0) * 1000:.0f} mA")
             dut.restarts += 1

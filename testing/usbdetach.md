@@ -2,7 +2,7 @@
 
 Command: `.\test.ps1 usbdetach` (= `python tools/testbench/usb/usb_detach_bench.py --dut localhost:18081` through a Pi tunnel with the console tail; by hand when the Pi is down and the DUT is already in the device role: `python tools/testbench/usb/usb_detach_bench.py --dut 192.168.82.1 [--restarts 10] [--settle 150] [--detach-max 5] [--class ncm] [--only d1,d2,d3]`; restore: `--only d4 --restore-host` = role host + a PSU power cycle on the FTDI port)
 
-Needs: DUT USB-C cabled to this PC (the preflight's `connector -> PC`) + the DUT on the bench AP through rpi001 for the flip (or the device role set in the UI) + the PSU on the FTDI port for the restore
+Needs: DUT USB-C cabled to this PC (the preflight's `connector -> PC`) + the DUT on the bench AP through rpi001 for the flip (or the device role set in the UI) + the ECU sim v2 supply for the restore
 
 Moved from the `TESTING.md` test-kinds table on 2026-10-31 (the row's detail cell, whole, as paragraphs). The index row and the other stages: [../TESTING.md](../TESTING.md).
 

@@ -3,8 +3,8 @@ same way in every bench script, instead of carrying a COM number that moves
 on the next re-plug.
 
     import bench_ports
-    psu = OwonPsu(bench_ports.resolve(args.psu_port, "psu", "COM2016"))
-    ap.add_argument("--psu-port", default="auto")      # auto = detect
+    con = Console(bench_ports.resolve(args.console, "wican_console", "COM116"))
+    ap.add_argument("--console", default="auto")       # auto = detect
 
 `resolve(value, role, default)` returns `value` unless it is "auto" / "" /
 None; then it detects live (tools/testbench/detect_ports.py, enumeration
@@ -13,6 +13,11 @@ only - nothing is opened), falls back to the last explicit detection record
 ports) when that port is still present, and finally to `default`. `role`
 may be a sequence of roles tried in order, e.g. ("wican_console",
 "ch342_console") for "whatever console is wired today".
+
+The DUT's supply is not a COM port since 2026-11-09 (ECU sim v2's OBD pin
+16 over its USB network link): benches open it with
+`bench_psu.open_psu(args.psu)`, and the `psu` role here names only a
+legacy OWON on an FTDI port when a rig still has one.
 """
 from __future__ import annotations
 

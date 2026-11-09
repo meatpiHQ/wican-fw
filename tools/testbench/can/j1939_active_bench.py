@@ -45,7 +45,7 @@ Legs:
   as found.
 
 Verdict: `J1939 ACTIVE PASS`. Run on the PC (IDF venv python; python-can):
-  python j1939_active_bench.py [host[:port]] [--pcan PCAN_USBBUS2]
+  python j1939_active_bench.py [host[:port]] [--pcan PCAN_USBBUS1]
         [--diag host:port] [--only a1,a2] [--logdir DIR]
 `--diag` is the DUT's J2534 TCP port (6809) as reachable from here; without
 it leg a7 is not run. `--only` runs chosen legs and says `J1939 ACTIVE
@@ -65,7 +65,7 @@ import j1939_ref as J  # noqa: E402
 from pcbench import Actor, Bench, Dut, Run  # noqa: E402
 
 DUT_HOST = "localhost:8081"
-PCAN = "PCAN_USBBUS2"
+PCAN = "PCAN_USBBUS1"
 DIAG = ""
 ONLY = []
 LOGDIR = tempfile.gettempdir()

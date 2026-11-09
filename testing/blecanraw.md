@@ -2,7 +2,7 @@
 
 Command: `.\test.ps1 blecanraw` (= `ble_pi_run.py ble_can_raw_pi.py --dut <ip> --stage configure\|ble\|restore`, ON rpi001)
 
-Needs: main fw on DUT (`can_manager.enabled`) + rpi001 (UB500 + bleak) + the ECU simulator on the bus with `broadcast_enabled`
+Needs: main fw on DUT (`can_manager.enabled`) + rpi001 (UB500 + bleak) + ECU sim v2 on the bus with `broadcast_enabled`
 
 Moved from the `TESTING.md` test-kinds table on 2026-10-31 (the row's detail cell, whole, as paragraphs). The index row and the other stages: [../TESTING.md](../TESTING.md).
 

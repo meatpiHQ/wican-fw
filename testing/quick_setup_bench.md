@@ -2,7 +2,7 @@
 
 Command: `python tools/testbench/wifi/quick_setup_bench.py [--wican auto] [--psu auto] [--no-erase] [--no-vehicle]`
 
-Needs: DUT + PSU + rpi001 + ECU simulator
+Needs: DUT + rpi001 + ECU sim v2 (the car and the supply)
 
 Moved from the `TESTING.md` test-kinds table on 2026-10-31 (the row's detail cell, whole, as paragraphs). The index row and the other stages: [../TESTING.md](../TESTING.md).
 

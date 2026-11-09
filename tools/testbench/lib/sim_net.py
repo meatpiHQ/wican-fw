@@ -1,40 +1,61 @@
 #!/usr/bin/env python3
-"""The way to the ECU simulator, whatever LAN the PC is on.
+"""Where the ECU simulator is, and the way to it, whatever LAN the PC is on.
 
-The simulator hands the PC a USB network link with fixed addresses: itself
-192.168.8.1, the PC 192.168.8.2. 192.168.8.0/24 is also the factory LAN of
-common routers (GL.iNet), and on such a LAN the PC has TWO interfaces in that
-subnet: Windows then sends `http://192.168.8.1/...` to the router (the wired
-interface has the better metric) and a bench reads the router's admin page
-where it expects the simulator's JSON (2026-10-04, the day the bench PC moved
-behind such a router).
+The simulator hands the PC a USB network link with fixed addresses. ECU sim
+v2 (the bench since 2026-11-09) sits at http://10.8.8.1 on this bench (the
+PC is 10.8.8.2); the first-generation simulator box used 192.168.8.1, which
+is also the factory LAN of common routers (GL.iNet): on such a LAN the PC had
+TWO interfaces in that subnet and Windows sent `http://192.168.8.1/...` to the
+router, so a bench read the router's admin page where it expected JSON
+(2026-10-04, the day the bench PC moved behind such a router).
 
-install() makes every `urllib.request.urlopen()` of this process leave
-through the simulator's own link when that collision exists: the request is
-bound to the local address of the link (Windows sends a packet with a given
-source address on the interface that owns it). Which local address that is
-gets found by asking: the one behind which `/api/ecu/status` answers JSON.
-Without a collision (one local address in the subnet, or none) nothing is
-bound and nothing changes. No setting of the PC is touched.
+Two jobs, no setting of the PC touched:
+
+  sim_url()   the simulator's base URL: the WICAN_SIM_URL environment
+              variable when set, else the first of CANDIDATES whose
+              `/api/info` says it is the ECU simulator (10.8.8.1 first, then
+              192.168.8.1), else CANDIDATES[0] so the failure names a host.
+              Cached per process; "auto" / "" / None mean "find it".
+  install()   makes every `urllib.request.urlopen()` of this process leave
+              through the simulator's own link when the subnet collision
+              exists: the request is bound to the local address of the link
+              (Windows sends a packet with a given source address on the
+              interface that owns it). Which local address that is gets
+              found by asking: the one behind which `/api/ecu/status`
+              answers JSON. Without a collision nothing is bound.
 
   import sim_net; sim_net.install()          # bench_bus does it for its users
+  SIM = sim_net.sim_url(arg("--sim", "auto"))
   python sim_net.py                          # what it found
+  python sim_net.py --url                    # the URL alone (for scripts)
 """
 import http.client
 import ipaddress
 import json
+import os
 import socket
 import sys
 import urllib.error
 import urllib.request
 
+#: the product default (the first-generation box) kept for callers that
+#: import it; the bench's ECU sim v2 answers at CANDIDATES[0]
 SIM_HOST = "192.168.8.1"
+CANDIDATES = ("http://10.8.8.1", "http://192.168.8.1")
+ENV_URL = "WICAN_SIM_URL"
 PROBE_PATH = "/api/ecu/status"
 PROBE_TIMEOUT_S = 3
+INFO_TIMEOUT_S = 2.5
+AUTO = ("", "auto", None)
 
 _hosts = set()
 _source = {}                    # simulator host -> local address, None = no bind
 _installed = [False]
+_found = {}                     # "url" -> the resolved base URL
+
+
+def _host_of(url):
+    return url.replace("http://", "").replace("https://", "").split("/")[0].split(":")[0]
 
 
 def local_addresses(host):
@@ -100,18 +121,71 @@ class _SimHandler(urllib.request.HTTPHandler):
         return super().http_open(req)
 
 
-def install(host=SIM_HOST):
+def install(host=None):
     """Idempotent. No I/O here: the link is looked for at the first request
-    to `host`."""
-    _hosts.add(host.replace("http://", "").split("/")[0].split(":")[0])
+    to a simulator host. Every candidate host is covered; `host` adds one."""
+    for c in CANDIDATES:
+        _hosts.add(_host_of(c))
+    if host:
+        _hosts.add(_host_of(host))
+    env = os.environ.get(ENV_URL)
+    if env:
+        _hosts.add(_host_of(env))
     if not _installed[0]:
         urllib.request.install_opener(urllib.request.build_opener(_SimHandler))
         _installed[0] = True
 
 
+def _info(base):
+    """`/api/info` of `base` as a dict, or None (through the bound opener)."""
+    install(base)
+    try:
+        with urllib.request.urlopen(base + "/api/info", timeout=INFO_TIMEOUT_S) as r:
+            d = json.loads(r.read().decode("utf-8", errors="replace"))
+        return d if isinstance(d, dict) else None
+    except (OSError, ValueError, http.client.HTTPException):
+        return None
+
+
+def is_simulator(info):
+    """The simulator's own `/api/info`: the product line names it (a router's
+    page or a WiCAN under test does not)."""
+    return isinstance(info, dict) and "ECU Simulator" in str(info.get("product", ""))
+
+
+def sim_url(explicit=None):
+    """The simulator's base URL (no trailing slash). See the module doc."""
+    if explicit not in AUTO:
+        return str(explicit).rstrip("/")
+    if "url" in _found:
+        return _found["url"]
+    env = os.environ.get(ENV_URL)
+    if env:
+        _found["url"] = env.rstrip("/")
+        return _found["url"]
+    for c in CANDIDATES:
+        if is_simulator(_info(c)):
+            _found["url"] = c
+            return c
+    return CANDIDATES[0]            # not found: the failure will name this host
+
+
+def sim_host(explicit=None):
+    """The host part of sim_url(explicit) (for scripts that build URLs)."""
+    return _host_of(sim_url(explicit))
+
+
 def main():
-    host = sys.argv[1] if len(sys.argv) > 1 else SIM_HOST
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    want_url_only = "--url" in sys.argv
+    if want_url_only:
+        print(sim_url(args[0] if args else None))
+        return 0
+    base = sim_url(args[0] if args else None)
+    host = _host_of(base)
     mine = local_addresses(host)
+    print(f"simulator: {base}" + ("" if "url" in _found or args else " (NOT FOUND among "
+                                   f"{', '.join(CANDIDATES)}; set {ENV_URL} or pass the URL)"))
     print(f"local addresses in the subnet of {host}: {mine}")
     try:
         src = source_for(host)
@@ -119,9 +193,12 @@ def main():
         print(e.reason)
         return 1
     print(f"requests to {host} leave from: {src or 'the default route'}")
-    install(host)
-    with urllib.request.urlopen(f"http://{host}{PROBE_PATH}",
-                                timeout=PROBE_TIMEOUT_S) as r:
+    install(base)
+    info = _info(base)
+    if info:
+        print("info:", json.dumps({k: info.get(k) for k in ("product", "hw", "role",
+                                                             "device_id", "fw_version")}))
+    with urllib.request.urlopen(f"{base}{PROBE_PATH}", timeout=PROBE_TIMEOUT_S) as r:
         print(r.read().decode("utf-8", errors="replace")[:200])
     return 0
 

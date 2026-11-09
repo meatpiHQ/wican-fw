@@ -47,7 +47,7 @@ REPO = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 sys.path.insert(0, os.path.join(HERE, "..", "lib"))
 sys.path.insert(0, os.path.join(HERE, "..", "wifi"))
 import bench_ports  # noqa: E402
-from owon_psu import OwonPsu  # noqa: E402
+from bench_psu import open_psu  # noqa: E402  (ECU sim v2's OBD pin 16)
 from wican_fresh_bench import Console, check, note, fails  # noqa: E402
 import ota_from_factory_bench as F  # noqa: E402
 
@@ -106,8 +106,8 @@ def main():
     logdir = os.path.join(REPO, "test-reports", "logs", f"downgrade_{run}")
     os.makedirs(logdir, exist_ok=True)
     note(f"v6: {a.image} with {a.build}; legacy: {legacy_app}; logs: {logdir}")
-    wican = bench_ports.resolve(a.wican, "wican_console", "COM254")
-    psu = OwonPsu(bench_ports.resolve(a.psu, "psu", "COM50"))
+    wican = bench_ports.resolve(a.wican, "wican_console", "COM116")
+    psu = open_psu(a.psu)
     try:
         psu.meas_current()
     except (AssertionError, ValueError):

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """UDS DTC (0x19/0x14) end-to-end bench: TASK_dtc §12.
 
-Topology: the ECU-sim box (REST at 192.168.8.1 from the PC over its
+Topology: ECU sim v2 (REST from the PC over its
 NCM link) is the vehicle: it speaks UDS 0x19/0x14 on the shared
 500k bus. DUT driven over HTTP via rpi001.
 
@@ -30,7 +30,7 @@ import sim_net  # noqa: E402  (the simulator's own link on any LAN)
 
 sim_net.install()
 
-SIM = "http://192.168.8.1"
+SIM = sim_net.sim_url()            # ECU sim v2 over its USB network link
 
 fails = []
 

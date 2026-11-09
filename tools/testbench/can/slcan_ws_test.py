@@ -9,7 +9,7 @@ single-consumer), reboots, then:
 
 Run on the machine with PCAN (Windows, IDF venv python, has python-can):
   python slcan_ws_test.py [dut_ip] [pcan_channel]
-Defaults: dut 192.168.82.1, pcan PCAN_USBBUS2. WS client = wsmin.py (no deps).
+Defaults: dut 192.168.82.1, pcan PCAN_USBBUS1. WS client = wsmin.py (no deps).
 Restore the canonical bridge set afterwards (br_echo ws_can<->obd0).
 """
 import json
@@ -23,7 +23,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
 from wsmin import WS                     # noqa: E402
 
 DUT = sys.argv[1] if len(sys.argv) > 1 else "192.168.82.1"
-PCAN = sys.argv[2] if len(sys.argv) > 2 else "PCAN_USBBUS2"
+PCAN = sys.argv[2] if len(sys.argv) > 2 else "PCAN_USBBUS1"
 BASE = "http://" + DUT
 WS_PATH = "/ws/can"
 

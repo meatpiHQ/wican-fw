@@ -179,7 +179,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--dut", default="localhost:18081")
     ap.add_argument("--j2534", default="localhost:18534")
-    ap.add_argument("--pcan", default="PCAN_USBBUS2")
+    ap.add_argument("--pcan", default="PCAN_USBBUS1")
     ap.add_argument("--py32", default=r"C:\Users\Ali\idf_tmp\py32\python.exe")
     a = ap.parse_args()
 

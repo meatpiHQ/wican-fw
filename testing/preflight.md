@@ -15,22 +15,48 @@ and nothing is opened, since opening the WiCAN console resets the DUT),
 whether a CH342 is enumerated (= the DUT's USB connector is cabled to the
 PC), the DUT's address (hotspot lease / mDNS by device id), Pi reachability, DUT
 online + firmware version, USB-Ethernet adapter presence (`/api/usb`),
-mosquitto on :1883. It also prints the FTDI `USB Serial Port` (the OWON PSU
-on this rig) and `MeatPi USB-CAN Device` (the ECU simulator's CDC console)
-ports it sees.
+mosquitto on :1883, and since 2026-11-09 ECU sim v2's REST address and the
+DUT's supply as the simulator reads it at its OBD pin 16 (`supply=13.87 V
+49 mA`); a stage that moves or reads the supply gets a yellow warning when
+it did not answer. It also names the simulator's debug console port.
 
 **The port detector** behind it is `tools/testbench/detect_ports.py`. Run
 it by hand after re-plugging anything: it prints a role table
-(`wican_console`, `dongle_uart`, `psu`, `ecu_sim_cdc`, `ch342_console`,
-`ch342_obd`, spares), `--json` for machines, `--role psu` for shell
-substitution, `--probe-psu` to confirm the OWON by `*IDN?` (the only mode
-that opens anything, and only FTDI ports), `--dut-ip` to add the WiCAN's
-hotspot address via the Pi; every run refreshes the gitignored
+(`wican_console`, `dongle_uart`, `ecu_sim_console`, `ch342_console`,
+`ch342_obd`, `sim_v1_cdc`, `psu`, spares), `--json` for machines, `--role
+wican_console` for shell substitution, `--probe-sim` to confirm ECU sim v2's
+console port by its device id over the simulator's REST (no port opened),
+`--probe-psu` to confirm a legacy OWON by `*IDN?` (the only mode that opens
+anything, and only FTDI ports), `--dut-ip` to add the WiCAN's hotspot
+address via the Pi; every run refreshes the gitignored
 `tools/testbench/bench_ports.json`. The manual benches default their
-`--psu-port` / `--bridge` / `--elm-port` to `auto`, which asks the same
-detector through `lib/bench_ports.py` (`resolve(value, role, default)`),
-and the BenchBoard PSU instrument's `port` is `auto` too. No bench script
-carries a COM number any more; a new fixture gets a role in the detector.
+`--bridge` / `--elm-port` / `--console` to `auto`, which asks the same
+detector through `lib/bench_ports.py` (`resolve(value, role, default)`).
+**The DUT's supply is not a COM port since 2026-11-09**: it is ECU sim v2's
+OBD pin 16, reached over the simulator's USB network link, and `--psu auto`
+opens it through `lib/bench_psu.py` (`open_psu()`, the first rig's OWON
+driver's interface; a COM port there names a legacy OWON). Two things about
+that supply: a simulator reboot (a settings submit, `bench_bus.sim_set`)
+puts it back to its boot defaults (13.8 V, output on), so a bench that moved
+the voltage and then reboots the simulator sets it again (until the
+simulator's firmware of 2026-11-09 that reboot also cut the DUT's power for
+a moment: the DUT rode through only 9 of 12 and a `poweron` reason in its
+`/api/restart/history` marked the others; that firmware adopts a running
+port at boot instead of switching it off and on, and the DUT rode through 20
+of 20 since); and once
+(2026-11-09, right after the sleep bench) an `output off` was followed by a
+restart of the simulator itself (its REST away 13 s, back at the boot
+defaults, the DUT power-cycled, the simulator's console read `reset: USB`
+and its core dump partition stayed empty, so it was not a software crash;
+eight controlled off/on cycles under a console capture did not reproduce it),
+so `bench_psu.py` waits for the simulator's REST when it goes away under a
+request, puts the set point back and prints a `WARNING` line. No bench
+script carries a COM number any more; a new fixture gets a role in the
+detector.
+The quad UART enumerates as `MeatPi USB-UART A/B`, `MeatPi USB-RS232` (C)
+and `MeatPi USB-RS485` (D) since 2026-11-09; channel B is the WiCAN console
+(COM116 that day, COM254 before as `USB-Enhanced-SERIAL-B CH344`), and a
+passive open of it still resets the DUT.
 
 **The physical-setup matrix**: the DUT's USB-C connector can serve exactly
 ONE role at a time, so some legs are mutually exclusive by wiring:
@@ -62,14 +88,23 @@ the report says exactly why a leg didn't run.
 **The bench CAN bus** (the vehicle side; written down 2026-10-03 for
 `TASK_j1939_wwh.md` phase 7). Three nodes share one classic CAN bus: the DUT
 (two transceivers on the same wires: the MIC3624 OBD chip and the ESP32-S3's
-native TWAI controller, `can_manager`), the ECU simulator (a WiCAN-PRO at
-USB-NCM 192.168.8.1: the OBD-II car, and the ACK source of every leg where
-the DUT listens only), and the PCAN adapter (`PCAN_USBBUS2`, the PC's
-python-can: the J1939 truck, the WWH-OBD ECUs, the reflash ECU, the flood
-and watch instruments). Rules the benches live by: the simulator's CAN
-controller cannot leave the bus (it survives a software restart and keeps
-acknowledging at the bit rate it LAST ran at, `enabled` or not), so a leg
-at another bit rate turns it on at that rate first and then off; a
+native TWAI controller, `can_manager`), the ECU simulator (**ECU sim v2
+since 2026-11-09**: the OBD-II car, the DUT's supply, and the ACK source of
+every leg where the DUT listens only; its REST rides the PC's USB network
+link, `lib/sim_net.py` finds it, http://10.8.8.1 on this bench; the DUT
+sits in its OBD socket), and the PCAN adapter (`PCAN_USBBUS1` on the
+simulator's DB9 J2, the PC's python-can: the J1939 truck, the WWH-OBD ECUs,
+the reflash ECU, the flood and watch instruments). The simulator's second
+DB9 (J3) is another bus, not the DUT's: its MS CAN mirror at 125 kbit/s, or
+its CH CAN through a relay (`POST /api/tester {"relay_db9":"ch"}`), and the
+PCAN's channel 2 sits there. ECU sim v2 configures each interface on its
+own (`hs_bitrate_kbps`, `hs_obd11`, `hs_obd29`, `hs_enabled` for the DUT's
+bus); `lib/bench_bus.py` keeps the first box's `bitrate` / `id_format` /
+`enabled` names for the benches. Rules the benches live by: the first
+box's CAN controller could not leave the bus (it survived a software
+restart and kept acknowledging at the bit rate it LAST ran at, `enabled` or
+not), and the benches keep the habit: a leg at another bit rate turns the
+simulator on at that rate first and then off; a
 listen-only DUT acknowledges nothing, so the simulator must be on the bus at
 the test bit rate or nothing leaves the adapter; any node transmitting at
 the wrong bit rate destroys the traffic (an ELM app pinned to 500k on a 250k
@@ -82,7 +117,10 @@ conservation, zero bus errors at the adapter) are the evidence that this
 rig's termination is right. A fourth node joins for some legs: the bench
 AP (rpi001's) is NOT on the CAN bus; `obd0` / the ELM bridge reach the chip
 over TCP, not CAN. **The simulator's REST on a LAN that shares its subnet**
-(2026-10-04: the bench PC and rpi001 moved behind a router whose LAN is
+(the first-generation box's address, 192.168.8.1; ECU sim v2 uses 10.8.8.1 on
+this bench, so the collision is gone, and `sim_net.py` still handles it for a
+simulator left on the product default.
+2026-10-04: the bench PC and rpi001 moved behind a router whose LAN is
 192.168.8.0/24 with the router at 192.168.8.1, the simulator's own
 address): Windows sends `http://192.168.8.1/` to the router (the wired
 interface has the better metric) and a bench reads an admin page where it
@@ -145,8 +183,9 @@ instead of starting a fourth time. Nothing answers on the network, waiting
 does not help, and a reset over the console only costs the evidence. Two
 readings tell the states apart, and neither touches the DUT:
 
-- the supply: `python tools\testbench\lib\owon_psu.py` (setpoint, output,
-  measured volts and milliamps; `... owon_psu.py cycle` is a power cycle);
+- the supply: `python tools\testbench\lib\bench_psu.py` (ECU sim v2's
+  setpoint, output, and the volts and milliamps it reads at its OBD pin 16;
+  `... bench_psu.py cycle` is a power cycle of the DUT);
 - the console of the stage: `test-reports\logs\<run>\console_<stage>.log`
   (`test.ps1` tails it beside `autobaud`, `eutruck`, `wwh` and the `j1939`
   stages, and prints `THE DUT PARKED ITSELF` at the stage's end, with the
@@ -157,13 +196,19 @@ readings tell the states apart, and neither touches the DUT:
   `did not come back` message (the two older ones with their own helpers,
   `autobaud` and `wwh`, run under the console tail).
 
-| Supply at 13.5 V | Console | LED | The DUT is | Back with |
+The levels below are ECU sim v2's reading of the DUT alone at its OBD pin 16
+(2026-11-09, the bench DUT 44bd8d73ca79 on 6.0.0-beta.8 with the PC cable on
+its USB-C, which feeds part of the board while it is awake). The first rig's
+figures (47 mA parked or asleep, 73 mA download mode, 150 to 170 mA awake)
+included the first simulator box on the shared harness and are history.
+
+| Supply at 13.5 V (pin 16) | Console | LED | The DUT is | Back with |
 |---|---|---|---|---|
-| 46 to 48 mA | last line `WICAN PARK streak=N parks=N retry_s=N bare=N`; before it `crash-loop brake: N runs in a row crashed ...`, and the crashes with their panic text | breathing red | **parked** | `owon_psu.py cycle`, or its button held until the LED turns sky blue |
-| 43 to 48 mA | `sleep_manager: components down; napping (wake >= 13.20 V)` | dark | asleep (sleep mode, the battery guard, the critical floor). At the bench's 13.5 V it wakes by itself; if it stays down, the supply is under its wake voltage | the supply above the wake voltage |
-| about 73 mA, steady | silent | as it was | in the ROM's download mode (a console reset that latched the boot strap) | `owon_psu.py cycle` |
-| 150 to 170 mA | alive | normal | awake, off the bench AP (an association stall): `ap` on the bench_ap console | `ap kick <mac>`, `ap off` / `ap on`, or a restart over the console |
-| 0 mA | silent | dark | without power: the output is off (or a cold OWON's first answer was wrong: ask twice) | the PSU's output |
+| the sleep level plus the LED's breath (a few mA) | last line `WICAN PARK streak=N parks=N retry_s=N bare=N`; before it `crash-loop brake: N runs in a row crashed ...`, and the crashes with their panic text | breathing red | **parked** | `bench_psu.py cycle`, or its button held until the LED turns sky blue |
+| 4.2 to 4.6 mA (about 55 mW: 4.6 mA at 11.8 V, 4.2 mA at 14 V; the accepted level, the sleep bench holds a median under 5 mA) | `sleep_manager: components down; napping (wake >= 13.20 V)` | dark | asleep (sleep mode, the battery guard, the critical floor). At the bench's 13.5 V it wakes by itself; if it stays down, the supply is under its wake voltage | the supply above the wake voltage |
+| steady, between the sleep and the awake levels (not re-measured on ECU sim v2; the first rig read it 26 mA over its sleep level) | silent | as it was | in the ROM's download mode (a console reset that latched the boot strap) | `bench_psu.py cycle` |
+| 48 to 55 mA | alive | normal | awake, off the bench AP (an association stall): `ap` on the bench_ap console | `ap kick <mac>`, `ap off` / `ap on`, or a restart over the console |
+| 0.0 mA, about 0.8 V at the pin | silent | dark | without power: the simulator's output is off | `bench_psu.py on` |
 
 **A parked DUT, step by step.**
 
@@ -172,7 +217,7 @@ readings tell the states apart, and neither touches the DUT:
    the tracker's lines of the next boot (`previous run crashed: ...`,
    `backtrace: ...`, `crash report stored`, `crash-loop brake: 2 of 3 quick
    crashes in a row`), then the park.
-2. **Bring it back.** `python tools\testbench\lib\owon_psu.py cycle` empties
+2. **Bring it back.** `python tools\testbench\lib\bench_psu.py cycle` empties
    the RAM (the history, the notes, the count): three new tries, and what is
    left of the crashes is the stored report. The button (hold until the LED
    turns sky blue, about 3 s, release) is a warm start: the history then

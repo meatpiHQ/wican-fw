@@ -2,7 +2,7 @@
 
 Command: `python tools/testbench/obd/autopid_matrix_bench.py localhost:18081` (the tunnel to the DUT)
 
-Needs: main fw on DUT + ECU simulator reachable (192.168.8.1), autopid gates toggled and restored by the run
+Needs: main fw on DUT + ECU sim v2 reachable (its REST over the USB network link), autopid gates toggled and restored by the run
 
 Moved from the `TESTING.md` test-kinds table on 2026-10-31 (the row's detail cell, whole, as paragraphs). The index row and the other stages: [../TESTING.md](../TESTING.md).
 

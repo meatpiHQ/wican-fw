@@ -29,7 +29,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
 import bench_ports  # noqa: E402  (COM ports by role, tools/testbench/detect_ports.py)
 import sim_net  # noqa: E402  (the simulator's own link on any LAN)
 
-from owon_psu import OwonPsu            # noqa: E402
+from bench_psu import open_psu          # noqa: E402  (ECU sim v2's OBD pin 16)
 from sleep_bench_test import PiHttp, mA  # noqa: E402
 
 sim_net.install()
@@ -52,7 +52,7 @@ class Rig:
 
     def __init__(self, args):
         self.args = args
-        self.psu = OwonPsu(args.psu_port)
+        self.psu = open_psu(args.psu_port)
         self.dut = PiHttp(args.bench_host, "auto")
         self.reboots = 0  # config reboots we caused (forensics budget)
         # the WiCAN console (2026-10-02): without it the 2026-10-01 runs could
@@ -732,10 +732,10 @@ def s_periodic_critical(rig):
 
 def _sim_rxlog_new(since_seq, want_id="7DF"):
     """Frames the ECU sim sniffed since seq (the DUT's own requests are
-    id 7DF). The sim rides the PC's Ethernet at 192.168.8.1."""
+    id 7DF). The sim's REST rides its USB network link (sim_net finds it)."""
     import urllib.request
     with urllib.request.urlopen(
-            "http://192.168.8.1/api/ecu/rxlog", timeout=5) as r:
+            sim_net.sim_url() + "/api/ecu/rxlog", timeout=5) as r:
         d = json.loads(r.read().decode())
     frames = [f for f in d.get("frames", [])
               if f.get("seq", 0) > since_seq
@@ -1144,7 +1144,6 @@ def main():
     ap.add_argument("--only", default="",
                     help="comma-separated scenario keys")
     args = ap.parse_args()
-    args.psu_port = bench_ports.resolve(args.psu_port, "psu", "COM2016")
     args.elm_port = bench_ports.resolve(args.elm_port, "ch342_obd", "COM6")
     only = {k.strip() for k in args.only.split(",") if k.strip()}
 

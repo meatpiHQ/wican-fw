@@ -6,7 +6,7 @@ because the device took an ISO15765 message's data as the bare payload while SAE
 J2534-1 (and every tool) puts the 4-byte CAN id first and the pad flag on each
 message. The Windows DLL copies PASSTHRU_MSGs verbatim, so a tool's bytes can be
 replayed byte-exact over the wire protocol; the real DLL + udsoncan run too when
-the 32-bit Python is present. PCAN_USBBUS2 is the witness on the bus; the ECU
+the 32-bit Python is present. PCAN_USBBUS1 is the witness on the bus; the ECU
 simulator answers 7E0 (and 7E1) with UDS and 7DF with OBD-II.
 
 Legs (one planned restart to configure, one to restore):
@@ -34,7 +34,7 @@ Legs (one planned restart to configure, one to restore):
 
 usage (PC, PCAN wired, the tunnel of ports 80 and 6809 to the DUT):
   python j2534_std_tool_bench.py --dut localhost:18081 --j2534 localhost:18534
-       [--pcan PCAN_USBBUS2] [--py32 C:\\Users\\Ali\\idf_tmp\\py32\\python.exe]
+       [--pcan PCAN_USBBUS1] [--py32 C:\\Users\\Ali\\idf_tmp\\py32\\python.exe]
 """
 import argparse
 import json
@@ -255,7 +255,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--dut", default="localhost:18081")
     ap.add_argument("--j2534", default="localhost:18534")
-    ap.add_argument("--pcan", default="PCAN_USBBUS2")
+    ap.add_argument("--pcan", default="PCAN_USBBUS1")
     ap.add_argument("--py32", default=r"C:\Users\Ali\idf_tmp\py32\python.exe")
     ap.add_argument("--dll", default=None, help="a wican_j2534.dll to drive instead of the installed one")
     a = ap.parse_args()

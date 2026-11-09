@@ -525,8 +525,8 @@ def main():
             dut.restart({"usb_host_manager": back})
             psu = subprocess.run(
                 [sys.executable, os.path.join(HERE, "..", "lib",
-                                              "owon_psu.py"), "cycle"]
-                + ([] if a.psu == "auto" else ["--port", a.psu]),
+                                              "bench_psu.py"), "cycle"]
+                + ([] if a.psu == "auto" else ["--psu", a.psu]),
                 capture_output=True, text=True, timeout=60)
             print("d4: " + (psu.stdout or "").strip().replace("\n", " | "),
                   flush=True)

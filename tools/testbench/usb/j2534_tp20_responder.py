@@ -15,7 +15,7 @@ Every 0x0N / 0x1N frame's ACK latency (ECU frame out -> tester ACK in) is
 recorded: that is the round trip the tool imposes on the ECU at every
 block end. T3 = the gap the ECU keeps between its frames.
 
-usage: python j2534_tp20_responder.py [--pcan PCAN_USBBUS2] [--bs 15] [--t3-ms 1]
+usage: python j2534_tp20_responder.py [--pcan PCAN_USBBUS1] [--bs 15] [--t3-ms 1]
        [--blocks 40] [--timeout 120]
 Prints RESPONDER DONE with the statistics, or RESPONDER FAIL.
 """
@@ -32,7 +32,7 @@ REQ_ID, DATA_ID = 0x740, 0x300
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--pcan", default="PCAN_USBBUS2")
+    ap.add_argument("--pcan", default="PCAN_USBBUS1")
     ap.add_argument("--bs", type=int, default=15)
     ap.add_argument("--t3-ms", type=float, default=1.0)
     ap.add_argument("--blocks", type=int, default=40)

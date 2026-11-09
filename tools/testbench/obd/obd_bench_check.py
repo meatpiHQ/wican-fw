@@ -97,7 +97,7 @@ def check_pcan(channel: str) -> None:
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--bridge", default="auto")  # auto = the CH342 usb_obd port detect_ports.py finds
-    ap.add_argument("--pcan", default="PCAN_USBBUS2")  # BUS2 is on the bench bus
+    ap.add_argument("--pcan", default="PCAN_USBBUS1")  # BUS2 is on the bench bus
     args = ap.parse_args()
     args.bridge = bench_ports.resolve(args.bridge, "ch342_obd", "COM6")
 

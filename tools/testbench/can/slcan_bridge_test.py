@@ -26,7 +26,7 @@ Legs (each check prints PASS/FAIL/SKIP; the verdict is the last line):
      and unexpected resets unchanged.
 
   python slcan_bridge_test.py --dut localhost:18081 --slcan localhost:18333
-         --dut-ip 10.42.1.194 --pi rpi001 [--pcan PCAN_USBBUS2] [--n 200]
+         --dut-ip 10.42.1.194 --pi rpi001 [--pcan PCAN_USBBUS1] [--n 200]
          [--skip-pi]
 test.ps1 slcan holds the tunnel (port 80 and 3333 of the DUT) and the
 console. Needs python-can on the PC (the IDF venv) and, for leg L, on the
@@ -384,7 +384,7 @@ def main():
     ap.add_argument("--dut-ip", default="10.42.1.194", help="the DUT's address as the Pi sees it (leg L)")
     ap.add_argument("--pi", default="rpi001")
     ap.add_argument("--skip-pi", action="store_true")
-    ap.add_argument("--pcan", default="PCAN_USBBUS2")
+    ap.add_argument("--pcan", default="PCAN_USBBUS1")
     ap.add_argument("--n", type=int, default=200)
     ap.add_argument("--fps", type=float, default=100.0)
     a = ap.parse_args()

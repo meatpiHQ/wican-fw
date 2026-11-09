@@ -25,7 +25,7 @@ hotspot); counters are read here through the DUT API before and after:
 
   python atma_flood_bench.py [dut host[:port]] [--dut-ip 10.42.1.194]
         --source pcan [--pcan PCAN_USBBUS1] [--rate 1000] [--count 5000] [--id 0x123]
-        --source sim  [--sim 192.168.8.1] [--secs 10]
+        --source sim  [--sim 10.8.8.1] [--secs 10]
 Expected final line: ATMA FLOOD PASS
 """
 from __future__ import annotations
@@ -39,10 +39,11 @@ import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 import benchlib as bl  # noqa: E402
+import sim_net  # noqa: E402  (where ECU sim v2 answers)
 
 DUT = "localhost:8081"
 DUT_IP = "10.42.1.194"
-SIM = "192.168.8.1"
+SIM = sim_net.sim_host()
 SOURCE = "sim"
 PCAN = "PCAN_USBBUS1"
 RATE = 1000

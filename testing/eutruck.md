@@ -2,7 +2,7 @@
 
 Command: `.\test.ps1 eutruck`
 
-Needs: PCAN on the DUT's bus + the ECU simulator (USB-NCM 192.168.8.1) + rpi001 (tunnel, broker)
+Needs: PCAN on the DUT's bus + ECU sim v2 (its REST over the USB network link) + rpi001 (tunnel, broker)
 
 Moved from the `TESTING.md` test-kinds table on 2026-10-31 (the row's detail cell, whole, as paragraphs). The index row and the other stages: [../TESTING.md](../TESTING.md).
 

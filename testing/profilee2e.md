@@ -2,7 +2,7 @@
 
 Command: `.\test.ps1 profilee2e` (= `python tools/testbench/obd/autopid_profile_e2e_bench.py --dut localhost:18081 [--profiles FILE\|URL] [--car "Leaf ZE1 (2018-)"] [--watch 60] [--seed N]`; by hand through your own tunnel; `--profiles <checkout>\vehicle_profiles.json` tests a profile before it is pushed)
 
-Needs: PC + PCAN_USBBUS2 on the DUT bus + the ECU simulator; the DUT on the bench AP, the PSU above the sleep voltage; 2026-10-28: the test route answered `chip busy (monitor/update)` for 2102 and 21045 when it started inside a passive filter's monitor window (a one-shot parked the poller and did not wait for the window in flight; the claim fails fast on a held MONITOR by design): `ap_core_scan_pause(true)` now waits up to 3 s for the poller's idle bit, PASS 38 on the fixed build
+Needs: PC + PCAN_USBBUS1 on the DUT bus + ECU sim v2; the DUT on the bench AP, the PSU above the sleep voltage; 2026-10-28: the test route answered `chip busy (monitor/update)` for 2102 and 21045 when it started inside a passive filter's monitor window (a one-shot parked the poller and did not wait for the window in flight; the claim fails fast on a held MONITOR by design): `ap_core_scan_pause(true)` now waits up to 3 s for the poller's idle bit, PASS 38 on the fixed build
 
 Moved from the `TESTING.md` test-kinds table on 2026-10-31 (the row's detail cell, whole, as paragraphs). The index row and the other stages: [../TESTING.md](../TESTING.md).
 

@@ -2,7 +2,7 @@
 
 Command: `python tools\testbench\wifi\espnetlink_garage_bench.py [--mode usb_rndis\|wifi_modem] [--vpn A\|B\|none] [--only g1,...] [--console auto\|COMx\|none] [--psu auto\|none]` (= `.\test.ps1 garage` for the default run)
 
-Needs: PC + rpi001 (the P4 daemon up, `wican-bench-usb` active) + betty (ssh, `sudo wg`) + the PSU + the dongle on the connector
+Needs: PC + rpi001 (the P4 daemon up, `wican-bench-usb` active) + betty (ssh, `sudo wg`) + the ECU sim v2 supply + the dongle on the connector
 
 Moved from the `TESTING.md` test-kinds table on 2026-10-31 (the row's detail cell, whole, as paragraphs). The index row and the other stages: [../TESTING.md](../TESTING.md).
 

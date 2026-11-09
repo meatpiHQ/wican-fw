@@ -40,8 +40,7 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "lib"))
-import bench_ports  # noqa: E402
-from owon_psu import OwonPsu  # noqa: E402
+from bench_psu import open_psu  # noqa: E402  (ECU sim v2's OBD pin 16)
 
 PI = "rpi001"
 PI_POLLER_SRC = os.path.join(HERE, "..", "pi", "pi_ttff_poll.py")
@@ -87,9 +86,8 @@ def main():
                        capture_output=True, text=True)
     if r.returncode != 0:
         raise SystemExit("could not deploy the Pi poller: " + r.stderr.strip())
-    psu_port = bench_ports.resolve(a.psu, "psu", "COM50")
-    psu = OwonPsu(psu_port)
-    print("psu %s: %s V=%s out=%s" % (psu_port, psu.idn, psu.query("MEAS:VOLT?"), psu.query("OUTP?")), flush=True)
+    psu = open_psu(a.psu)
+    print("psu: %s V=%.2f out=%s" % (psu.idn, psu.meas_voltage(), psu.output_on()), flush=True)
     if a.bench_ap == "off":
         bench_ap("off")
         time.sleep(25)
@@ -99,7 +97,7 @@ def main():
             print("\n=== cycle %d/%d  %s" % (i, a.n, time.strftime("%H:%M:%S")), flush=True)
             psu.output(False)
             time.sleep(1)
-            print("psu off: %s %s" % (psu.query("OUTP?"), psu.query("OUTP?")), flush=True)
+            print("psu off: output_on=%s" % psu.output_on(), flush=True)
             time.sleep(max(0.0, a.off_s - 1))
             off, rtt = pi_offset()
             t0 = time.time()
@@ -113,7 +111,7 @@ def main():
             res = json.loads(lines[0][7:]) if lines else {"error": (r.stdout + r.stderr)[-300:]}
             res.update({"cycle": i, "label": a.label,
                         "t0": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(t0)),
-                        "psu_v": psu.query("MEAS:VOLT?"), "psu_a": psu.query("MEAS:CURR?")})
+                        "psu_v": "%.2f" % psu.meas_voltage(), "psu_a": "%.3f" % psu.meas_current()})
             subprocess.run(["scp", "-o", "BatchMode=yes", "%s:%s" % (PI, samples),
                             os.path.join(REPORT_DIR, "%s_samples_%d.jsonl" % (a.label, i))],
                            capture_output=True)

@@ -45,7 +45,7 @@ ble_bench.py). Stages (they share /tmp/ble_slcan_bridge.json):
               submit-reboot, no new faults vs the saved baseline.
 
 PC companion (proves the FFF2 writes reached the bus with DLC 8 and drives
-the flood; PCAN_USBBUS2 sees the DUT/sim bus). Start it BEFORE the ble stage:
+the flood; PCAN_USBBUS1 sees the DUT/sim bus). Start it BEFORE the ble stage:
   python tools/testbench/can/pcan_watch_flood.py --secs 240 --marker rpi001
 
 Usage (on rpi001; root does not see the user's bleak):

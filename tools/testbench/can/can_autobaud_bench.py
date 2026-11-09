@@ -66,9 +66,9 @@ Legs (bus / DUT setting):
   found.
 
 Run on the PC (IDF venv python: python-can + the PCAN on the DUT's bus, the
-simulator's REST at 192.168.8.1, the DUT's HTTP through the tunnel):
-  python can_autobaud_bench.py [dut host[:port]] [--sim http://192.168.8.1]
-        [--pcan PCAN_USBBUS2] [--fps 200] [--window 8] [--only n1,c3,...]
+simulator's REST over its USB network link, the DUT's HTTP through the tunnel):
+  python can_autobaud_bench.py [dut host[:port]] [--sim http://10.8.8.1]
+        [--pcan PCAN_USBBUS1] [--fps 200] [--window 8] [--only n1,c3,...]
 Takes about 9 minutes (18 DUT restarts, 2 simulator restarts).
 
 The simulator cannot leave the bus (its CAN controller survives a software
@@ -95,7 +95,7 @@ from pcbench import unplanned_boots  # noqa: E402
 
 DUT = "localhost:8081"
 SIM = bench_bus.SIM_URL
-PCAN = "PCAN_USBBUS2"
+PCAN = "PCAN_USBBUS1"
 FPS = 200
 WINDOW = 8.0
 ONLY = None

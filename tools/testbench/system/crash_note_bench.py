@@ -49,7 +49,7 @@ sys.path.insert(0, os.path.join(HERE, "..", "wifi"))
 import bench_ports  # noqa: E402
 import crash_note  # noqa: E402
 import pcbench  # noqa: E402
-from owon_psu import OwonPsu  # noqa: E402
+from bench_psu import open_psu  # noqa: E402  (ECU sim v2's OBD pin 16)
 
 ROOT = crash_note.ROOT
 FAULT_ADDR = "0x0000bad0"           # restart_tracker_cli.c, RT_CLI_FAULT_ADDR
@@ -115,7 +115,7 @@ def unpark(dut, con, psu_arg):
     print("power-cycling it: the stored report (GET /api/restart/report) "
           "keeps the crash that parked it", flush=True)
     mark = time.time() - con.t0
-    psu = OwonPsu(bench_ports.resolve(psu_arg, "psu", "COM2016"))
+    psu = open_psu(psu_arg)
     try:
         psu.output(False)
         time.sleep(4)
@@ -449,7 +449,7 @@ def main():
                   "and the stored report stay on the DUT", flush=True)
         else:
             mark = time.time() - con.t0
-            psu = OwonPsu(bench_ports.resolve(a.psu, "psu", "COM2016"))
+            psu = open_psu(a.psu)
             try:
                 volts = psu.voltage_setpoint()
                 psu.output(False)

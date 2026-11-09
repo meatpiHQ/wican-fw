@@ -7,6 +7,14 @@
 # benchboard.local.toml (gitignored; copy benchboard.local.example.toml).
 # ${python} = the interpreter running BenchBoard; ${<ins>.<key>} = an
 # instrument's (locally-overridden) config value.
+#
+# The bench since 2026-11-09: ECU sim v2 is the OBD-II car on the DUT's
+# bus AND the DUT's supply (its OBD pin 16, read at the pin), reached over
+# the PC's USB network link; the PCAN's channel 1 sits on its DB9 J2 (the
+# DUT's HS CAN), channel 2 on DB9 J3 (MS CAN or CH CAN through its relay).
+# A test that moves the supply declares both `ecu_sim` and `psu`: a
+# simulator reboot (settings submit) puts the supply back to its boot
+# defaults, so the two must never run side by side.
 
 [project]
 name = "WiCAN Pro v6"
@@ -397,7 +405,7 @@ name = "Sleep bench (PSU ladder)"
 group = "sleep"
 file = "tools/testbench/sleep/sleep_bench_test.py"
 cmd = "powershell -NoProfile -ExecutionPolicy Bypass -File test.ps1 sleep"
-instruments = ["dut", "pi", "psu"]
+instruments = ["dut", "pi", "ecu_sim", "psu"]
 timeout_s = 1800
 doc = "Voltage ladder -> light-sleep entry by supply current -> voltage wake."
 
@@ -407,7 +415,7 @@ name = "Sleep robustness matrix (~90 min)"
 group = "sleep"
 file = "tools/testbench/sleep/sleep_matrix_test.py"
 cmd = "powershell -NoProfile -ExecutionPolicy Bypass -File test.ps1 sleepmatrix"
-instruments = ["dut", "pi", "psu"]
+instruments = ["dut", "pi", "ecu_sim", "psu"]
 timeout_s = 9000
 doc = "Sleep entry under load, one scenario per subsystem incl. betty VPN soaks."
 
@@ -438,7 +446,7 @@ name = "Log timestamps vs the clock's history (~8 min)"
 group = "system"
 file = "tools/testbench/system/log_clock_bench.py"
 cmd = "powershell -NoProfile -ExecutionPolicy Bypass -File test.ps1 logclock"
-instruments = ["dut", "pi", "psu"]
+instruments = ["dut", "pi", "ecu_sim", "psu"]
 timeout_s = 1200
 doc = "issue #984: the SNTP actor on the Pi steps the DUT's clock while the logger writes; the clock journal, the in-band markers, the re-based rows, the mf4 relative times, the unsynced boot after a PSU power cycle, the re-base tool. Prints LOG CLOCK PASS."
 

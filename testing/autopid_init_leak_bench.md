@@ -1,8 +1,8 @@
 # A custom row's init does not leak into the standard rows
 
-Command: `python tools/testbench/obd/autopid_init_leak_bench.py [--dut localhost:18081] [--pcan PCAN_USBBUS2] [--cycles 4] [--period-ms 5000]` (PC, the DUT through an ssh tunnel)
+Command: `python tools/testbench/obd/autopid_init_leak_bench.py [--dut localhost:18081] [--pcan PCAN_USBBUS1] [--cycles 4] [--period-ms 5000]` (PC, the DUT through an ssh tunnel)
 
-Needs: PC + PCAN_USBBUS2 on the DUT bus + the ECU simulator; the DUT on the bench AP, the PSU above the sleep voltage; 2026-10-28: the bench moved to the 2026-10-24 frame of reference (the reply as printed with headers on: B3 for the first data byte of a single-frame reply, the extended-addressed odometer at [B5:B7]); on the stale numbering it read 13698817 for 123456 and 771 for RPM 800, the firmware was right; PASS again that evening on the moved numbering (the raw check takes the printed header)
+Needs: PC + PCAN_USBBUS1 on the DUT bus + ECU sim v2; the DUT on the bench AP, the PSU above the sleep voltage; 2026-10-28: the bench moved to the 2026-10-24 frame of reference (the reply as printed with headers on: B3 for the first data byte of a single-frame reply, the extended-addressed odometer at [B5:B7]); on the stale numbering it read 13698817 for 123456 and 771 for RPM 800, the firmware was right; PASS again that evening on the moved numbering (the raw check takes the printed header)
 
 Moved from the `TESTING.md` test-kinds table on 2026-10-31 (the row's detail cell, whole, as paragraphs). The index row and the other stages: [../TESTING.md](../TESTING.md).
 

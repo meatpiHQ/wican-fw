@@ -2,7 +2,7 @@
 
 Command: `python tools/testbench/system/downgrade_bench.py --image <v6.bin> [--build build] [--legacy-dir <the v4.51p zip, extracted>] [--resume-up --ssid WiCAN_<id>]`
 
-Needs: DUT console + PSU + rpi001 (wtest1 / wint0 on the DUT's AP)
+Needs: DUT console + the supply (ECU sim v2's OBD pin 16) + rpi001 (wtest1 / wint0 on the DUT's AP)
 
 Moved from the `TESTING.md` test-kinds table on 2026-10-31 (the row's detail cell, whole, as paragraphs). The index row and the other stages: [../TESTING.md](../TESTING.md).
 

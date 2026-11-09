@@ -46,7 +46,7 @@ Legs:
 
 Verdict: `EU TRUCK E2E PASS`. Run on the PC (IDF venv python; python-can,
 can-isotp):
-  python eu_truck_e2e_bench.py [host[:port]] [--pcan PCAN_USBBUS2]
+  python eu_truck_e2e_bench.py [host[:port]] [--pcan PCAN_USBBUS1]
         [--only e1,e2] [--detections N] [--forget-after] [--logdir DIR]
 """
 import json
@@ -63,7 +63,7 @@ import j1939_ref as J  # noqa: E402
 from pcbench import Actor, Bench, Dut, Run  # noqa: E402
 
 DUT_HOST = "localhost:8081"
-PCAN = "PCAN_USBBUS2"
+PCAN = "PCAN_USBBUS1"
 ONLY = []
 LOGDIR = tempfile.gettempdir()
 DETECTIONS = 60                 # legs x1, x2, x3

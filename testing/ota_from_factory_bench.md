@@ -2,7 +2,7 @@
 
 Command: `python tools/testbench/system/ota_from_factory_bench.py --image <v6.bin> --legacy-dir <the v4.51p release zip, extracted> [--backup auto\|<ip>\|none] [--downgrade] [--skip-flash --ssid WiCAN_<id>] [--downgrade-only --ssid WiCAN_<id>]`
 
-Needs: DUT console + PSU + rpi001 (wtest1 / wint0 on the DUT's AP)
+Needs: DUT console + the supply (ECU sim v2's OBD pin 16) + rpi001 (wtest1 / wint0 on the DUT's AP)
 
 Moved from the `TESTING.md` test-kinds table on 2026-10-31 (the row's detail cell, whole, as paragraphs). The index row and the other stages: [../TESTING.md](../TESTING.md).
 

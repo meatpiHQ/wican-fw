@@ -53,7 +53,7 @@ def pi_offset(host):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--channel", default="PCAN_USBBUS2")
+    ap.add_argument("--channel", default="PCAN_USBBUS1")
     ap.add_argument("--secs", type=float, default=240)
     ap.add_argument("--out", default="pcan_watch.jsonl")
     ap.add_argument("--marker", default="", help="ssh host whose marker file starts the flood")

@@ -335,7 +335,7 @@ class ReleaseTest:
             self.device_id = inf.get("device_id", "")
         if not a.no_flash:
             run.check("console_port_known", bool(a.console), a.console or "none by role")
-        psu = os.path.join(HERE, "..", "lib", "owon_psu.py")
+        psu = os.path.join(HERE, "..", "lib", "bench_psu.py")
         code, out = sh([sys.executable, psu, "status"], 40)
         m = re.search(r"(\d+) mA", out)
         run.check("psu_answers", code == 0 and m is not None, out.strip()[-120:])
@@ -661,16 +661,18 @@ class ReleaseTest:
         self.dut.passing_checks(run)
         self.stop_console()
         self.console_verdict()
-        psu = os.path.join(HERE, "..", "lib", "owon_psu.py")
+        psu = os.path.join(HERE, "..", "lib", "bench_psu.py")
         code, out = sh([sys.executable, psu, "status"], 40)
         m = re.search(r"(\d+) mA", out)
         if m:
             ma = int(m.group(1))
             run.metric("supply_ma_after", ma)
-            # awake: a station-only device without the dongle idles at 89 to 92 mA
-            # on this bench (the median of the helper's readings; 2026-11-02 read 89
-            # against a floor of 90), a parked or sleeping one at 47 to 54 mA
-            run.check("supply_current_awake_band", 75 <= ma <= 300, "%d mA" % ma)
+            # the DUT's own current at ECU sim v2's OBD pin 16 (2026-11-09; the
+            # first rig's supply fed a harness shared with the first simulator
+            # box and read 89 to 92 mA here): awake about 49 mA with the PC
+            # cable on the USB-C, which feeds part of the board; a parked or
+            # sleeping DUT sits well under the floor (testing/preflight.md)
+            run.check("supply_current_awake_band", 30 <= ma <= 300, "%d mA" % ma)
 
     def restore(self):
         """The settings as found, one submit when anything differs."""

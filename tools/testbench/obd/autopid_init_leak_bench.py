@@ -30,12 +30,12 @@ Legs:
   L4 restore: the saved tables and settings (a submit-reboot when the
      settings had to change).
 
-usage: autopid_init_leak_bench.py [--dut localhost:18081] [--pcan PCAN_USBBUS2]
+usage: autopid_init_leak_bench.py [--dut localhost:18081] [--pcan PCAN_USBBUS1]
                                   [--cycles 4] [--period-ms 5000] [--out DIR]
   Runs on the PC (python-can + PCAN); the DUT through an ssh tunnel
   (`ssh -N -L 18081:10.42.1.194:80 rpi001`) or by address.
 Needs: the main firmware on the DUT on the bench AP, the ECU simulator
-answering 7DF (its car in the vehicle store), PCAN_USBBUS2 on the DUT bus,
+answering 7DF (its car in the vehicle store), PCAN_USBBUS1 on the DUT bus,
 the bench PSU above the sleep voltage (pause_follow_sleep). ~2 min, up to
 two planned restarts.
 """
@@ -154,7 +154,7 @@ def main():
         return 2
     dut = opt("--dut", "localhost:18081")
     base = "http://" + dut.rstrip("/")
-    pcan = opt("--pcan", "PCAN_USBBUS2")
+    pcan = opt("--pcan", "PCAN_USBBUS1")
     cycles = int(opt("--cycles", 4))
     period_ms = int(opt("--period-ms", 5000))
     ts = time.strftime("%Y%m%d_%H%M%S")

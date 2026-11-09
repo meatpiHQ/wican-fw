@@ -2,8 +2,9 @@
 
 > What can break sleep, mapped: every subsystem that can be mid-flight
 > when the voltage drops, and every historical failure mode (meatpi
-> 2026-07-21 list). Runner: `sleep_matrix_test.py` (PSU on COM2016 +
-> HTTP via rpi001 + local COM6/COM7, see TESTBENCH.md §1). Each
+> 2026-07-21 list). Runner: `sleep_matrix_test.py` (the DUT's supply =
+> ECU sim v2's OBD pin 16 over its USB network link, `lib/bench_psu.py`;
+> HTTP via rpi001; the local console port by role). Each
 > scenario: configure → hold the condition live → 12.5 V →
 > **entry** (current-delta within countdown+90 s) → **soak** asleep
 > (no spurious wake, HTTP stays dead) → 14.0 V → **wake** (current +
@@ -51,9 +52,10 @@ Chip-stays-asleep coverage: every scenario's forensics fail on an
 the nap loop gave up) and the soak fails on any sustained current rise
 (= spurious wake or chip re-awake churn).
 
-ECU-sim note: the sim shares the PSU feed (~40 mA standing), all
-current assertions are deltas against each scenario's own awake
-baseline.
+Supply note: since 2026-11-09 ECU sim v2 reads the DUT's current alone at
+its OBD pin 16 (the first rig's supply fed a harness shared with the
+first simulator box, about 40 mA standing); the current assertions stay
+deltas against each scenario's own awake baseline.
 
 Rig note (2026-10-01, revised 2026-10-02): the runner checks the DUT is reachable before every scenario and recovers first (console reset, then a cycle of the bench AP), so one lost scenario no longer cascades into the rest; the 2026-10-01 runs lost 13 scenarios that way after four passes. **The runner no longer touches the Pi's own radios**: the bench AP is the `bench_ap` P4 instrument (`tools/testbench/instruments/bench_ap/`, `wican-bench-usb` active on the Pi), recover() and wifi_ghost drive it through `bench_ap_cli.py`, and without it recover() only resets the DUT and wifi_ghost SKIPs. The P4's console log (`/tmp/bench_ap.console.log`) gives the association forensics the matrix lacked. The bench CLI (`sleep test`, `restart_tracker --panic`) goes over the DUT console the runner already holds; the ws_cli channel ships parked.
 

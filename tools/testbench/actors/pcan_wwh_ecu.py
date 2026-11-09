@@ -45,7 +45,7 @@ its own UNSCALED F40C (02 FB): a reader that takes it shows 190 rpm.
                         channel to one client
   --stop-file PATH   -> stop cleanly (ECU DONE printed) once PATH exists
 
-  python pcan_wwh_ecu.py [secs] [--pcan PCAN_USBBUS2] [--bitrate 500]
+  python pcan_wwh_ecu.py [secs] [--pcan PCAN_USBBUS1] [--bitrate 500]
         [--id-format 11|29] [--ecu 0x00] [--ecu2 0x3D]
         [--dtcs P0420:08:02,P2463-1F:04:04] [--dtcs2 ...]
         [--permanent P0420] [--dtc-format 04|02] [--vin ...]
@@ -760,7 +760,7 @@ def selftest():
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("secs", nargs="?", type=float, default=120)
-    ap.add_argument("--pcan", default="PCAN_USBBUS2")
+    ap.add_argument("--pcan", default="PCAN_USBBUS1")
     ap.add_argument("--bitrate", type=int, default=500, choices=(250, 500))
     ap.add_argument("--id-format", type=int, default=11, choices=(11, 29))
     ap.add_argument("--ecu", default="0x00")

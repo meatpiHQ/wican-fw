@@ -1,4 +1,10 @@
-"""OWON P4305 bench power supply driver (RS232, SCPI).
+"""OWON P4305 bench power supply driver (RS232, SCPI): the FIRST rig's supply.
+
+Since 2026-11-09 the bench DUT is powered from ECU sim v2's OBD pin 16 and
+the benches open their supply through `bench_psu.open_psu()`, which returns
+this driver only when an OWON is present on an FTDI port and the
+simulator's supply does not answer. Kept for such a rig; `python
+owon_psu.py` hands over to `bench_psu.py`.
 
 The PSU plays the car battery for sleep-mode tests: voltage steps across
 the sleep/wake thresholds and current readback to prove the DUT actually
@@ -114,44 +120,21 @@ class OwonPsu:
 
 
 def main() -> int:
-    """By hand: what the supply reads, and a power cycle of the DUT.
-
-        python owon_psu.py            setpoint, output, measured V and mA
-        python owon_psu.py cycle      output off 4 s, on again, then the same
-
-    The current tells a DUT that went quiet apart without touching it
-    (TESTING.md, "When the DUT disappears in the middle of a test"): about
-    47 mA at 13.5 V = parked or asleep, 73 mA = the ROM's download mode,
-    160 mA = awake. Opens the PSU's port only.
+    """By hand: `python owon_psu.py [status|cycle] [--port COMx]` is the old
+    spelling of `python bench_psu.py [status|cycle] [--psu COMx|auto]`: the
+    bench supply is ECU sim v2's since 2026-11-09, and bench_psu finds it
+    (or an OWON on an FTDI port when that is what the rig has).
     """
-    import argparse
+    import sys
 
-    import bench_ports
+    import bench_psu
 
-    ap = argparse.ArgumentParser(description="The bench PSU by hand")
-    ap.add_argument("what", nargs="?", default="status",
-                    choices=("status", "cycle"))
-    ap.add_argument("--port", default="auto")
-    a = ap.parse_args()
-    with OwonPsu(bench_ports.resolve(a.port, "psu", "COM2016")) as psu:
-        try:
-            psu.meas_current()  # a cold OWON's first answer is not one
-        except (AssertionError, ValueError):
-            pass
-        if a.what == "cycle":
-            psu.output(False)
-            print("output off", flush=True)
-            time.sleep(4)
-            psu.output(True)
-            print("output on", flush=True)
-            time.sleep(2)
-        amps = sorted(psu.sample_current(2, 0.25))
-        print(f"setpoint {psu.voltage_setpoint():.2f} V, output "
-              f"{'on' if psu.output_on() else 'OFF'}, measured "
-              f"{psu.meas_voltage():.2f} V, {amps[len(amps) // 2] * 1000:.0f} mA "
-              f"(median of {len(amps)}; {amps[0] * 1000:.0f} to "
-              f"{amps[-1] * 1000:.0f})")
-    return 0
+    argv = sys.argv[1:]
+    if "--port" in argv:                 # the old flag, the new name
+        argv[argv.index("--port")] = "--psu"
+    print("owon_psu.py: the bench supply is bench_psu.py's since 2026-11-09", flush=True)
+    sys.argv = [sys.argv[0]] + argv
+    return bench_psu.main()
 
 
 if __name__ == "__main__":

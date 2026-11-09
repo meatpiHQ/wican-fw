@@ -136,9 +136,9 @@ class Console:
         return ("THE DUT PARKED ITSELF and is still parked: three runs in a "
                 "row crashed before any had been up ten minutes, so the "
                 "firmware sleeps instead of starting again (LED breathing "
-                "red, about 47 mA, no network).\n  " + snap[at].strip()
+                "red, the sleep-level supply current, no network).\n  " + snap[at].strip()
                 + "".join("\n  " + l for l in why)
-                + "\n  bring it back: python tools/testbench/lib/owon_psu.py "
+                + "\n  bring it back: python tools/testbench/lib/bench_psu.py "
                 "cycle; then GET /api/restart/report is the crash that "
                 "parked it (TESTING.md, \"When the DUT disappears in the "
                 "middle of a test\")")

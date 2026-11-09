@@ -17,7 +17,7 @@ for the .wdl CAN frames we sent). CAN legs self-skip without a PCAN.
 Topology: DUT over the USB mgmt link (192.168.82.1: HTTP + /ws/cli);
 PCAN on this PC wired to the DUT's CAN bus. Ends with DATALOG PASS.
 
-  python data_logger_bench.py [usb_ip] [--pcan PCAN_USBBUS2]
+  python data_logger_bench.py [usb_ip] [--pcan PCAN_USBBUS1]
 """
 import argparse
 import csv as csvmod
@@ -47,7 +47,7 @@ from wsmin import WS, OP_TEXT            # noqa: E402
 import wdl_dump                          # noqa: E402  (wican-fw/tools/)
 
 USB = "192.168.82.1"
-PCAN = "PCAN_USBBUS2"
+PCAN = "PCAN_USBBUS1"
 fails = []
 metrics = []
 

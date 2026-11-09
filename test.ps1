@@ -235,7 +235,7 @@ function Stop-ConsoleTail { param($Tail)
             Write-Host "  $($keys[$parkAt])"
             $keys | Where-Object { $_ -match 'previous run crashed' } | Select-Object -Last 3 | ForEach-Object { Write-Host "  $_" }
             if (-not $back) {
-                Write-Host "  bring it back:  python tools\testbench\lib\owon_psu.py cycle   (or hold its button until the LED turns sky blue: one try, and the history keeps every note)" -ForegroundColor Red
+                Write-Host "  bring it back:  python tools\testbench\lib\bench_psu.py cycle   (or hold its button until the LED turns sky blue: one try, and the history keeps every note)" -ForegroundColor Red
             }
             Write-Host "  then the cause: GET /api/restart/report (the crash that parked it, kept in flash), python tools\crash_decode.py --url http://<device>; TESTING.md, 'When the DUT disappears in the middle of a test'" -ForegroundColor Red
         }
@@ -284,9 +284,11 @@ function Invoke-BenchCheck {
         Ports    = @([System.IO.Ports.SerialPort]::GetPortNames())
         Serial   = $null     # usable console/flash port for target/hil
         Ch342    = @()       # CH342 COM names => connector is in DEVICE role
-        Ch344B   = @()       # CH344 quad-UART channel B = the rig's WiCAN UART0
-        Ftdi     = @()       # FTDI 'USB Serial Port' (the OWON PSU on this rig)
-        EcuSim   = @()       # 'MeatPi USB-CAN Device' = the ECU simulator's CDC
+        Ch344B   = @()       # the quad UART's channel B = the rig's WiCAN UART0
+        Ftdi     = @()       # FTDI 'USB Serial Port' (a legacy OWON, absent since 2026-11-09)
+        EcuSim   = @()       # ECU sim v2's debug console port (its USB-C marked debug)
+        SimUrl   = ''        # ECU sim v2's REST over the PC's USB network link
+        Supply   = ''        # the DUT's supply as the simulator reads it at pin 16
         PiOk     = $false
         DutOnline = $false
         DutVersion = ''
@@ -319,7 +321,7 @@ function Invoke-BenchCheck {
         if ($r.ch342_obd)     { $b.Ch342 += @($r.ch342_obd.port) }
         if ($r.psu)           { $b.Ftdi = @($r.psu.port) }
         elseif ($det.candidates.psu) { $b.Ftdi = @($det.candidates.psu | ForEach-Object { $_.port }) }
-        if ($r.ecu_sim_cdc)   { $b.EcuSim = @($r.ecu_sim_cdc.port) }
+        if ($r.ecu_sim_console) { $b.EcuSim = @($r.ecu_sim_console.port) }
     } else {
         # no python/pyserial: the same classification by PnP name, inline
         try {
@@ -327,11 +329,22 @@ function Invoke-BenchCheck {
                 Where-Object { $_.Name -match '\(COM\d+\)' })
             $com = { param($e) ($e.Name -replace '.*\((COM\d+)\).*', '$1') }
             $b.Ch342  = @($pnp | Where-Object { $_.Name -match 'CH342' } | ForEach-Object { & $com $_ })
-            $b.Ch344B = @($pnp | Where-Object { $_.Name -match 'SERIAL-B.*CH344' } | ForEach-Object { & $com $_ })
+            $b.Ch344B = @($pnp | Where-Object { $_.Name -match 'SERIAL-B.*CH344|MeatPi USB-UART B' } | ForEach-Object { & $com $_ })
             $b.Ftdi   = @($pnp | Where-Object { $_.Name -match '^USB Serial Port' } | ForEach-Object { & $com $_ })
-            $b.EcuSim = @($pnp | Where-Object { $_.Name -match 'MeatPi USB-CAN' } | ForEach-Object { & $com $_ })
+            $b.EcuSim = @($pnp | Where-Object { $_.PNPDeviceID -match 'VID_303A&PID_1001' -and $_.Name -match '\(COM' } | ForEach-Object { & $com $_ })
         } catch {}
     }
+    # ECU sim v2 over its USB network link: the OBD-II car on the DUT's bus
+    # and, since 2026-11-09, the DUT's supply (its OBD pin 16, read at the
+    # pin). One python call reports both; the supply line keeps the OWON
+    # helper's shape ("measured 13.87 V, 49 mA").
+    try {
+        $sup = & python "$repo\tools\testbench\lib\bench_psu.py" status 2>$null
+        $supTxt = ($sup | Out-String)
+        if ($supTxt -match 'at (http://[\w\.:]+)') { $b.SimUrl = $Matches[1] }
+        if ($supTxt -match 'measured ([\d\.]+) V, (\d+) mA') { $b.Supply = "$($Matches[1]) V $($Matches[2]) mA" }
+        if ($supTxt -match 'output OFF') { $b.Supply += ' OUTPUT OFF' }
+    } catch {}
 
     # console/flash port: the requested -Port, else the UART0 adapter, else the
     # CH344 channel B, else CH342 A
@@ -391,13 +404,17 @@ function Invoke-BenchCheck {
     elseif ($b.Serial -and $b.Ch342 -contains $b.Serial) { $how = ' (CH342 A)' }
     $serialTxt = if ($b.Serial) { "$($b.Serial)$how" } else { 'NONE' }
     $dutTxt = if ($b.DutOnline) { "$($b.DutVersion) @ $DutIp" } else { "OFFLINE @ $DutIp" }
-    $ftdiTxt = if ($b.Ftdi) { $b.Ftdi -join '/' } else { 'none' }
     $ecuTxt = if ($b.EcuSim) { $b.EcuSim -join '/' } else { 'none' }
+    $simTxt = if ($b.SimUrl) { $b.SimUrl } else { 'NO ANSWER' }
+    $supplyTxt = if ($b.Supply) { $b.Supply } elseif ($b.Ftdi) { "no answer from the simulator; FTDI $($b.Ftdi -join '/') (a legacy OWON?)" } else { 'NO ANSWER' }
     $apTxt = if ($b.P4Serves) { 'P4 (wican-bench-usb)' } elseif ($b.PiOk) { 'Pi radio' } else { 'unknown' }
     if ($b.TwinActive.Count -gt 0) { $apTxt += " + TWIN $($b.TwinActive -join '/')" }
     Write-Host "bench: serial=$serialTxt  pi=$($b.PiOk)  dut=$dutTxt  broker=$($b.Broker)  ncm=$($b.UsbNcm)  ap=$apTxt" -ForegroundColor Cyan
-    Write-Host "bench: $wiring; ftdi(psu)=$ftdiTxt  ecu_sim_cdc=$ecuTxt" -ForegroundColor Cyan
-    $script:conditions += "preflight: $wiring; serial=$serialTxt; dut=$(if ($b.DutOnline) { $b.DutVersion } else { 'offline' }) @ $DutIp; broker=$($b.Broker); ncm=$($b.UsbNcm); ap=$apTxt; ftdi=$ftdiTxt; ecu_sim_cdc=$ecuTxt"
+    Write-Host "bench: $wiring; ecu_sim=$simTxt (console $ecuTxt)  supply=$supplyTxt" -ForegroundColor Cyan
+    if (-not $b.Supply -and $What -in @('sleep', 'sleepmatrix', 'crashnote', 'logclock', 'sleeptrig', 'release', 'usbdetach', 'habackfill', 'attpstore')) {
+        Write-Host "bench: WARNING the DUT's supply (ECU sim v2 /api/power) did not answer: this stage moves or reads it" -ForegroundColor Yellow
+    }
+    $script:conditions += "preflight: $wiring; serial=$serialTxt; dut=$(if ($b.DutOnline) { $b.DutVersion } else { 'offline' }) @ $DutIp; broker=$($b.Broker); ncm=$($b.UsbNcm); ap=$apTxt; ecu_sim=$simTxt (console $ecuTxt); supply=$supplyTxt"
 
     # hard requirements per kind
     if (-not $b.PiOk) { throw "bench: $BenchHost unreachable - every kind needs the Pi" }
@@ -955,7 +972,7 @@ function Show-Inventory {
     Write-Host '  wgcycle    - WireGuard torn down while MQTT runs through it, N times (the beta.5 vpn_state crashes, 2026-11-02): wg-bench on the Pi, the broker at its tunnel address, a station trial to a network that does not exist drops the uplink each cycle; connects grows, MQTT returns, no reboot (~30 s per cycle, 10 cycles)'
     Write-Host '  tspublic   - Tailscale on Betty: six DUT-initiated subnet requests over pure relay through rekey (direct UDP blocked), no false direct endpoint, direct DISCO/ICMP/HTTP recovery, PSRAM stacks, flat RAM, zero errors/faults, exact settings restoration and scoped teardown (~10 min; needs betty and the DUT on the Pi''s internet path)'
     Write-Host '  tlschain   - An HTTPS chain ending in a cross-signed root (Cloudflare under GTS Root R4 as signed by GlobalSign Root CA, 2026-11-03) accepted by the built-in certificate bundle: the HA webhook pointed at such a host must get an HTTP answer, never a transport error; restored afterwards (~40 s; needs internet for the DUT)'
-    Write-Host '  habackfill - Store and forward (2026-11-06): a drive recorded on the SD card as JSON lines reaches the bench Home Assistant''s long-term statistics once the pushes return, through the export route and its cursor; the Catch up history button, nothing imported twice, the sleep countdown pushed out while the log is read (the OWON at 12.5 V), everything restored (~12 min, 2 planned restarts; needs the bench HA on rpi001, the simulator answering 010C, internal/bench_ha_credentials.json)'
+    Write-Host '  habackfill - Store and forward (2026-11-06): a drive recorded on the SD card as JSON lines reaches the bench Home Assistant''s long-term statistics once the pushes return, through the export route and its cursor; the Catch up history button, nothing imported twice, the sleep countdown pushed out while the log is read (the supply at 12.5 V), everything restored (~12 min, 2 planned restarts; needs the bench HA on rpi001, the simulator answering 010C, internal/bench_ha_credentials.json)'
     Write-Host '  espnleasy  - the ESPNetLink easy-setup surfaces on the DUT (2026-10-13): the usb summary on /api/status against /api/espnetlink, the sim_pin key (a no-op PUT, no restart), the UI doors in the served page, the GPS hint counting away from home (ap off on the P4 for 100 s, home again) (~6 min; needs the P4 daemon)'
     Write-Host '  espnlapn   - the carrier settings relay in the USB modes (2026-10-28): a bench APN set on the WiCAN reaches the dongle through the share pass (one planned dongle restart), a plain WiCAN restart writes nothing, the APN restored as found and the LTE back (~8 min, 3 to 4 planned WiCAN restarts, 2 dongle restarts; the dongle on the connector in a USB mode with its console on; its LTE is down while the bench APN is on it)'
     Write-Host '  garage     - the garage story with the ESPNetLink (2026-10-12): home WiFi on the P4, away on the dongle LTE with the VPN to betty, home again, flaps, a dongle reboot away, sleep/wake both ways; the data path judged at a receiver on betty by the source address of every POST; the default legs in usb_rndis with VPN variant A (~35 min; wifi_modem, variant B, g9 and g11 by hand)'
@@ -968,7 +985,7 @@ function Show-Inventory {
     Write-Host '  attpstore  - the OBD chip''s protocol store (issue #1023, 2026-11-01): the chip memorises every protocol switch a request answers on into its EEPROM-backed store, RAM-only ATTP or not, and the Audi MEB profile flipped it seven times per poll cycle; the driver now sends ATM0 at the bring-up and ahead of every switch on the request path. The store read back through an ATZ: as found after a test-a-PID switch with an answer (the engine), after a planned restart and an app-path switch (the bring-up''s ATM0), the app''s ATZ answered as a warm start with the ATM0 hidden behind it (one prompt, nothing shifted, a second sooner) and the app path''s own switch after its ATZ no longer writing (the canary) (1 planned restart; the simulator flipped between 11-bit and 29-bit ids, 2 to 6 simulator restarts, ~3 min; on an image without the fix the two legs read the other protocol: the reproduction)'
     Write-Host '  obdbringup - the OBD chip''s bring-up (2026-11-02, Ali): the warm start (chip_soft_reset sends ATWS instead of ATZ: the MIC3624''s ATZ answer began with junk bytes in 5 of 16 probes and a NUL among them made every third software restart log "soft reset not confirmed" and pay a reset pulse plus 1.5 s; ATWS answers clean in 40 ms) and the PP 0F guard (the bring-up reads ATPPS and writes PP 0F back only when it is not 95 or off: STSLCS does not report it). N planned restarts each read "chip awake; warm start (ATWS)", "started ... memory off", no "not confirmed", the bring-up under 1.5 s, ATDPN back on the stored protocol; then ATPP 0F OFF through the wire probe, a restart that logs the restore and reads 0F:95 N with pp_restores 1, and one more restart with the guard quiet (5 planned restarts, 3 EEPROM writes of PP 0F, ~3 min; --skip-pp drops the fault leg)'
     Write-Host '  sleepword  - the OBD chip''s sleep word and the PPSW repair (2026-11-07, Ali, after the sleep-path review against 4.52p): obd_chip_sleep(true) sends STSLEEP0 (the documented ST sleep command, what 4.x sent at every sleep entry and re-sleep) and pulls the PowerEn pin behind it, the nap re-sleep waits 1.5 s after its reset pulse before the word, and the bring-up''s VTPPSW10 is acknowledged, settled 600 ms and read back as 10 before the reset pulse. A healthy `sleep test` on the console must log "chip asleep by command" before "components down", zero re-sleeps and a power_wake; then VTPPSW2F through the wire probe (the pin cannot sleep the chip: a rising edge wakes, nothing sleeps; the digits are x = wake, y = sleep, 0F is a LOW-level WAKE and FF is refused), STSLEEP0 over the probe answered OK with a prompt and an ATI 3 s later unanswered (the command sleep holds while the device is awake), then `sleep test`: zero re-sleeps (the command sleep holds through the naps), the timed wake instead of the recovery reboot, the boot''s "PPSW is 2F, setting to 10" and "PPSW reads 10 after the write", VTPPSWS 10 after (2 planned wakes, 2 EEPROM writes of the PPSW cell, ~2.5 min; --skip-ppsw drops the stand-in; the bench holds COM254 itself: no console tail; on an image before 2026-11-07 the stand-in reads six re-sleeps, an E line and internal_recovery: the reproduction)'
-    Write-Host '  sleeptrig  - the OBD chip''s own sleep triggers, switched off: the stored thresholds have no effect (2026-11-07, Ali, before they are dropped from the provisioning): STSLCS reads the four controls OFF; the PSU at 12.5 V (under the stored <13.20 V sleep threshold) for 170 s with the chip awake, its own ATRV under the threshold throughout, ATI answers after; VTPPSW2F (the pin cannot wake the chip) + STSLEEP0 at 13.0 V, ATI silent, the PSU at 14.0 V (over the stored >13.50 V wake threshold) 30 s, ATI silent twice, a planned restart wakes the chip and repairs PPSW; -UartSilence adds 25 min of UART silence (over the stored 1200 s) with ATI answering after; -ProvisionLeg adds the provisioning after the change (obd_chip wake_voltage_mv 13000 and back: two reboots, no provisioning, STSLCS as found; STSLVL on, off over the probe then a restart: "provisioning sleep config: a control is on", the four controls OFF again, the stored thresholds untouched); STSLCS line for line as found at the end (1 planned restart, 2 EEPROM writes of the PPSW cell, ~6 min; ~31 with the UART leg; +3 restarts and ~5 writes with the provisioning leg; needs the OWON PSU on the PC)'
+    Write-Host '  sleeptrig  - the OBD chip''s own sleep triggers, switched off: the stored thresholds have no effect (2026-11-07, Ali, before they are dropped from the provisioning): STSLCS reads the four controls OFF; the PSU at 12.5 V (under the stored <13.20 V sleep threshold) for 170 s with the chip awake, its own ATRV under the threshold throughout, ATI answers after; VTPPSW2F (the pin cannot wake the chip) + STSLEEP0 at 13.0 V, ATI silent, the PSU at 14.0 V (over the stored >13.50 V wake threshold) 30 s, ATI silent twice, a planned restart wakes the chip and repairs PPSW; -UartSilence adds 25 min of UART silence (over the stored 1200 s) with ATI answering after; -ProvisionLeg adds the provisioning after the change (obd_chip wake_voltage_mv 13000 and back: two reboots, no provisioning, STSLCS as found; STSLVL on, off over the probe then a restart: "provisioning sleep config: a control is on", the four controls OFF again, the stored thresholds untouched); STSLCS line for line as found at the end (1 planned restart, 2 EEPROM writes of the PPSW cell, ~6 min; ~31 with the UART leg; +3 restarts and ~5 writes with the provisioning leg; needs the ECU sim v2 supply)'
     Write-Host '  connections - the Connections page bridges and their jacks (2026-10-29, the field report of 2026-10-28): a bridge and its new TCP server in one submit, the server taken away under the bridge (one W line, no fault, the reason on /api/bridges, the list still saves: before the fix "unknown endpoint" refused every save and a boot_errors fault latched at every start), then the real page in Chrome: nothing staged on open, the stranded row with the missing server named and removable, a new connection made from the card (5 to 6 planned restarts, ~5 min)'
     Write-Host '  usbdetach  - a warm restart in the USB device role drops off the bus first (2026-10-17): the DUT cabled to this PC as a USB NCM device (one planned restart when it was host), warm restarts with the link up: gone from the PC within 5 s of each request (2.2 to 2.4 s measured), back, the link answers, software resets only; the internal heap before and after; the DUT stays in the device role (restore: python tools\testbench\usb\usb_detach_bench.py --only d4 --restore-host, a PSU power cycle inside) (~6 min)'
     Write-Host '  abrp       - the ABRP rows against the real Iternio API (2026-10-13): the key checked from the PC, host routes on the Pi for the run, the key as a query parameter / as the Authorization header / a wrong key, the counters over the window, the Test button, get_telemetry as the witness with a user token in internal/abrp_credentials.json (PARTIAL without one: the 401 refusals only), restore (2 planned restarts, ~5 min)'
@@ -1139,7 +1156,7 @@ try {
         }
         'blethru' {
             # BLE throughput with the ECU simulator as the CENTRAL
-            # (ble_central_bench over USB-NCM 192.168.8.1): throughput_app
+            # (ble_central_bench over the simulator's USB network link): throughput_app
             # link tuning, notify/write/read + tunnel legs on 1M then 2M.
             # The DUT is read over WiFi before/after each link. ~10 min.
             Invoke-Stage 'live blethru (simulator central: BLE throughput)' {
@@ -1179,11 +1196,11 @@ try {
             }
         }
         'sleep'  {
-            # Sleep-mode HIL (OWON P4305 on COM2016 + Pi; ~10 min).
+            # Sleep-mode HIL (the ECU sim v2 supply + Pi; ~20 min).
             Invoke-Stage 'sleep bench' {
                 $out = & $script:BenchPy -u "$repo\tools\testbench\sleep\sleep_bench_test.py" 2>&1 | ForEach-Object { Write-Host $_; $_ }
                 Save-StageLog 'sleep_bench' $out
-                if (-not ($out | Select-String -Quiet 'SLEEP BENCH PASS')) { throw 'no SLEEP BENCH PASS (PSU on COM2016? sleep enabled?)' }
+                if (-not ($out | Select-String -Quiet 'SLEEP BENCH PASS')) { throw 'no SLEEP BENCH PASS (the ECU sim v2 supply answering? sleep enabled?)' }
             }
         }
         'sleepmatrix' {
@@ -1234,7 +1251,7 @@ try {
             # CAN listen-before-talk + the autopid bus guard
             # (TASK_j1939_wwh.md phase 2, ~20 min, 17 DUT restarts). Runs on
             # the PC: the PCAN adapter on the DUT's bus is the judge, the ECU
-            # simulator (USB-NCM, 192.168.8.1) is the ACK source. The bench
+            # simulator (ECU sim v2, its REST over the USB network link) is the ACK source. The bench
             # polls the DUT's HTTP several times a second, so it gets a
             # tunnel of its own through the Pi instead of ssh + curl.
             Invoke-Stage 'CAN auto-baud + bus guard' {
@@ -1246,7 +1263,7 @@ try {
                     if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (port 18081 busy?)" }
                     $out = & $py -u "$repo\tools\testbench\can\can_autobaud_bench.py" 'localhost:18081' 2>&1 | ForEach-Object { Write-Host $_; $_ }
                     Save-StageLog 'can_autobaud' $out
-                    if (-not ($out | Select-String -Quiet 'CAN AUTOBAUD PASS')) { throw 'no CAN AUTOBAUD PASS (PCAN wired? simulator on 192.168.8.1?)' }
+                    if (-not ($out | Select-String -Quiet 'CAN AUTOBAUD PASS')) { throw 'no CAN AUTOBAUD PASS (PCAN wired? ECU sim v2 answering on its USB link? PCAN channel 1 on its DB9 J2?)' }
                 } finally {
                     if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
                     Stop-ConsoleTail $con
@@ -1556,7 +1573,7 @@ try {
             # Store and forward (2026-11-06): the drive recorded on the SD card
             # reaches the bench HA's long-term statistics through the export
             # route once the pushes return; the Catch up history button; the
-            # sleep countdown pushed out while the log is read (the OWON);
+            # sleep countdown pushed out while the log is read (the supply);
             # everything restored. testing/habackfill.md.
             Invoke-Stage 'Store and forward: the SD card log into Home Assistant' {
                 $py = $script:BenchPy
@@ -1681,7 +1698,7 @@ try {
             # re-based rows, the relative formats, the unsynced boot after
             # a PSU power cycle (`rtc --forget`), the re-base tool. Two
             # planned restarts for the settings plus one for the format
-            # change, one power cycle. Needs the OWON PSU on this PC.
+            # change, one power cycle. Needs the ECU sim v2 supply.
             Invoke-Stage 'Log clock' {
                 $py = $script:BenchPy
                 $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", $BenchHost)
@@ -1690,7 +1707,7 @@ try {
                     if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (port 18081 busy?)" }
                     $out = & $py -u "$repo\tools\testbench\system\log_clock_bench.py" '--dut' 'localhost:18081' '--pi' $BenchHost 2>&1 | ForEach-Object { Write-Host $_; $_ }
                     Save-StageLog 'log_clock' $out
-                    if (-not ($out | Select-String -Quiet 'LOG CLOCK (PARTIAL )?PASS')) { throw 'no LOG CLOCK PASS (the DUT on the bench AP? the Pi can bind UDP 123? the OWON on this PC?)' }
+                    if (-not ($out | Select-String -Quiet 'LOG CLOCK (PARTIAL )?PASS')) { throw 'no LOG CLOCK PASS (the DUT on the bench AP? the Pi can bind UDP 123? the ECU sim v2 supply?)' }
                     if ($out | Select-String -Quiet 'LOG CLOCK PARTIAL PASS') { Write-Host 'bench: PARTIAL (a leg skipped)' -ForegroundColor Yellow }
                 } finally {
                     if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
@@ -1811,7 +1828,7 @@ try {
                     if ($fw22) { $benchArgs += @('--fw22', $fw22) } else { Write-Host 'bench: no obd_chip_manager/obd_fw/V2.3.22.txt in the components tree: the .22 leg is skipped' }
                     $out = & $py -u "$repo\tools\testbench\can\can_selftest_bench.py" @benchArgs 2>&1 | ForEach-Object { Write-Host $_; $_ }
                     Save-StageLog 'can_selftest' $out
-                    if (-not ($out | Select-String -Quiet 'CAN SELFTEST PASS')) { throw 'no CAN SELFTEST PASS (the DUT on the bench AP? the simulator at 192.168.8.1? the chip up?)' }
+                    if (-not ($out | Select-String -Quiet 'CAN SELFTEST PASS')) { throw 'no CAN SELFTEST PASS (the DUT on the bench AP? ECU sim v2 answering on its USB link? the chip up?)' }
                 } finally {
                     if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
                 }
@@ -1836,7 +1853,7 @@ try {
                     if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (port 18081 busy?)" }
                     $out = & $py -u "$repo\tools\testbench\obd\attp_store_bench.py" --dut localhost:18081 2>&1 | ForEach-Object { Write-Host $_; $_ }
                     Save-StageLog 'attp_store' $out
-                    if (-not ($out | Select-String -Quiet 'ATTP STORE PASS')) { throw 'no ATTP STORE PASS (the DUT on the bench AP? the simulator at 192.168.8.1 on 500 kbit/s? the chip up? an image without the fix reads the other protocol)' }
+                    if (-not ($out | Select-String -Quiet 'ATTP STORE PASS')) { throw 'no ATTP STORE PASS (the DUT on the bench AP? ECU sim v2 answering on its USB link on 500 kbit/s? the chip up? an image without the fix reads the other protocol)' }
                 } finally {
                     Stop-ConsoleTail $con
                     if ($con -and (Test-Path $con.Log)) {
@@ -1907,7 +1924,7 @@ try {
             # Ali): the thresholds the bring-up stores (STSLVLW/STSLVLS,
             # STSLUIT) must have no effect while STSLVL and STSLU are off,
             # before they are dropped from the provisioning. PC-side through
-            # the tunnel with the OWON PSU on the PC; the console tail beside
+            # the tunnel with the ECU sim v2 supply; the console tail beside
             # it for the boot lines; one planned restart.
             Invoke-Stage 'OBD chip sleep triggers' {
                 $py = $script:BenchPy
@@ -1922,7 +1939,7 @@ try {
                     if ($OnlyProvision) { $extra += @('--only-provision') }
                     $out = & $py -u "$repo\tools\testbench\obd\obd_sleep_triggers_bench.py" --dut localhost:18081 --psu-port auto @extra 2>&1 | ForEach-Object { Write-Host $_; $_ }
                     Save-StageLog 'obd_sleep_triggers' $out
-                    if (-not ($out | Select-String -Quiet 'OBD SLEEP TRIGGERS PASS')) { throw 'no OBD SLEEP TRIGGERS PASS (the PSU on the PC? sleep enabled with its defaults so the device stays awake through the 12.5 V leg? the chip up?)' }
+                    if (-not ($out | Select-String -Quiet 'OBD SLEEP TRIGGERS PASS')) { throw 'no OBD SLEEP TRIGGERS PASS (the ECU sim v2 supply? sleep enabled with its defaults so the device stays awake through the 12.5 V leg? the chip up?)' }
                 } finally {
                     Stop-ConsoleTail $con
                     if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
@@ -2063,7 +2080,7 @@ try {
                     if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (port 18081 busy?)" }
                     $out = & $py -u "$repo\tools\testbench\obd\eu_truck_e2e_bench.py" 'localhost:18081' '--logdir' $actorLogs 2>&1 | ForEach-Object { Write-Host $_; $_ }
                     Save-StageLog 'eu_truck_e2e' $out
-                    if (-not ($out | Select-String -Quiet '^EU TRUCK E2E PASS')) { throw 'no EU TRUCK E2E PASS (PCAN wired? simulator on 192.168.8.1?)' }
+                    if (-not ($out | Select-String -Quiet '^EU TRUCK E2E PASS')) { throw 'no EU TRUCK E2E PASS (PCAN wired? ECU sim v2 answering on its USB link? PCAN channel 1 on its DB9 J2?)' }
                 } finally {
                     if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
                     Stop-ConsoleTail $con
@@ -2090,8 +2107,8 @@ try {
             # OBD over UDS as an autopid dialect (TASK_j1939_wwh.md phase 3,
             # ~10 min, about 14 DUT restarts). Runs on the PC: the PCAN
             # adapter is the vehicle (actors/pcan_wwh_ecu.py) and its log is
-            # the wire's side of every check; the ECU simulator (USB-NCM,
-            # 192.168.8.1) is the ACK source and the OBD-II car of the last
+            # the wire's side of every check; ECU sim v2 (its REST over the
+            # USB network link) is the ACK source and the OBD-II car of the last
             # leg. The actor's logs land beside the stage log.
             Invoke-Stage 'WWH-OBD (ISO 27145 / J1979-2)' {
                 $py = $script:BenchPy
@@ -2103,7 +2120,7 @@ try {
                     if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (port 18081 busy?)" }
                     $out = & $py -u "$repo\tools\testbench\obd\wwh_obd_bench.py" 'localhost:18081' '--logdir' $actorLogs 2>&1 | ForEach-Object { Write-Host $_; $_ }
                     Save-StageLog 'wwh_obd' $out
-                    if (-not ($out | Select-String -Quiet 'WWH OBD PASS')) { throw 'no WWH OBD PASS (PCAN wired? simulator on 192.168.8.1?)' }
+                    if (-not ($out | Select-String -Quiet 'WWH OBD PASS')) { throw 'no WWH OBD PASS (PCAN wired? ECU sim v2 answering on its USB link? PCAN channel 1 on its DB9 J2?)' }
                 } finally {
                     if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
                     Stop-ConsoleTail $con
@@ -2114,7 +2131,7 @@ try {
             # The J1939 listener on the native CAN bus (TASK_j1939_wwh.md
             # phase 4) and AutoPID on a J1939 vehicle (phase 5). Runs on the
             # PC: the PCAN adapter is the truck (actors/pcan_j1939_truck.py),
-            # the ECU simulator (USB-NCM, 192.168.8.1) only acknowledges.
+            # the ECU simulator (ECU sim v2, its REST over the USB network link) only acknowledges.
             # Three stages: the listener bench (~3 min, 4 DUT restarts),
             # counter conservation at 250k and 500k up to line rate (~9 min,
             # 3 restarts), then AutoPID on the truck (~10 min, 7 restarts;
@@ -2133,7 +2150,7 @@ try {
                     if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (port 18081 busy?)" }
                     $out = & $py -u "$repo\tools\testbench\can\j1939_bench.py" 'localhost:18081' '--logdir' $actorLogs 2>&1 | ForEach-Object { Write-Host $_; $_ }
                     Save-StageLog 'j1939_listener' $out
-                    if (-not ($out | Select-String -Quiet '^J1939 PASS')) { throw 'no J1939 PASS (PCAN wired? simulator on 192.168.8.1?)' }
+                    if (-not ($out | Select-String -Quiet '^J1939 PASS')) { throw 'no J1939 PASS (PCAN wired? ECU sim v2 answering on its USB link? PCAN channel 1 on its DB9 J2?)' }
                 } finally {
                     if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
                     Stop-ConsoleTail $con

@@ -1,12 +1,11 @@
-label = "OWON PSU"
-desc = "OWON P4305 car-battery sim (15 V HARD ceiling; keep >= 13.2 V when sleep enabled)"
+label = "DUT supply"
+desc = "The DUT's 12 V: ECU sim v2's programmable OBD pin 16 with voltage and current read at the pin (15 V HARD ceiling in the bench driver; keep >= 13.2 V when sleep enabled)"
 optional = true
-doc = "SCPI over RS232. The sleep benches drive it via ${psu.port}; `auto` = the FTDI port tools/testbench/detect_ports.py finds (COM numbers drift)."
+doc = "GET/POST /api/power on the simulator over its USB network link; the benches drive it through lib/bench_psu.py (`python tools/testbench/lib/bench_psu.py [status|cycle|set V|on|off]`). The current is the DUT's alone: the first rig's bench supply fed a shared harness. `auto` = the simulator lib/sim_net.py finds; a COM port here names a legacy OWON P4305 on an FTDI port instead. A simulator reboot (settings submit) puts the supply back to its boot defaults (13.8 V, on)."
 
 [config]
-port = "auto"
-baud = 115200
+psu = "auto"
 
 [health]
-cmd = "${python} \"${dir}/probe.py\" --port ${port} --baud ${baud}"
+cmd = "${python} \"${dir}/probe.py\" --psu ${psu}"
 timeout_s = 20

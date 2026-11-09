@@ -29,9 +29,9 @@ Legs:
   7  restore: config verbatim + settings as found (+ reboot), sim
      broadcast restored per --sim-restore
 
-  python autopid_matrix_bench.py [dut host[:port]] [--sim 192.168.8.1]
+  python autopid_matrix_bench.py [dut host[:port]] [--sim 10.8.8.1]
                                  [--sim-restore asis|on|off]
-                                 [--ack-pcan PCAN_USBBUS2]
+                                 [--ack-pcan PCAN_USBBUS1]
   --ack-pcan holds a PCAN channel open as a normal node during leg 5: it
   ACKs the simulator's broadcast, which then runs at its configured period
   (what a car's other ECUs do) instead of being retransmitted at line rate.
@@ -63,7 +63,7 @@ import sim_net  # noqa: E402  (the simulator's own link on any LAN)
 sim_net.install()
 
 DUT = "localhost:8081"
-SIM = "192.168.8.1"
+SIM = sim_net.sim_host()           # ECU sim v2 over its USB network link
 SIM_RESTORE = "asis"
 ACK_PCAN = None
 args = [a for a in sys.argv[1:]]

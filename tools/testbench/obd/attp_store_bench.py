@@ -38,12 +38,13 @@ reset (ATZ) is the protocol the chip comes back on.
                 app_resets) it DOES read <other>: the limit that build had,
                 and the proof that the read-back sees a write (two store
                 writes on that image)
-  power cycle   (--psu COMxx) the store as found across a PSU power cycle
+  power cycle   (--psu auto) the store as found across a power cycle of the DUT
+                (ECU sim v2's supply; a COM port names a legacy OWON)
   restore       the store put back when a leg moved it, the simulator back
                 as found, AutoPID back on when the bench switched it off
 
-usage: attp_store_bench.py [--dut localhost:18081] [--sim http://192.168.8.1]
-                           [--skip-bringup] [--skip-canary] [--psu COMxx]
+usage: attp_store_bench.py [--dut localhost:18081] [--sim http://10.8.8.1]
+                           [--skip-bringup] [--skip-canary] [--psu auto]
   run on the PC with the DUT through test.ps1's ssh tunnel (the attpstore
   stage) and the simulator at its NCM address (lib/sim_net.py binds the
   requests to the simulator's own link). The simulator reboots at every id
@@ -418,12 +419,8 @@ def main():
     if PSU:
         print("== the store across a PSU power cycle (%s) ==" % PSU, flush=True)
         e.close()
-        from owon_psu import OwonPsu  # noqa: E402  (pyserial, the bench PSU)
-        with OwonPsu(PSU) as psu:
-            try:
-                psu.meas_current()
-            except (AssertionError, ValueError):
-                pass
+        from bench_psu import open_psu  # noqa: E402  (ECU sim v2's OBD pin 16)
+        with open_psu(PSU) as psu:
             psu.output(False)
             time.sleep(4)
             psu.output(True)

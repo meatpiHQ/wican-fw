@@ -11,7 +11,7 @@ the two mux pages of a multiplexed message (dbc_bench leg 4b).
 
   python pcan_dbc_broadcast.py [secs] [--id 0x123] [--data FF38641027000000]
                                [--alt FF386410272A0100]
-                               [--gap 0.02] [--pcan PCAN_USBBUS2]
+                               [--gap 0.02] [--pcan PCAN_USBBUS1]
 """
 import argparse
 import time
@@ -26,7 +26,7 @@ def main():
     ap.add_argument("--data", default="FF38641027000000")
     ap.add_argument("--alt", default="")
     ap.add_argument("--gap", type=float, default=0.02)
-    ap.add_argument("--pcan", default="PCAN_USBBUS2")
+    ap.add_argument("--pcan", default="PCAN_USBBUS1")
     a = ap.parse_args()
 
     frame_id = int(a.id, 0)

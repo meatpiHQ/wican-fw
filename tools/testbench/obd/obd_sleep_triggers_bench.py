@@ -66,8 +66,7 @@ import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "lib"))
-import bench_ports  # noqa: E402
-from owon_psu import OwonPsu  # noqa: E402
+import bench_psu  # noqa: E402  (ECU sim v2's OBD pin 16 since 2026-11-09)
 
 ARGS = sys.argv[1:]
 
@@ -262,15 +261,14 @@ def restart():
 
 
 def open_psu():
-    port = bench_ports.resolve(PSU_PORT, "psu", "COM50")
     last = None
     for attempt in range(3):
         try:
-            return OwonPsu(port)
-        except AssertionError as exc:  # the first *IDN? can go unanswered
+            return bench_psu.open_psu(PSU_PORT)
+        except SystemExit as exc:  # a dropped request on the simulator's link
             last = exc
             time.sleep(1.5)
-    raise SystemExit("PSU on %s: %s" % (port, last))
+    raise SystemExit("the supply (%s): %s" % (PSU_PORT, last))
 
 
 # ---- legs ---------------------------------------------------------------------------

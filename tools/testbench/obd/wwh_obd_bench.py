@@ -47,7 +47,7 @@ Legs:
 
 Verdict: `WWH OBD PASS`. Run on the PC (IDF venv python; python-can +
 can-isotp):
-  python wwh_obd_bench.py [host[:port]] [--pcan PCAN_USBBUS2]
+  python wwh_obd_bench.py [host[:port]] [--pcan PCAN_USBBUS1]
                           [--only w1,w2,...] [--logdir DIR]
 `--only` runs some legs and says `WWH OBD PARTIAL PASS` (w1 is always run:
 the later legs need its vehicle).
@@ -71,7 +71,7 @@ ACTOR = os.path.join(HERE, "..", "actors", "pcan_wwh_ecu.py")
 PY = sys.executable
 
 DUT = "localhost:8081"
-PCAN = "PCAN_USBBUS2"
+PCAN = "PCAN_USBBUS1"
 ONLY = []
 LOGDIR = tempfile.gettempdir()
 args = sys.argv[1:]

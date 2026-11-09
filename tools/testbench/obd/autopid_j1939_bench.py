@@ -45,7 +45,7 @@ Fails on an unexpected reset, a new fault, an E line of the tags autopid /
 j1939 / can_manager, a task under 512 B of headroom, a heap floor under
 20 KB. By hand:
   python autopid_j1939_bench.py [localhost:8081] [--elm localhost:35001]
-         [--pcan PCAN_USBBUS2] [--only a1,a2] [--logdir DIR]
+         [--pcan PCAN_USBBUS1] [--only a1,a2] [--logdir DIR]
 """
 import json
 import os
@@ -64,7 +64,7 @@ from pcbench import Actor, Bench, Dut, Run  # noqa: E402
 
 DUT_HOST = "localhost:8081"
 ELM_HOST = "localhost:35001"
-PCAN = "PCAN_USBBUS2"
+PCAN = "PCAN_USBBUS1"
 ONLY = []
 LOGDIR = tempfile.gettempdir()
 args = sys.argv[1:]

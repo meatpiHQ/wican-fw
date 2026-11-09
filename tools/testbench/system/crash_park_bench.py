@@ -50,7 +50,7 @@ import crash_note  # noqa: E402
 import pcbench  # noqa: E402
 from crash_note_bench import (SETTINGS_KEPT, newest, report_text,  # noqa: E402
                               uptime_s, wait_boot)
-from owon_psu import OwonPsu  # noqa: E402
+from bench_psu import open_psu  # noqa: E402  (ECU sim v2's OBD pin 16)
 
 CRASH = "restart_tracker --panic=fault"
 PARK_LINE = re.compile(r"WICAN PARK streak=(\d+) parks=(\d+) retry_s=(\d+) "
@@ -189,14 +189,10 @@ def main():
     con = Console(port, 2000000)
     print(f"console {port} held by the bench (an open may reset the DUT once)",
           flush=True)
-    psu = OwonPsu(bench_ports.resolve(a.psu, "psu", "COM2016"))
+    psu = open_psu(a.psu)
     parked = False
     rc = 1
     try:
-        try:
-            psu.meas_current()      # a cold OWON's first answer is not one
-        except (AssertionError, ValueError):
-            pass
         volts = psu.voltage_setpoint()
         time.sleep(4)
         wait_boot(dut, None, 120)

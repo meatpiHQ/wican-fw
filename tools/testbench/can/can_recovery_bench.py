@@ -35,7 +35,7 @@ Topology: DUT over the USB mgmt link (192.168.82.1: HTTP + /ws/cli);
 PCAN on this PC wired to the DUT's CAN bus. Self-skips without a PCAN.
 Ends with CANREC PASS.
 
-  python can_recovery_bench.py [usb_ip] [--pcan PCAN_USBBUS2]
+  python can_recovery_bench.py [usb_ip] [--pcan PCAN_USBBUS1]
 """
 import argparse
 import json
@@ -51,7 +51,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
 from wsmin import WS, OP_TEXT            # noqa: E402
 
 USB = "192.168.82.1"
-PCAN = "PCAN_USBBUS2"
+PCAN = "PCAN_USBBUS1"
 fails = []
 metrics = []
 

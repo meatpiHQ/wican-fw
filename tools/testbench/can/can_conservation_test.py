@@ -59,7 +59,7 @@ def main():
     check("bus_quiet", b["rx"] - a["rx"] == 0,
           f"{b['rx'] - a['rx']} stray frames in 3 s")
 
-    bus = can.Bus(interface="pcan", channel="PCAN_USBBUS2",
+    bus = can.Bus(interface="pcan", channel="PCAN_USBBUS1",
                   bitrate=500000)
     msg = can.Message(arbitration_id=0x321, is_extended_id=False,
                       data=bytes(8))

@@ -2,7 +2,7 @@
 
 Command: `.\test.ps1 crashnote`
 
-Needs: DUT console + PSU + `ssh rpi001`
+Needs: DUT console + the supply (ECU sim v2's OBD pin 16) + `ssh rpi001`
 
 Moved from the `TESTING.md` test-kinds table on 2026-10-31 (the row's detail cell, whole, as paragraphs). The index row and the other stages: [../TESTING.md](../TESTING.md).
 

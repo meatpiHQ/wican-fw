@@ -585,13 +585,8 @@ def main():
 
         # ---- L4 the field case: an unsynced boot --------------------------------------
         if "L4" in legs:
-            import bench_ports
-            import owon_psu
-            psu = owon_psu.OwonPsu(bench_ports.resolve(a.psu, "psu", "COM50"))
-            try:
-                psu.meas_current()
-            except (AssertionError, ValueError):
-                pass
+            from bench_psu import open_psu  # noqa: E402  (ECU sim v2's OBD pin 16)
+            psu = open_psu(a.psu)
             restart_with({"data_logger": {"format": "binary", "can_log": False}})
             actor_down()
             out = cli(hostport, "rtc --forget", "OK")

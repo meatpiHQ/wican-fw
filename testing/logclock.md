@@ -2,7 +2,7 @@
 
 Command: `.\test.ps1 logclock` (= `python tools/testbench/system/log_clock_bench.py --dut localhost:18081 --pi rpi001`; by hand add `[--dut-ip 10.42.1.194] [--pi-ip 10.42.1.1] [--psu auto\|none] [--only L1,L2] [--logdir DIR]`)
 
-Needs: DUT on the bench AP through rpi001 (ws_cli up) + the Pi (sudo, UDP 123) + the OWON PSU
+Needs: DUT on the bench AP through rpi001 (ws_cli up) + the Pi (sudo, UDP 123) + the ECU sim v2 supply
 
 Moved from the `TESTING.md` test-kinds table on 2026-10-31 (the row's detail cell, whole, as paragraphs). The index row and the other stages: [../TESTING.md](../TESTING.md).
 

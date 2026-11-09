@@ -52,6 +52,9 @@ image of the day, `--cycles 2 --expect public`): BLE ADDR PROBE PASS**: one addr
 the two connections, 68:EE:8F:5A:65:3E type public, the same as `GET /api/ble` `address`
 (the identity the Pi's bond had always shown); the plain link's FFF1 subscribe refused and
 BlueZ's pairing attempt on it failed without the agent (the link dropped, the write legs
-unreachable: expected); paired, FFF1 subscribed, `ATI` answered `ELM327 v2.3>`
+unreachable: expected); paired, FFF1 subscribed, `ATI
+` answered `ELM327 v2.3
+
+>`
 through the factory `br_ble_obd` (`dut_ble_bridges=['br_ble_obd']`, no row added by the
 bench); no E line of the Bluetooth tags. Output `test-reports/logs/ble_addr_probe_final.txt`.

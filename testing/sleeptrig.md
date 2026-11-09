@@ -1,8 +1,8 @@
 # OBD chip sleep triggers switched off: the stored thresholds have no effect
 
-Command: `.\test.ps1 sleeptrig [-UartSilence]` = `python tools\testbench\obd\obd_sleep_triggers_bench.py --dut localhost:18081 --psu-port auto [--uart-silence 25] [--log-dir DIR]` (PC, the DUT through the tunnel, the OWON PSU on the PC, the console tailed beside it)
+Command: `.\test.ps1 sleeptrig [-UartSilence]` = `python tools\testbench\obd\obd_sleep_triggers_bench.py --dut localhost:18081 --psu-port auto [--uart-silence 25] [--log-dir DIR]` (PC, the DUT through the tunnel, the ECU sim v2 supply, the console tailed beside it)
 
-Needs: main fw on DUT + rpi001 + the OWON PSU on the PC (COM50). Sleep enabled with its default thresholds (the device must stay awake through the 12.5 V leg: 190 s against the 5 min countdown; the critical floor at 11.9 V is never approached). AutoPID and every setting are left as found.
+Needs: main fw on DUT + rpi001 + the ECU sim v2 supply (over its USB network link). Sleep enabled with its default thresholds (the device must stay awake through the 12.5 V leg: 190 s against the 5 min countdown; the critical floor at 11.9 V is never approached). AutoPID and every setting are left as found.
 
 The index row and the other stages: [../TESTING.md](../TESTING.md). The question it answers: `internal/OBD_CHIP_SLEEP_V6_VS_V4.md` section 7 (Ali, 2026-11-07: "do we need to set this voltage? maybe not read them from configuration"), and the vendor's PowerSave text (OBDLink 8.11 and 15.2: "each trigger can be independently enabled or disabled").
 

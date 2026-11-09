@@ -1,8 +1,8 @@
 # CAN self-test and chip diagnostics
 
-Command: `.\test.ps1 canselftest` = `python tools\testbench\can\can_selftest_bench.py --dut localhost:18081 [--sim http://192.168.8.1] [--sim-restore asis\|on\|off] [--skip-flip] [--fw22 <V2.3.22.txt>]` (PC, the DUT through the tunnel)
+Command: `.\test.ps1 canselftest` = `python tools\testbench\can\can_selftest_bench.py --dut localhost:18081 [--sim http://10.8.8.1] [--sim-restore asis\|on\|off] [--skip-flip] [--fw22 <V2.3.22.txt>]` (PC, the DUT through the tunnel)
 
-Needs: main fw on DUT + rpi001 + the ECU simulator on the bus
+Needs: main fw on DUT + rpi001 + ECU sim v2 on the bus
 
 Moved from the `TESTING.md` test-kinds table on 2026-10-31 (the row's detail cell, whole, as paragraphs). The index row and the other stages: [../TESTING.md](../TESTING.md).
 

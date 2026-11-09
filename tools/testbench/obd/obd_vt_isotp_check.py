@@ -21,7 +21,7 @@ if none) and the prompt.
 
 Usage:
     python tools/testbench/obd_vt_isotp_check.py \
-        [--bridge auto|COMx] [--pcan PCAN_USBBUS2] [--size 4095]
+        [--bridge auto|COMx] [--pcan PCAN_USBBUS1] [--size 4095]
 
 Needs: the obd_chip test app running on the DUT (bridge up after TEST DONE),
 python-can + PCAN drivers, can-isotp, pyserial.
@@ -71,7 +71,7 @@ def main():
     global stop
     ap = argparse.ArgumentParser()
     ap.add_argument("--bridge", default="auto")  # auto = the CH342 usb_obd port detect_ports.py finds
-    ap.add_argument("--pcan", default="PCAN_USBBUS2")
+    ap.add_argument("--pcan", default="PCAN_USBBUS1")
     ap.add_argument("--size", type=int, default=4095,
                     help="payload bytes (max 4095)")
     args = ap.parse_args()
