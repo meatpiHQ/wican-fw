@@ -29,7 +29,12 @@ Legs:
               re-joins and the tunnel reconnects (about 30 s per cycle)
         peer  the DUT's peer removed from wg-bench on the Pi: the keys expire,
               "peer silent for 30 s; reconnecting" (the field's other path, 2 to
-              4 min per cycle); the peer is put back when the teardown shows
+              4 min per cycle); the peer is put back when the teardown shows.
+              With --hold-s N (2026-11-09) the tunnel first stays up for N
+              seconds, so WireGuard has rekeyed (every 120 s) before the peer
+              goes: until that day the key the rekey replaced never expired,
+              the peer read as up for ever and the teardown never came for a
+              tunnel older than two minutes (N = 150 is the witness)
       Each cycle: `connects` on /api/vpn grows by one, MQTT is back through the
       tunnel, the DUT did not reboot (boot_count), no crash note.
   c3  as found: vpn_manager and mqtt_manager back (one restart), wg-bench down,
@@ -37,7 +42,7 @@ Legs:
 
   python tools/testbench/vpn/wg_teardown_cycle_bench.py [--dut-ip 10.42.1.194]
       [--dut localhost:18083] [--pi rpi001] [--pi-ip 10.42.1.1] [--cycles 10]
-      [--trigger wifi|peer] [--logdir DIR]
+      [--trigger wifi|peer] [--hold-s N] [--logdir DIR]
 
 Prints `WG TEARDOWN CYCLE PASS`. Written 2026-11-02.
 """
@@ -80,6 +85,9 @@ def main():
                     "endpoint); default: the DUT's address with .1")
     ap.add_argument("--cycles", type=int, default=10)
     ap.add_argument("--trigger", choices=("wifi", "peer"), default="wifi")
+    ap.add_argument("--hold-s", type=int, default=0,
+                    help="peer trigger: seconds the tunnel stays up before the "
+                    "peer is removed (150 = past the first rekey)")
     ap.add_argument("--logdir", default="")
     a = ap.parse_args()
 
@@ -187,6 +195,19 @@ def main():
                     run.check(f"c2_{i}_trigger", False, f"{code} {r}")
                     break
             else:
+                if a.hold_s > 0:
+                    # the tunnel through its rekey first: the state the field
+                    # is in whenever a server goes away
+                    print(f"cycle {i}: holding the tunnel {a.hold_s} s", flush=True)
+                    time.sleep(a.hold_s)
+                    code, vv = dut.api("/api/vpn", timeout=5)
+                    held = code == 200 and isinstance(vv, dict) \
+                        and vv.get("state") == "connected" \
+                        and int(vv.get("connects") or 0) == connects
+                    run.check(f"c2_{i}_held_through_rekey", held,
+                              f"{(vv or {}).get('state') if isinstance(vv, dict) else code} "
+                              f"connects {(vv or {}).get('connects') if isinstance(vv, dict) else '?'}")
+                    t0 = time.time()
                 rc, out = ssh(a.pi, f"sudo -n wg set wg-bench peer {dut_pub} remove")
                 if rc != 0:
                     run.check(f"c2_{i}_trigger", False, out.strip()[-80:])

@@ -1,6 +1,6 @@
 # WireGuard torn down while MQTT runs through it, N times
 
-Command: `.\test.ps1 wgcycle` (= `python tools/testbench/vpn/wg_teardown_cycle_bench.py --dut localhost:18083 --dut-ip <ip> --pi rpi001`; by hand: `python tools/testbench/vpn/wg_teardown_cycle_bench.py [--dut-ip 10.42.1.194] [--pi rpi001] [--pi-ip 10.42.1.1] [--cycles 10] [--trigger wifi|peer] [--logdir DIR]`)
+Command: `.\test.ps1 wgcycle` (= `python tools/testbench/vpn/wg_teardown_cycle_bench.py --dut localhost:18083 --dut-ip <ip> --pi rpi001`; by hand: `python tools/testbench/vpn/wg_teardown_cycle_bench.py [--dut-ip 10.42.1.194] [--pi rpi001] [--pi-ip 10.42.1.1] [--cycles 10] [--trigger wifi|peer] [--hold-s N] [--logdir DIR]`)
 
 Needs: DUT on the bench AP + rpi001 (`wg-bench`, the mosquitto on 1883)
 
@@ -19,7 +19,12 @@ that does not exist (`/api/wifi/try`), the station leaves the bench AP for a few
 seconds, `network_up()` goes false and the state task tears the tunnel down at once
 (the uplink-lost path; about 30 s per cycle); `peer` removes the DUT's peer from
 `wg-bench` so the keys expire and "peer silent for 30 s; reconnecting" fires (the
-field's other path; 2 to 4 min per cycle). Each cycle checks `connects` on `/api/vpn`
+field's other path; 2 to 4 min per cycle). `--hold-s N` (2026-11-09, the `peer`
+trigger only) keeps the tunnel up for N seconds first and checks it is still
+connected on the same `connects`, so WireGuard has rekeyed (every 120 s) before the
+peer goes: the state every tunnel older than two minutes is in. `--hold-s 150` is the
+witness of the key that never expired (see the 2026-11-09 records below). Each cycle
+checks `connects` on `/api/vpn`
 grew by one, MQTT is back through the tunnel and `boot_count` did not move; the
 closing checks are the as-found settings (one restart), no unexpected reset, no E line
 of `vpn_manager` / `ip4_routes` / `esp_wireguard` / `mqtt_manager`, the state task's
@@ -68,3 +73,26 @@ comes back with the next serial flash (the EN reset clears the brake's count).
 the tunnel, MQTT back every time, no reboot, no E line, the as-found settings put back with
 one restart; `test-reports/logs/` `wg_cycle_*` of that time). The same stage ran green on the
 thread-check build first (14:01, above).
+
+**2026-11-09 16:40 (the published beta.8, `--trigger peer --hold-s 150 --cycles 1`, by hand):
+FAIL as intended**, the reproduction of the key that never expired on a plain tunnel. The
+tunnel connected in 2 s, MQTT through it, held 150 s on the same `connects` (so WireGuard had
+rekeyed), then the DUT's peer entry was removed on the Pi: the DUT stayed `connected` for the
+whole 300 s the bench waits (`left=False connects 1->1`), the state task's "peer silent" watch
+never fired. The driver's `wireguardif_peer_is_up()` counts the previous keypair, which the
+first rekey fills and nothing destroyed, so a tunnel older than two minutes read as up for as
+long as the device ran: the VPN page said connected with the server gone, and the reconnect
+(which also looks the server's name up again) never came. Log
+`test-reports/logs/2026-11-09_1640_wgcycle_peer_hold_beta8/`.
+
+**2026-11-09 17:22 (the fix: the driver destroys the previous keypair at REJECT_AFTER_TIME,
+ELF `8da296f7c66bb2eb`, the same command): PASS**, `left=True connects 1->2 mqtt=True`, 198 s
+from the removal to the tunnel and MQTT back (the keys expire 180 s after the last handshake,
+30 s of silence, the reconnect), `boot_count` unchanged, no E line, `vpn_state` headroom
+3808 B, internal heap floor 53,424 B. Log
+`test-reports/logs/2026-11-09_1722_wgcycle_peer_hold_fix/`.
+
+**2026-11-09 17:27 (`.	est.ps1 wgcycle` on the same fix image, the release configuration):
+PASS**, 10 of 10 teardowns under the `wifi` trigger, worst cycle 27 s, 213 s in all, MQTT back
+every time, no reboot, no E line, `vpn_state` headroom 3712 B, internal heap floor 53,700 B.
+Report `test-reports/2026-11-09_1727_wgcycle.md`.
