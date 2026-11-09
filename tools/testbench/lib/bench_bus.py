@@ -11,14 +11,40 @@ controller is set to; PCAN scripts take their bitrate as an argument and the
 chip follows its protocol (ATTP).
 
   python bench_bus.py status
+  python bench_bus.py restart                  (the simulator's own reboot forensics)
   python bench_bus.py sim --bitrate 250 [--id-format 29bit] [--enabled 1]
   python bench_bus.py sim --restore            (back to 500k / 11bit / enabled)
 
-As a module: sim_get/sim_set/sim_status, dut_can(). The simulator's REST is
-reachable from the PC only (USB-NCM 192.168.8.1); its settings PUT replaces
-the whole object, hence GET, modify, PUT. A submit reboots it (~20 s). On a
-LAN that uses the same subnet (a router at 192.168.8.1) the requests are
-bound to the simulator's own link: sim_net.py.
+As a module: sim_get/sim_set/sim_status, sim_restart_state/sim_restart_delta,
+dut_can(). The simulator's REST is
+reachable from the PC only (its USB network link, found by sim_net.py); its
+settings PUT replaces the whole object, hence GET, modify, PUT. A submit
+reboots it (about 7 s on its firmware of 2026-11-09, up to 20 s before) and
+puts its supply back to the boot defaults. Until that firmware the boot
+parked the supply off for a moment and the DUT rode through only 9 of 12
+such reboots (a `poweron` reason in its /api/restart/history marked the
+others); since then the boot adopts a running port and the DUT rode through
+20 of 20. Read the DUT's boot count after a sim_set when its state matters
+all the same, and ask the simulator itself whether a boot was planned:
+sim_restart_state() reads its own restart history (that firmware on).
+
+ECU sim v2 (2026-11-09) configures each CAN interface on its own: the HS CAN
+keys are `hs_enabled`, `hs_bitrate_kbps`, `hs_obd11`, `hs_obd29`, `hs_j1939`,
+`hs_uds`, `hs_broadcast`, `hs_dialect` (the first-generation box had one
+`bitrate` / `id_format` / `enabled` set). sim_get() returns the raw settings
+PLUS that legacy view (`bitrate` as a string of kbit/s, `id_format`
+"11bit" / "29bit" / "both", `enabled` = the HS CAN answers), and sim_set()
+takes the legacy names, so the benches written against the first box keep
+working. The MS CAN mirror on DB9 J3 (125 kbit/s) and the other interfaces
+are left alone: they are not on the DUT's bus.
+
+`enabled=False` on ECU sim v2 means "acknowledge, answer nothing": the HS
+node stays up (`hs_enabled` true) and its OBD 11-bit, 29-bit and UDS answers
+go off. The first box's disabled controller kept acknowledging at its last
+bitrate by accident, and the J1939 / WWH / EU-truck legs built on that: the
+PCAN's actor needs an ACK source while a listen-only DUT reads. On v2 a
+really disabled node leaves the bus (verified 2026-11-09), so the trick is
+spelled out here instead.
 """
 import argparse
 import json
@@ -213,20 +239,85 @@ def dut_can(dut):
     return _http(f"http://{dut}/api/can")
 
 
+# ---- the simulator's own reboot forensics -------------------------------------
+
+def sim_restart_state(base=SIM_URL):
+    """ECU sim v2's restart history (GET /api/restart/history, its firmware of
+    2026-11-09 on): the same shape as the DUT's, so a stage can tell a
+    simulator fault from a DUT fault. Returns {'boot_count',
+    'unexpected_resets', 'reason' (this boot's), 'planned', 'parked' (its
+    crash-loop brake left the ECU engines off), 'coredump' (a crash dump sits
+    in its flash), 'crash' (one line about the crash this boot follows, or
+    '')}, or None when it does not answer or its firmware predates the
+    tracker (404)."""
+    try:
+        h = _http(f"{base}/api/restart/history", timeout=8)
+    except (urllib.error.URLError, OSError, ValueError):
+        return None
+    if not isinstance(h, dict) or "boot_count" not in h:
+        return None
+    recs = h.get("records") or []
+    top = recs[0] if recs else {}
+    crash = top.get("crash") if isinstance(top.get("crash"), dict) else None
+    return {"boot_count": h.get("boot_count"),
+            "unexpected_resets": h.get("unexpected_resets"),
+            "reason": top.get("reason"), "planned": bool(top.get("planned")),
+            "parked": (h.get("brake") or {}).get("verdict") not in (None, "normal"),
+            "coredump": bool((h.get("coredump") or {}).get("present")),
+            "crash": crash.get("summary", "") if crash else ""}
+
+
+def sim_restart_delta(before, after):
+    """What the simulator did between two sim_restart_state() readings, as
+    text for a stage's notes, and whether it is a bench fault: ('', False)
+    when nothing happened; a planned reboot count otherwise; a reset nobody
+    asked for, a park or a stored crash dump make it a fault (the stage's
+    verdict then says the bench, not the DUT, failed)."""
+    if not before or not after:
+        return "", False
+    boots = (after["boot_count"] or 0) - (before["boot_count"] or 0)
+    unexpected = (after["unexpected_resets"] or 0) - (before["unexpected_resets"] or 0)
+    if boots < 0:
+        # its PSRAM history started again: a power cycle of the simulator
+        return (f"ECU SIM V2 POWER-CYCLED (boot_count {before['boot_count']} -> "
+                f"{after['boot_count']}): a bench fault, not the DUT's"), True
+    parts = []
+    fault = False
+    if unexpected > 0:
+        parts.append(f"ECU SIM V2 RESET x {unexpected} nobody asked for (reason {after['reason']}"
+                     + (f"; {after['crash']}" if after["crash"] else "") + "): a bench fault, not the DUT's")
+        fault = True
+    elif boots > 0:
+        parts.append(f"ecu_sim rebooted {boots} x (planned)")
+    if after["parked"]:
+        parts.append("ECU SIM V2 PARKED by its crash-loop brake (its ECU engines are off; POST /api/restart)")
+        fault = True
+    if after["coredump"] and not before["coredump"]:
+        parts.append("ECU SIM V2 left a crash dump (GET /api/restart/coredump/raw, then DELETE)")
+        fault = True
+    return "; ".join(parts), fault
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = ap.add_subparsers(dest="what", required=True)
     st = sub.add_parser("status")
     st.add_argument("--dut", default="", help="host[:port] of the DUT API")
+    rs = sub.add_parser("restart", help="the simulator's own reboot forensics")
     sm = sub.add_parser("sim")
     sm.add_argument("--bitrate", choices=("250", "500"))
     sm.add_argument("--id-format", choices=("11bit", "29bit", "both"))
     sm.add_argument("--enabled", choices=("0", "1"))
     sm.add_argument("--restore", action="store_true")
-    for p in (st, sm):
+    for p in (st, rs, sm):
         p.add_argument("--sim", default=SIM_URL)
     a = ap.parse_args()
     sim_net.install(a.sim)
+
+    if a.what == "restart":
+        print("simulator at     :", a.sim)
+        print("simulator restarts:", json.dumps(sim_restart_state(a.sim)))
+        return 0
 
     if a.what == "status":
         print("simulator at     :", a.sim)

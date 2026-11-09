@@ -252,14 +252,71 @@ function Add-Metric { param([string]$Label, [string]$Line)
 # Runs one report row. The body streams its output to the console; it can set
 # $script:note for the report's notes column. A throw = FAIL (run continues -
 # the report records it).
+# ECU sim v2's own reboot forensics (GET /api/restart/history on its firmware
+# of 2026-11-09 on; the same shape as the DUT's): $null when it does not
+# answer or its firmware predates the tracker.
+function Get-SimRestartState { param([string]$Url)
+    if (-not $Url) { return $null }
+    try {
+        $r = Invoke-RestMethod -Uri "$Url/api/restart/history" -TimeoutSec 4 -ErrorAction Stop
+    } catch { return $null }
+    if ($null -eq $r.boot_count) { return $null }
+    $top = $null
+    if ($r.records -and @($r.records).Count -gt 0) { $top = @($r.records)[0] }
+    $crash = ''
+    if ($top -and $top.crash -and $top.crash.summary) { $crash = [string]$top.crash.summary }
+    $parked = $false
+    if ($r.brake -and $r.brake.verdict -and $r.brake.verdict -ne 'normal') { $parked = $true }
+    $dump = $false
+    if ($r.coredump -and $r.coredump.present) { $dump = $true }
+    $reason = ''
+    if ($top) { $reason = [string]$top.reason }
+    return [pscustomobject]@{ BootCount = [int]$r.boot_count; Unexpected = [int]$r.unexpected_resets;
+        Reason = $reason; Parked = $parked; Coredump = $dump; Crash = $crash }
+}
+
 function Invoke-Stage { param([string]$Name, [scriptblock]$Body)
     Write-Host "== $Name ==" -ForegroundColor Cyan
     $sw = [Diagnostics.Stopwatch]::StartNew()
     $script:note = ''
     $script:skipStage = $false   # a body sets this when its FIXTURE is absent
     $status = 'PASS'
+    # the simulator before and after the body: a reset of ECU sim v2 that
+    # nobody asked for, a park of its crash-loop brake or a crash dump left
+    # in its flash is a BENCH fault and fails the stage as such, so the DUT
+    # is never blamed for it (2026-11-09); its planned reboots are noted
+    $simUrl = ''
+    if ($script:bench -and $script:bench.SimTracker) { $simUrl = $script:bench.SimUrl }
+    $simBefore = Get-SimRestartState $simUrl
     try { & $Body | Out-Host }
     catch { $status = 'FAIL'; $script:note = $_.Exception.Message; $script:anyFail = $true }
+    $simAfter = Get-SimRestartState $simUrl
+    if ($simBefore -and $simAfter) {
+        $boots = $simAfter.BootCount - $simBefore.BootCount
+        $unexp = $simAfter.Unexpected - $simBefore.Unexpected
+        $newDump = $simAfter.Coredump -and -not $simBefore.Coredump
+        $simNote = ''
+        if ($boots -lt 0) { $simNote = "ECU SIM V2 POWER-CYCLED (boot_count $($simBefore.BootCount) -> $($simAfter.BootCount)): a bench fault, not the DUT's" }
+        elseif ($unexp -gt 0) {
+            $simNote = "ECU SIM V2 RESET x $unexp nobody asked for (reason $($simAfter.Reason)"
+            if ($simAfter.Crash) { $simNote += "; $($simAfter.Crash)" }
+            $simNote += "): a bench fault, not the DUT's"
+        }
+        elseif ($boots -gt 0) { $simNote = "ecu_sim rebooted $boots x (planned)" }
+        if ($simAfter.Parked) { $simNote += "; ECU SIM V2 PARKED by its crash-loop brake (POST /api/restart on it)" }
+        if ($newDump) { $simNote += "; ECU SIM V2 left a crash dump (GET /api/restart/coredump/raw, then DELETE)" }
+        $simFault = ($boots -lt 0) -or ($unexp -gt 0) -or $simAfter.Parked -or $newDump
+        $simNote = $simNote.TrimStart(';', ' ')
+        if ($simNote) {
+            if ($script:note) { $script:note += '; ' }
+            $script:note += $simNote
+            if ($simFault) {
+                Write-Host "bench: $simNote" -ForegroundColor Yellow
+                if ($status -eq 'PASS') { $status = 'FAIL' }
+                $script:anyFail = $true
+            }
+        }
+    }
     if ($script:skipStage -and $status -eq 'PASS') { $status = 'SKIP' }
     $sw.Stop()
     $secs = [math]::Round($sw.Elapsed.TotalSeconds, 1)
@@ -289,6 +346,11 @@ function Invoke-BenchCheck {
         EcuSim   = @()       # ECU sim v2's debug console port (its USB-C marked debug)
         SimUrl   = ''        # ECU sim v2's REST over the PC's USB network link
         Supply   = ''        # the DUT's supply as the simulator reads it at pin 16
+        SimTracker = $false  # the simulator's firmware has the restart tracker (2026-11-09 on)
+        SimBoots = 0         # its boot count since its power-on
+        SimUnexpected = 0    # its resets nobody asked for
+        SimParked = $false   # its crash-loop brake left its ECU engines off
+        SimCoredump = $false # a crash dump sits in its flash
         PiOk     = $false
         DutOnline = $false
         DutVersion = ''
@@ -345,6 +407,16 @@ function Invoke-BenchCheck {
         if ($supTxt -match 'measured ([\d\.]+) V, (\d+) mA') { $b.Supply = "$($Matches[1]) V $($Matches[2]) mA" }
         if ($supTxt -match 'output OFF') { $b.Supply += ' OUTPUT OFF' }
     } catch {}
+    # the simulator's own reboot forensics (its restart tracker, 2026-11-09
+    # on): a crash of the simulator is a bench fault, and a dump left in its
+    # flash is evidence to fetch before the next crash overwrites it
+    if ($b.SimUrl) {
+        $sr = Get-SimRestartState $b.SimUrl
+        if ($sr) {
+            $b.SimTracker = $true; $b.SimBoots = $sr.BootCount; $b.SimUnexpected = $sr.Unexpected
+            $b.SimParked = $sr.Parked; $b.SimCoredump = $sr.Coredump
+        }
+    }
 
     # console/flash port: the requested -Port, else the UART0 adapter, else the
     # CH344 channel B, else CH342 A
@@ -406,6 +478,11 @@ function Invoke-BenchCheck {
     $dutTxt = if ($b.DutOnline) { "$($b.DutVersion) @ $DutIp" } else { "OFFLINE @ $DutIp" }
     $ecuTxt = if ($b.EcuSim) { $b.EcuSim -join '/' } else { 'none' }
     $simTxt = if ($b.SimUrl) { $b.SimUrl } else { 'NO ANSWER' }
+    if ($b.SimTracker) {
+        $simTxt += "; boots $($b.SimBoots), unexpected $($b.SimUnexpected)"
+        if ($b.SimParked) { $simTxt += ', PARKED' }
+        if ($b.SimCoredump) { $simTxt += ', CRASH DUMP STORED' }
+    } elseif ($b.SimUrl) { $simTxt += '; no restart tracker (its firmware predates 2026-11-09)' }
     $supplyTxt = if ($b.Supply) { $b.Supply } elseif ($b.Ftdi) { "no answer from the simulator; FTDI $($b.Ftdi -join '/') (a legacy OWON?)" } else { 'NO ANSWER' }
     $apTxt = if ($b.P4Serves) { 'P4 (wican-bench-usb)' } elseif ($b.PiOk) { 'Pi radio' } else { 'unknown' }
     if ($b.TwinActive.Count -gt 0) { $apTxt += " + TWIN $($b.TwinActive -join '/')" }
@@ -413,6 +490,12 @@ function Invoke-BenchCheck {
     Write-Host "bench: $wiring; ecu_sim=$simTxt (console $ecuTxt)  supply=$supplyTxt" -ForegroundColor Cyan
     if (-not $b.Supply -and $What -in @('sleep', 'sleepmatrix', 'crashnote', 'logclock', 'sleeptrig', 'release', 'usbdetach', 'habackfill', 'attpstore')) {
         Write-Host "bench: WARNING the DUT's supply (ECU sim v2 /api/power) did not answer: this stage moves or reads it" -ForegroundColor Yellow
+    }
+    if ($b.SimUnexpected -gt 0 -or $b.SimParked -or $b.SimCoredump) {
+        $why = "unexpected $($b.SimUnexpected)"
+        if ($b.SimParked) { $why += ', parked' }
+        if ($b.SimCoredump) { $why += ', a crash dump in its flash' }
+        Write-Host "bench: WARNING ECU sim v2 crashed since its power-on ($why): read its /api/restart/history and fetch /api/restart/coredump/raw before anything erases it" -ForegroundColor Yellow
     }
     $script:conditions += "preflight: $wiring; serial=$serialTxt; dut=$(if ($b.DutOnline) { $b.DutVersion } else { 'offline' }) @ $DutIp; broker=$($b.Broker); ncm=$($b.UsbNcm); ap=$apTxt; ecu_sim=$simTxt (console $ecuTxt); supply=$supplyTxt"
 

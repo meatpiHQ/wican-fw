@@ -18,7 +18,19 @@ online + firmware version, USB-Ethernet adapter presence (`/api/usb`),
 mosquitto on :1883, and since 2026-11-09 ECU sim v2's REST address and the
 DUT's supply as the simulator reads it at its OBD pin 16 (`supply=13.87 V
 49 mA`); a stage that moves or reads the supply gets a yellow warning when
-it did not answer. It also names the simulator's debug console port.
+it did not answer. It also names the simulator's debug console port. Since
+the simulator's firmware of 2026-11-09 the line carries the simulator's own
+restart history too (`boots N, unexpected M`, `PARKED`, `CRASH DUMP
+STORED`, from `GET /api/restart/history` on the simulator) and a yellow
+warning when it crashed since its power-on: fetch `/api/restart/coredump/raw`
+before the next crash overwrites it. **Every stage reads that history before
+and after its body** (`Invoke-Stage`): a reset of the simulator nobody asked
+for, a park of its crash-loop brake (its ECU engines off until `POST
+/api/restart`) or a crash dump left behind FAILS the stage with `ECU SIM V2
+...` in its notes, a bench fault named as such so the DUT is never blamed
+for it; the simulator's planned reboots (a `bench_bus.sim_set`) are noted
+as `ecu_sim rebooted N x (planned)`. By hand: `python
+tools\testbench\lib\bench_bus.py restart`.
 
 **The port detector** behind it is `tools/testbench/detect_ports.py`. Run
 it by hand after re-plugging anything: it prints a role table

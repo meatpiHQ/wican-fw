@@ -35,6 +35,11 @@ The Release Test's `supply_current_awake_band` (30..300 mA since 2026-11-09) is 
 at ECU sim v2's OBD pin 16, the DUT's own current: about 49 mA awake with the PC
 cable on the USB-C (the PC feeds part of the board through it). The first rig's
 supply read 88 to 91 mA there, on a harness it shared with the first simulator box.
+Since the simulator's firmware of 2026-11-09 every stage also reads ECU sim v2's
+own restart history before and after its body: a simulator reset nobody asked for,
+a park of its crash-loop brake or a crash dump left in its flash fails the stage
+with `ECU SIM V2 ...` in its notes, a bench fault named as such so the DUT is never
+blamed for it ([testing/preflight.md](testing/preflight.md)).
 
 **Every run writes a dated summary report to `test-reports\`** (results
 table, performance numbers, DUT conditions, git revision): that folder is
