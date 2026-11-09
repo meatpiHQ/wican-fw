@@ -10,9 +10,13 @@
 #           peer node "betty-peer" (static build, own tun)
 #   DUT:    joins as "wican-pub" via vpn_manager type=tailscale
 #   legs:   register -> relay-only subnet requests through rekey (UDP
-#           blocked before the peer joins) -> unblock -> direct DISCO,
-#           ICMP, HTTP and subnet request -> PSRAM task stacks -> RAM
-#           flat over the soak -> zero errors/faults -> exact restore.
+#           blocked before the peer joins) -> [run only: a second peer
+#           opens a session itself, the DUT's requests to that peer's OWN
+#           address through rekey, both peers away until every session
+#           key expired, the request to the peer's own address again] ->
+#           unblock -> direct DISCO, ICMP, HTTP and subnet request ->
+#           PSRAM task stacks -> RAM flat over the soak -> zero
+#           errors/faults -> exact restore.
 #
 # KEY HYGIENE (same rules as wg_public_soak.sh):
 #   * headscale's noise private key + node db live only on betty; `down`
@@ -102,10 +106,44 @@ print(json.dumps(d))" | $PI "curl -s -o /dev/null -w '%{http_code}' -m 10 \
         -X PUT http://${DUT_IP}/api/settings/data_destinations \
         -H 'Content-Type: application/json' -d @-"
 }
-DD_ROW_DROP="d['destinations']=[r for r in d.get('destinations',[]) if r.get('name')!='tsroute']"
+recv_paths() { # $1 = a path ending: the records the receiver holds for it ("" when it is down)
+    $SRVSSH "curl -s -m 5 'http://127.0.0.1:${RECV_PORT}/__dump?since=0'" 2>/dev/null | python3 -c \
+        "import json,sys; print(sum(1 for x in json.load(sys.stdin) if x.get('path','').endswith('$1')))" 2>/dev/null
+}
+# the peer's-own-address legs (2026-11-09, `run` only; the case of a Home
+# Assistant webhook at HA's tailnet address that times out for ever while
+# the VPN says connected, on beta.8): a second node, betty-peer2, userspace
+# networking (no tun: tailscaled hands a connection to its tailnet address
+# on to the same port of localhost, where the receiver listens). headscale
+# hands out addresses in order from a fresh database (the DUT .1, betty-peer
+# .2), so the second peer's address is known before it joins, which the
+# destination row needs: rows apply at the DUT's restart. The join checks it.
+PEER2_IP=100.64.0.3
+PEER2_SOCKS=127.0.0.1:1055       # the second peer's own requests leave through its SOCKS5 port
+PEER2_FLAGS="--tun=userspace-networking --socks5-server=${PEER2_SOCKS}"
+LAPSE_S="${TS_LAPSE_S:-200}"     # both peers away: past WireGuard's REJECT_AFTER_TIME (180 s)
+tsq2() { $SRVSSH "$BASE/ts/tailscale --socket=/run/tsb2.sock $*"; }
+peer_daemon() { # pid-name state-dir socket port log [flags]: a tailscaled of this rig (its state kept)
+    $SRVSSH "nohup $BASE/ts/tailscaled ${6:-} --state=$BASE/$2 --socket=$3 --port=$4 >> $5 2>&1 < /dev/null &
+        echo \$! > $BASE/$1.pid"
+}
+peer_running() { # $1 = socket: the backend runs (up to 60 s)
+    local end=$((SECONDS+60))
+    while [ $SECONDS -lt $end ]; do
+        $SRVSSH "$BASE/ts/tailscale --socket=$1 status --json 2>/dev/null" | python3 -c \
+            "import json,sys; sys.exit(0 if json.load(sys.stdin).get('BackendState')=='Running' else 1)" 2>/dev/null && return 0
+        sleep 5
+    done
+    return 1
+}
+dd_test() { # $1 = destination row: one delivery now, the DUT's answer
+    dut "-s -m 40 -X POST http://${DUT_IP}/api/destinations/test -H 'Content-Type: application/json' -d '{\"name\":\"$1\"}'" 2>/dev/null
+}
+DD_ROW_DROP="d['destinations']=[r for r in d.get('destinations',[]) if r.get('name') not in ('tsroute','tspeer')]"
 DD_ROW_ADD="${DD_ROW_DROP}
 d['enabled']=True
-d['destinations'].append({'name':'tsroute','type':'http','enabled':False,'url':'http://${SUBNET_IP}:${RECV_PORT}/route','period_s':86400,'auth':'none','auth_token':'','auth_name':'','basic_username':'','basic_password':'','api_key':'','query':'','cert_set':'','car_model':'','retain':True,'full_first':True})"
+for n,u in (('tsroute','http://${SUBNET_IP}:${RECV_PORT}/route'),('tspeer','http://${PEER2_IP}:${RECV_PORT}/peer')):
+    d['destinations'].append({'name':n,'type':'http','enabled':False,'url':u,'period_s':86400,'auth':'none','auth_token':'','auth_name':'','basic_username':'','basic_password':'','api_key':'','query':'','cert_set':'','car_model':'','retain':True,'full_first':True})"
 dut_int_free() { # the DUT's internal RAM free, bytes ("" when unreachable)
     dut "-s -m 6 http://${DUT_IP}/api/status" 2>/dev/null | python3 -c \
         "import json,sys; print(json.load(sys.stdin)['memory']['internal']['free'])" 2>/dev/null
@@ -188,8 +226,9 @@ up|run)
     # Only stop processes whose PID files were written by this rig.
     stop_bench_process headscale || exit 1
     stop_bench_process tailscaled || exit 1
+    stop_bench_process tailscaled2 || exit 1
     $SRVSSH "set -e; umask 077
-        rm -rf /var/lib/headscale /etc/headscale /run/tsb.sock $BASE/tsb_state
+        rm -rf /var/lib/headscale /etc/headscale /run/tsb.sock $BASE/tsb_state /run/tsb2.sock $BASE/tsb2_state
         mkdir -p /etc/headscale /var/lib/headscale /var/run/headscale
         cat > /etc/headscale/config.yaml <<EOF
 server_url: http://${EP}:${HSPORT}
@@ -331,6 +370,21 @@ EOF
     REL=$(tsq "status --json" 2>/dev/null | python3 -c "import json,sys; print(json.load(sys.stdin)['Self'].get('Relay',''))" 2>/dev/null)
     echo "betty peer's home relay: ${REL:-?} (the DUT's own is region 9, dfw, unless the map lacks it)"
 
+    # --- the second peer (2026-11-09, `run` only; see PEER2_IP above): it
+    # joins behind the same UDP drop and stays silent until it opens its
+    # session to the DUT, after the first subnet request below
+    if [ "$1" = "run" ]; then
+        peer_daemon tailscaled2 tsb2_state /run/tsb2.sock 41642 /var/log/tsdb_p2.log "$PEER2_FLAGS"
+        $SRVSSH "sleep 4
+            $BASE/ts/tailscale --socket=/run/tsb2.sock up --login-server http://127.0.0.1:${HSPORT} \
+                --auth-key \"file:$KEYFILE\" --hostname betty-peer2 --accept-dns=false 2>/dev/null"
+        RC=$?
+        check "second peer joined" "$([ "$RC" = "0" ] && echo 1 || echo 0)" "rc=$RC"
+        P2=$(tsq2 "ip -4" 2>/dev/null | head -1)
+        check "second peer holds the address the destination row was staged with" \
+            "$([ "$P2" = "$PEER2_IP" ] && echo 1 || echo 0)" "${P2:-none} (staged $PEER2_IP)"
+    fi
+
     # --- the DERP relay (2026-10-31, issue 1024): the public Tailscale relays
     # over TLS on :443 (the derpmap above). Every handshake failed on v6
     # until the Ed25519 meta certificate was tolerated again; /api/vpn
@@ -370,6 +424,7 @@ for r in json.load(sys.stdin) or []:
     check "subnet route advertised and enabled on headscale" "$(echo "$RL" | grep -qi 'true.*true' && echo 1 || echo 0)" "$RL"
     N0=$(recv_count)
     check "receiver up on betty" "$([ -n "$N0" ] && echo 1 || echo 0)" "records=${N0:-?}"
+    R0=$(recv_paths /route)
     R=0; end=$((SECONDS+120))
     while [ $SECONDS -lt $end ]; do
         V4=$(dut "-s -m 6 http://${DUT_IP}/api/vpn" 2>/dev/null)
@@ -387,6 +442,21 @@ print(r[-1]['peer'] if r else 'none')\"" 2>/dev/null)
     echo "relay-only path: $(tsq status 2>/dev/null | grep -i wican || echo '?')"
     check "relay-only: the peer has no false direct endpoint" \
         "$(tsq status 2>/dev/null | grep -qE 'wican-pub.*relay' && echo 1 || echo 0)"
+    # --- a session the PEER opens (2026-11-09, `run` only): the second peer
+    # asks the DUT for a page through the relay, the way Home Assistant
+    # talks to a WiCAN it reaches over the tailnet. The DUT is the responder
+    # of that session and never asked for it; the warm loop below then sends
+    # the DUT's own requests to that peer's address through it, across the
+    # peer's rekey. That is the state the lapse leg needs: on beta.8 the key
+    # the first rekey left behind never expired and hid the dead session.
+    PEER_LEGS=0
+    if [ "$1" = "run" ] && echo "$T" | grep -q '"ok":true'; then
+        PEER_LEGS=1
+        H2=$($SRVSSH "curl -s -m 45 -o /dev/null -w '%{http_code}' --socks5-hostname $PEER2_SOCKS http://$TSIP/api/status")
+        check "relay-only: the second peer opens a session to the DUT itself (a page through the relay)" \
+            "$([ "$H2" = "200" ] && echo 1 || echo 0)" "code=${H2:-none}"
+        P0=$(recv_paths /peer)
+    fi
     if echo "$T" | grep -q '"ok":true'; then
         # Exercise a warm session through WireGuard's 120 s rekey boundary.
         for n in 1 2 3 4 5; do
@@ -394,11 +464,75 @@ print(r[-1]['peer'] if r else 'none')\"" 2>/dev/null)
             T=$(dut "-s -m 40 -X POST http://${DUT_IP}/api/destinations/test -H 'Content-Type: application/json' -d '{\"name\":\"tsroute\"}'")
             check "relay-only: warm request $n" \
                 "$(echo "$T" | grep -q '\"ok\":true,\"status\":200' && echo 1 || echo 0)" "$T"
+            if [ "$PEER_LEGS" = "1" ]; then
+                T=$(dd_test tspeer)
+                check "relay-only: request $n to the second peer's own address (the session it opened)" \
+                    "$(echo "$T" | grep -q '\"ok\":true,\"status\":200' && echo 1 || echo 0)" "$T"
+            fi
         done
-        N2=$(recv_count)
+        R2=$(recv_paths /route)
         check "relay-only: all six requests arrived exactly once" \
-            "$([ -n "$N2" ] && [ "$((N2 - N0))" -eq 6 ] && echo 1 || echo 0)" \
-            "records ${N0:-?} -> ${N2:-?}"
+            "$([ -n "$R0" ] && [ -n "$R2" ] && [ "$((R2 - R0))" -eq 6 ] && echo 1 || echo 0)" \
+            "records ${R0:-?} -> ${R2:-?}"
+        if [ "$PEER_LEGS" = "1" ]; then
+            P1=$(recv_paths /peer)
+            check "relay-only: the five requests to the second peer's own address arrived exactly once" \
+                "$([ -n "$P0" ] && [ -n "$P1" ] && [ "$((P1 - P0))" -eq 5 ] && echo 1 || echo 0)" \
+                "records ${P0:-?} -> ${P1:-?}"
+        fi
+    fi
+
+    # --- the lapse (2026-11-09, `run` only; the case of a webhook at Home
+    # Assistant's tailnet address that times out for ever while the VPN
+    # says connected). Both peers go away for LAPSE_S, past WireGuard's
+    # REJECT_AFTER_TIME, and the DUT sends them nothing: every session key
+    # on the DUT is dead when the second peer comes back, and that peer
+    # stays silent. The DUT's next request to the peer's OWN address then
+    # has to bring the session up by itself, which takes two things that
+    # beta.8 lacked: the packet must reach the tunnel while its link is down
+    # (the tailnet's own network in ip4_routes: a peer's address used to be
+    # left to lwIP's netif walk, which skips a netif whose link is down, so
+    # the SYN left on the station in clear text), and the key a rekey left
+    # behind must have expired with the session (it kept the peer reading
+    # as up, the want was dropped and nothing ever handshook again; the
+    # failure this leg shows on beta.8). The first peer returns afterwards:
+    # its session, which the DUT had opened, must carry the subnet route
+    # again too.
+    if [ "$PEER_LEGS" = "1" ]; then
+        echo "lapse: both peers away for ${LAPSE_S} s, the DUT silent"
+        stop_bench_process tailscaled || exit 1
+        stop_bench_process tailscaled2 || exit 1
+        sleep "$LAPSE_S"
+        peer_daemon tailscaled2 tsb2_state /run/tsb2.sock 41642 /var/log/tsdb_p2.log "$PEER2_FLAGS"
+        peer_running /run/tsb2.sock
+        check "after the lapse: the second peer is back (silent)" "$([ $? = 0 ] && echo 1 || echo 0)"
+        sleep 15    # its relay connection, before the DUT's first packet for it
+        P1=$(recv_paths /peer)
+        T=$(dd_test tspeer)
+        check "after the lapse: a request to the second peer's own address answers (the DUT opens the session)" \
+            "$(echo "$T" | grep -q '\"ok\":true,\"status\":200' && echo 1 || echo 0)" "$(echo "$T" | head -c 200)"
+        T=$(dd_test tspeer)
+        check "after the lapse: a second request on that session answers" \
+            "$(echo "$T" | grep -q '\"ok\":true,\"status\":200' && echo 1 || echo 0)" "$(echo "$T" | head -c 200)"
+        P2N=$(recv_paths /peer)
+        check "after the lapse: both requests arrived exactly once" \
+            "$([ -n "$P1" ] && [ -n "$P2N" ] && [ "$((P2N - P1))" -eq 2 ] && echo 1 || echo 0)" \
+            "records ${P1:-?} -> ${P2N:-?}"
+        peer_daemon tailscaled tsb_state /run/tsb.sock 41641 /var/log/tsdb.log --verbose=2
+        peer_running /run/tsb.sock
+        check "after the lapse: the first peer is back" "$([ $? = 0 ] && echo 1 || echo 0)"
+        R=0; end=$((SECONDS+90))
+        while [ $SECONDS -lt $end ]; do
+            V4=$(dut "-s -m 6 http://${DUT_IP}/api/vpn" 2>/dev/null)
+            echo "$V4" | grep -q "\"routes\":\[[^]]*\"${SUBNET}\"" && R=1 && break
+            sleep 5
+        done
+        check "after the lapse: the subnet route is listed" "$R" "$(echo "$V4" | sed -n 's/.*\("routes":\[[^]]*\]\).*/\1/p')"
+        sleep 15
+        T=$(dd_test tsroute)
+        check "after the lapse: a request through the subnet route answers" \
+            "$(echo "$T" | grep -q '\"ok\":true,\"status\":200' && echo 1 || echo 0)" "$(echo "$T" | head -c 200)"
+        echo "after the lapse: $(tsq status 2>/dev/null | grep -i wican || echo '?')"
     fi
     # the pass is only worth its name while the drops bit: the OUTPUT rule's
     # packet counter (UDP to the DUT that betty tried to send and could not)
@@ -534,10 +668,11 @@ down)
         rm "$SNAPSHOT/public_ip"
     fi
     stop_bench_process tailscaled || exit 1
+    stop_bench_process tailscaled2 || exit 1
     stop_bench_process headscale || exit 1
     $SRVSSH "
-        rm -rf /var/lib/headscale /etc/headscale $BASE/tsb_state /run/tsb.sock $KEYFILE
-        left=\$(ls /var/lib/headscale /etc/headscale $BASE/tsb_state $KEYFILE 2>/dev/null | wc -l)
+        rm -rf /var/lib/headscale /etc/headscale $BASE/tsb_state /run/tsb.sock $BASE/tsb2_state /run/tsb2.sock $KEYFILE
+        left=\$(ls /var/lib/headscale /etc/headscale $BASE/tsb_state $BASE/tsb2_state $KEYFILE 2>/dev/null | wc -l)
         echo \"betty: control+peer down, state+keys wiped (residue files: \$left)\"" || exit 1
     if [ "$RESTORED" = "1" ] && [ -d "$SNAPSHOT" ]; then
         rm "$SNAPSHOT/vpn_manager.json" "$SNAPSHOT/data_destinations.json"

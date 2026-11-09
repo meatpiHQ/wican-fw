@@ -32,7 +32,23 @@ own region, Sydney for betty, the DUT's home being Dallas), and the pass
 asserts that the peer reports a relay, not a false direct endpoint.
 Five more requests 30 s apart exercise the session beyond WireGuard's
 120 s rekey boundary, all six must answer 200 and arrive exactly once,
-and the OUTPUT drop counter must be above zero. The drops come off,
+and the OUTPUT drop counter must be above zero. **The peer's-own-address
+legs (2026-11-09, `run` only, so `up` and its callers are unchanged):** a
+second node, `betty-peer2` (userspace networking, its own requests through
+its SOCKS5 port; headscale's sequential allocation makes it 100.64.0.3,
+which the staged `tspeer` destination row needs and the join checks),
+joins behind the same UDP drop. After the first subnet request it asks the
+DUT for a page, so it OPENS its session itself, the way Home Assistant
+talks to a WiCAN; during the five warm requests the DUT also sends five
+to that peer's own address (`http://100.64.0.3:8199/peer`), across the
+peer's rekey, all 200 and arriving exactly once. Then the lapse: both
+tailscaled processes are stopped for 200 s (`TS_LAPSE_S`, past WireGuard's
+180 s REJECT_AFTER_TIME) with the DUT sending nothing, the second peer
+comes back and stays silent, and the DUT's request to its own address
+must answer 200, twice, both arriving exactly once: the DUT has to open
+the session itself with no key left and the tunnel's link down. The first
+peer returns, the route must be listed and a subnet request must answer.
+The drops come off,
 then the direct-path legs: disco ping, ICMP and HTTP
 through the tunnel, the DUT's peer surface, the subnet request once more
 over the direct path; **the task stacks (2026-11-01)**: `vpn_state` and
@@ -43,13 +59,56 @@ and faults. `down` restores both original settings documents, submits a
 planned restart and compares the returned documents byte-for-byte with
 the originals. Snapshots under `state/ts-public-<ip>` are gitignored and
 removed only after verification; a failed restore retains them for another
-`down`. The peer, headscale, receiver, alias and disposable keys are removed
+`down`. The peers, headscale, receiver, alias and disposable keys are removed
 from Betty. Processes are stopped by saved PID, and only the bench's tagged
 firewall rules are deleted. `run` tears down from an EXIT trap, and cleanup
 failure fails the stage even if the traffic checks passed.
 
 **Records.**
 
+- **2026-11-09 17:06: TS PUBLIC PASS**, 834.1 s, the fix for a peer's own
+  address and a lapsed session (ELF `8da296f7c66bb2eb`, image 4,075,264 B,
+  448 B more than beta.8). `ip4_routes: 100.64.0.0/10 via wg0` 7.2 s after
+  the start, before any peer. First relay subnet request 200 in 1080 ms
+  (`session ... up after 291 ms`), five warm 282/271/270/484/498 ms, six
+  arrived exactly once. The second peer opened its session (a page, 200);
+  the DUT's five requests to its own address 316/273/543/590/319 ms, five
+  arrived exactly once. Both peers away 200 s: 24 handshake tries to the
+  first peer (the DUT had opened that session, one every 5 s once its key
+  had expired), 5 to the second (the driver's own rekey window) and then
+  none. The second peer back and silent: the request to its own address
+  **200 in 1023 ms** (`session wanted with betty-peer2 (lwIP traffic):
+  handshake through the relay`, `up after 566 ms`), the next 308 ms, both
+  arrived exactly once; the subnet request after the first peer's return
+  491 ms. A raw-socket watch on the Pi's bench interface over the whole run
+  (`tools/testbench/vpn/ts_leak_sniff.py`, by hand): **0** packets from the DUT to
+  100.64.0.0/10 in clear text. 260 UDP packets dropped, the peer on a
+  relay. Direct recovery: DISCO 79 ms, ICMP 8/8, HTTP 200, subnet 83 ms.
+  `vpn_state`/`ml_wg_mgr` headroom 3864/4012 B, internal RAM 86,523 to
+  86,523 B, zero errors/faults, settings restored byte-for-byte, betty
+  clean. Report `test-reports/2026-11-09_1706_tspublic.md`, console
+  `test-reports/logs/2026-11-09_1706_tspublic/`, the watch
+  `test-reports/logs/2026-11-09_1707_tspublic_fix/leak_sniff.txt`.
+- 2026-11-09 16:49: **TS PUBLIC FAIL as intended**, a diagnostic build with
+  the key ageing in and the tunnel's own network left out of `ip4_routes`
+  (ELF `0e28cee2792e1ede`): everything green up to the lapse, then both
+  requests to the second peer's own address `ESP_ERR_HTTP_CONNECT` after
+  6 s, none arrived, no `session wanted` line, and the watch on the Pi
+  caught the reason: **10 TCP SYNs `10.42.1.75 -> 100.64.0.3:8199` in clear
+  text on the bench AP** (five per request). The leg guards the route by
+  itself. Report `test-reports/2026-11-09_1649_tspublic.md`, the watch
+  `test-reports/logs/2026-11-09_1650_tspublic_mutation/leak_sniff.txt`.
+- 2026-11-09 16:23: **TS PUBLIC FAIL as intended on the published beta.8**
+  (ELF `493e4b0ef3d8c8f4`), the reproduction the new legs were written for:
+  the second peer opened its session, five DUT requests to its own address
+  answered (326 to 590 ms) across the rekey; after 200 s away both requests
+  `ESP_ERR_HTTP_CONNECT` after 6 s, none arrived, no `session wanted` and no
+  `WG INIT` for that peer (the driver had tried five times in its own rekey
+  window, 155 to 180 s after the last handshake, and stopped: the stale
+  previous keypair read as a session), while
+  the subnet request to the first peer, whose session the DUT had opened,
+  answered in 310 ms. The three E lines of each failed request also fail
+  the zero-error check. Report `test-reports/2026-11-09_1623_tspublic.md`.
 - **2026-11-03 15:57: TS PUBLIC PASS**, 559.9 s, final non-diagnostic ELF
   `8b3f8068ef52c85b`, image 4,052,432 B. Same-transport DISCO replies fixed
   the false `direct 127.3.3.40:5` endpoint reproduced at 15:28 and 15:36.
@@ -119,6 +178,21 @@ the first-request premise. The fixture row is disabled: the Test endpoint
 explicitly supports disabled rows and is the only sender during this bench.
 Do not edit the running shell script; Bash may resume reading it at an old
 byte offset. A failed snapshot before any settings change aborts safely.
+The peer's-own-address legs (2026-11-09): the `tspeer` row is staged with
+100.64.0.3 before the second peer exists (rows apply at the DUT's restart),
+so the join order on a fresh headscale is part of the bench, and a
+different address fails its own check; the second peer's SOCKS5 port is
+127.0.0.1:1055 on betty; a failed request to the peer leaves the HTTP
+client's E lines, so the zero-error check fails with it; `relay-only path`
+prints every node (the user column matches the grep). The lapse must stay
+inside the relay-only pass: with direct UDP open the DUT's own DISCO probe
+of the returned peer starts a one-shot handshake and heals the session
+without any lwIP traffic, which hides the defect. To see where a failing
+request's packets went, copy `tools/testbench/vpn/ts_leak_sniff.py` to the
+Pi and run `sudo python3 ts_leak_sniff.py <seconds> <dut-ip> usb0` beside
+the stage (the Pi has no tcpdump): it prints every packet from the DUT to
+100.64.0.0/10 that shows in clear text on the bench AP's interface, and
+their count at the end.
 
 `WG_BENCH_DNS` (env, never committed) makes the control URL a
 name so the DNS path runs too. The DUT's egress may be the dongle's LTE (the
