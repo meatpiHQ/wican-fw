@@ -43,6 +43,7 @@
             "type": "object",
             "propertyNames": {
               "enum": [
+                "AC_CHARGE_POWER",
                 "AC_COMP",
                 "AC_C_C",
                 "AC_C_V",
@@ -56,6 +57,8 @@
                 "CAPACITOR",
                 "CHARGER_CONNECTED",
                 "CHARGER_DC_PWR",
+                "CHARGER_STATE",
+                "CHARGE_PLUG_STATE",
                 "CHARGING",
                 "CHARGING_DC",
                 "CHARGING_R_A",
@@ -285,6 +288,7 @@
                 "HV_C_V_MAX_NO",
                 "HV_C_V_MIN",
                 "HV_C_V_MIN_NO",
+                "HV_ENERGY_AVAILABLE",
                 "HV_H_1",
                 "HV_KWH_R",
                 "HV_RELAY",
@@ -335,6 +339,7 @@
                 "KWH_CHARGED",
                 "KWH_DISCHARGED",
                 "LV_A",
+                "LV_DCDC_STATE",
                 "LV_SOC",
                 "LV_V",
                 "MAF",

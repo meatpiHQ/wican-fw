@@ -1,53 +1,118 @@
 {
   "car_model": "Renault Zoe R110/R90",
-  "init": "ATSP6;",
+  "init": "ATSP6;ATST96;",
   "pids": [
     {
       "pid": "222002",
+      "pid_init": "ATSH7E4;ATCRA7EC;",
       "parameters": {
         "SOC": "[B4:B5]*0.02"
       }
     },
     {
       "pid": "223206",
+      "pid_init": "ATSH7E4;ATCRA7EC;",
       "parameters": {
         "SOH": "B4"
       }
     },
     {
       "pid": "223451",
+      "pid_init": "ATSH7E4;ATCRA7EC;",
       "parameters": {
         "RANGE": "[B4:B5]"
       }
     },
     {
       "pid": "222006",
+      "pid_init": "ATSH7E4;ATCRA7EC;",
       "parameters": {
         "ODOMETER": "[B4:B6]"
       }
     },
     {
       "pid": "222004",
+      "pid_init": "ATSH7E4;ATCRA7EC;",
       "parameters": {
-        "HV_V": "[B3:B4] * 0.5"
+        "HV_V": "[B4:B5] * 0.5"
       }
     },
     {
       "pid": "223204",
+      "pid_init": "ATSH7E4;ATCRA7EC;",
       "parameters": {
         "HV_A": "[B4:B5] * 0.25 - 8192"
       }
     },
     {
       "pid": "22339D",
+      "pid_init": "ATSH7E4;ATCRA7EC;",
       "parameters": {
-        "CHARGER_CONNECTED": "B3 & 1"
+        "CHARGER_CONNECTED": "B4 & 1"
       }
     },
     {
       "pid": "222001",
+      "pid_init": "ATSH7E4;ATCRA7EC;",
       "parameters": {
         "BATT_TEMP": "B4 - 40"
+      }
+    },
+    {
+      "pid": "22200E",
+      "pid_init": "ATSH7E4;ATCRA7EC;",
+      "parameters": {
+        "IGNITION": "B4 & 1"
+      }
+    },
+    {
+      "pid": "2233EA",
+      "pid_init": "ATSH7E4;ATCRA7EC;",
+      "parameters": {
+        "CHARGE_PLUG_STATE": "B4 & 7"
+      }
+    },
+    {
+      "pid": "22302A",
+      "pid_init": "ATSH7E4;ATCRA7EC;",
+      "parameters": {
+        "LV_DCDC_STATE": "B4 & 3"
+      }
+    },
+    {
+      "pid": "22320C",
+      "pid_init": "ATSH7E4;ATCRA7EC;",
+      "parameters": {
+        "HV_ENERGY_AVAILABLE": "[B4:B5] * 0.005"
+      }
+    },
+    {
+      "pid": "2233B1",
+      "pid_init": "ATSH7E4;ATCRA7EC;",
+      "parameters": {
+        "OUTSIDE_TEMPERATURE": "B4 - 40"
+      }
+    },
+    {
+      "pid": "225063",
+      "pid_init": "ATSH792;ATFCSH792;ATFCSD300000;ATFCSM1;ATCRA793;",
+      "parameters": {
+        "CHARGER_STATE": "B4"
+      }
+    },
+    {
+      "pid": "22504A",
+      "pid_init": "ATSH792;ATFCSH792;ATFCSD300000;ATFCSM1;ATCRA793;",
+      "parameters": {
+        "AC_CHARGE_POWER": "[B4:B5] - 20000"
+      }
+    },
+    {
+      "pid": "2103",
+      "pid_init": "ATSH79B;ATFCSH79B;ATFCSD300000;ATFCSM1;ATCRA7BB;",
+      "parameters": {
+        "HV_C_V_MAX": "(B15*256+B17)*0.01",
+        "HV_C_V_MIN": "[B18:B19]*0.01"
       }
     }
   ]
