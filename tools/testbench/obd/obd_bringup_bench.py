@@ -36,14 +36,28 @@ Two bring-up changes of 2026-11-02 (Ali), both after that night's benches
                 reads 0F:95 N; pp_restores 1; one more planned restart: no
                 restoring line, pp_restores 0 (the guard is quiet on an
                 intact chip), the bring-up under 1500 ms
+  check first   (2026-11-11) AutoPID on, switched on for the leg when it was
+                off: 4 planned restarts. The bring-up ends in the start-up's
+                chip firmware check (`chip reports: ...`, one VTVERS under an
+                EXCLUSIVE claim). It used to take that claim behind the done
+                bit and raced the first requester the bit woke, AutoPID's
+                first contact: the claim is polled, not queued, so the check
+                got the chip seconds later ("bring-up done in" 3.6 to 4.6 s)
+                or, past its 5 s wait, not at all in that boot. Now the claim
+                is taken before the bit. In every boot: AutoPID asked the
+                chip, the ring reads `chip reports:`, and "bring-up done in"
+                stays under 1500 ms. AutoPID is put back as found
   end           the chip ready, 0F:95 N, the restarts counted
 
 usage: obd_bringup_bench.py [--dut localhost:18081] [--restarts N] [--skip-pp]
+                            [--skip-order]
   run on the PC with the DUT through test.ps1's ssh tunnel (the obdbringup
   stage). Needs: the branch firmware on the DUT, the chip up, the /ws/obd
-  bridge (br_obd, the canonical bench settings). 5 planned restarts with the
-  defaults, about 3 min; the chip's PP 0F takes 3 EEPROM writes (the fault,
-  the restore's SV + ON); --skip-pp drops that leg. AutoPID is left as found.
+  bridge (br_obd, the canonical bench settings). 11 planned restarts with the
+  defaults when AutoPID is off as found (9 when it is on), about 5 min; the
+  chip's PP 0F takes 3 EEPROM writes (the fault, the restore's SV + ON);
+  --skip-pp drops that leg, --skip-order the check-first leg. AutoPID is as
+  found at the end.
 """
 import json
 import os
@@ -67,6 +81,8 @@ DUT_HP = arg("--dut", "localhost:18081")
 DUT = "http://" + DUT_HP
 RESTARTS = int(arg("--restarts", "3"))
 SKIP_PP = "--skip-pp" in ARGS
+SKIP_ORDER = "--skip-order" in ARGS
+ORDER_RESTARTS = 4
 BRINGUP_MAX_MS = 1500
 CHECKS = []
 PLANNED = 0
@@ -126,28 +142,50 @@ def wait_dut(limit):
     return False
 
 
-def wait_ready(limit):
-    """GET /api/obd_chip once the chip is ready and unclaimed"""
+def wait_ready(limit, unclaimed=True):
+    """GET /api/obd_chip once the chip is ready and unclaimed (with AutoPID
+    polling the chip is claimed for a request most of the time: ready only)"""
     t0 = time.time()
     oc = {}
     while time.time() - t0 < limit:
         oc = chip()
-        if oc.get("ready") and oc.get("claim") == "none":
+        if oc.get("ready") and (not unclaimed or oc.get("claim") == "none"):
             return oc
         time.sleep(0.5)
     return oc
 
 
-def restart():
+def restart(unclaimed=True):
     """a planned restart; back with the chip ready"""
     global PLANNED
     http(DUT, "/api/logs/ring", "DELETE")
     st, _ = http(DUT, "/api/restart", "POST", {})
     PLANNED += 1
     ok = st == 200 and wait_dut(60)
-    oc = wait_ready(40) if ok else {}
+    oc = wait_ready(40, unclaimed) if ok else {}
     time.sleep(2)  # the bring-up's last lines into the ring
     return ok and bool(oc.get("ready")), oc
+
+
+def set_autopid(enabled):
+    """autopid.enabled staged and submitted (one planned restart when it
+    changes); True = the unit is back with the chip ready"""
+    global PLANNED
+    st, cur = http(DUT, "/api/settings/autopid")
+    if st != 200 or not isinstance(cur, dict):
+        return False
+    cur = {k: v for k, v in cur.items() if k not in ("degraded", "pending_reboot")}
+    if bool(cur.get("enabled")) == enabled:
+        return True
+    cur["enabled"] = enabled
+    st, r = http(DUT, "/api/settings/autopid", "PUT", cur)
+    if st != 200:
+        return False
+    http(DUT, "/api/settings/submit", "POST", {}, timeout=15)
+    PLANNED += 1
+    if not wait_dut(60):
+        return False
+    return bool(wait_ready(40, unclaimed=not enabled).get("ready"))
 
 
 def ring_lines():
@@ -327,6 +365,41 @@ def leg_pp0f():
           ms is not None and ms < BRINGUP_MAX_MS, "%s ms" % ms)
 
 
+def leg_check_first(was_on):
+    """AutoPID polling: the start-up's firmware check has the chip before
+    AutoPID's first request, in every boot"""
+    if not was_on:
+        check("check first: AutoPID switched on for the leg", set_autopid(True))
+    times = []
+    for i in range(ORDER_RESTARTS):
+        label = "check first, restart %d of %d" % (i + 1, ORDER_RESTARTS)
+        ok, oc = restart(unclaimed=False)
+        check("%s: the DUT back with the chip ready" % label, ok, json.dumps({k: oc.get(k) for k in ("ready", "claim")}))
+        # behind AutoPID's first contact the line came up to 4.6 s after the
+        # warm start: wait for it, so that a late check is reported as late
+        lines, ms = [], None
+        t0 = time.time()
+        while time.time() - t0 < 12 and ms is None:
+            lines = ring_lines()
+            ms = bringup_ms(lines)
+            if ms is None:
+                time.sleep(1)
+        st, ap = http(DUT, "/api/autopid")
+        stats = ap.get("stats", {}) if isinstance(ap, dict) else {}
+        asked = (stats.get("polls_ok") or 0) + (stats.get("polls_failed") or 0)
+        check("%s: AutoPID asked the chip in this boot" % label, asked > 0,
+              "polls_ok %s, polls_failed %s" % (stats.get("polls_ok"), stats.get("polls_failed")))
+        check("%s: the ring reads 'chip reports:' (the check ran)" % label,
+              any("chip reports:" in l for l in lines), [l[-70:] for l in lines[-4:]])
+        check("%s: bring-up done in under %d ms (the check was first)" % (label, BRINGUP_MAX_MS),
+              ms is not None and ms < BRINGUP_MAX_MS, "%s ms" % ms)
+        if ms is not None:
+            times.append(ms)
+    print("%s check first, bring-up times with AutoPID on: %s ms" % (now(), " ".join(str(t) for t in times)), flush=True)
+    if not was_on:
+        check("check first: AutoPID off again, as found", set_autopid(False))
+
+
 def main():
     print("%s OBD BRINGUP bench on %s (%d restarts%s)" % (now(), DUT, RESTARTS, ", PP 0F leg skipped" if SKIP_PP else ""), flush=True)
     autopid_on = leg_as_found()
@@ -339,7 +412,9 @@ def main():
         print("%s bring-up times: %s ms" % (now(), " ".join(str(t) for t in times)), flush=True)
     if not SKIP_PP:
         leg_pp0f()
-    oc = wait_ready(20)
+    if not SKIP_ORDER:
+        leg_check_first(autopid_on)
+    oc = wait_ready(20, unclaimed=not autopid_on)
     v, f = pp0f()
     check("the chip ready at the end, 0F:95 N", oc.get("ready") and v == "95" and f == "N", "0F:%s %s" % (v, f))
     print("%s planned restarts: %d" % (now(), PLANNED), flush=True)

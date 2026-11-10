@@ -28,6 +28,13 @@ its answer was lost, the second call of the boot wrote again, `Expected 1 Was
 40 tests PASS (`test-reports/2026-11-10_1353_host_obd_chip.md`), autopid 148
 PASS after it (`2026-11-10_1413_host_autopid.md`).
 
+**2026-11-11:** the claim model's EXCLUSIVE holder may claim again (the
+bring-up task takes the claim before it opens its gate; `testing/obdbringup.md`,
+the check-first leg). `test_claim_exclusive_holder_claims_again`: the holder is
+let in a second time, another task and a request are refused meanwhile, one
+release frees the chip and no holder is remembered. `obd_chip` 41 tests PASS
+(`test-reports/2026-11-11_0906_host_obd_chip.md`).
+
 **2026-11-10, evening:** what the chip may learn (`autopid`,
 `ap_veh_chip_learns`: only a protocol a standard request answered on, never
 the protocol of a car confirmed by its profile). 149 tests PASS
