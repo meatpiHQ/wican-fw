@@ -110,7 +110,23 @@ static int64_t elm327_autopid_last_cmd_time = 0;
  *   2 chars ("17" of a spaced 29-bit id)  -> skip the 9 remaining id chars
  *   3 chars ("7E8", 11-bit)               -> no extra skip
  *   8 chars ("17FE007B", one-token 29-bit)-> no extra skip
- *   1 char  ("6", J1939 "prio PGN SA")    -> skip the 9 chars of "0FEEE 80 " */
+ *   1 char  ("6", J1939 "prio PGN SA")    -> skip the 9 chars of "0FEEE 80 "
+ *
+ * Exception: J1850 and K-line (ELM protocols 1 to 5) print a 3-byte header as
+ * three spaced tokens ("48 6B 11 41 0C 1A F8"). Its first token is 2 chars long
+ * like a spaced 29-bit CAN id, so the heuristic alone skips 9 chars and drops
+ * the positive-response byte (0x41): autopid_validate_response_for_cmd() then
+ * rejects every K-line answer. For these protocols only the second header byte
+ * is skipped, as before v4.51p: the third one (source address) takes the place
+ * of the ISO-TP PCI byte, so expressions index the same bytes as on CAN
+ * (B1 = 0x41, B2 = PID, B3 = A). See autopid_kline_protocol(). */
+
+/* True for the ELM protocols whose header is 3 spaced bytes: SAE J1850 PWM/VPW
+ * (1, 2), ISO 9141-2 (3), ISO 14230-4 KWP slow/fast init (4, 5). */
+static bool autopid_kline_protocol(int32_t protocol_number)
+{
+    return protocol_number >= 1 && protocol_number <= 5;
+}
 
 static double autopid_round_parameter_value(double value)
 {
@@ -2165,6 +2181,22 @@ void parse_elm327_response(char *buffer, response_t *response)
         {
             int header_length = data_start - frame;
             char header_str[9] = {0};
+            // A header is 1 to 8 hex digits. Anything else is a status line
+            // printed before the answer, such as "BUS INIT: ...OK" on the
+            // first K-line request: parsing it as data would shift every byte
+            // index (and an over-long first word would overflow header_str).
+            bool header_is_hex = header_length >= 1 && header_length <= 8;
+            for (int h = 0; header_is_hex && h < header_length; h++)
+            {
+                header_is_hex = isxdigit((unsigned char)frame[h]);
+            }
+            if (!header_is_hex)
+            {
+                ESP_LOGD(TAG, "Not a data line, skipping frame: %s", frame);
+                frame_count--;
+                frame = strtok(NULL, "\r\n");
+                continue;
+            }
             strncpy(header_str, frame, header_length);
             uint32_t current_header = strtoul(header_str, NULL, 16);
             ESP_LOGD(TAG, "Frame %d header: 0x%lX (length: %d)", frame_count, current_header, header_length);
@@ -2193,8 +2225,15 @@ void parse_elm327_response(char *buffer, response_t *response)
             // which the first token's length identifies unambiguously — the
             // protocol number cannot (the MIC3624 prints a 29-bit id as four
             // spaced byte tokens, the internal engine as one 8-char token; see
-            // the note at the top of this file). Always use the heuristic.
-            switch (header_length)
+            // the note at the top of this file). Always use the heuristic,
+            // except for J1850 / K-line ("48 6B 11 41 0C ..."): skip only the
+            // second header byte, as before v4.51p.
+            if (header_length == 2 && autopid_kline_protocol(current_protocol_number))
+            {
+                data_start += 3;
+                ESP_LOGD(TAG, "J1850/K-line header: skipping 3 chars");
+            }
+            else switch (header_length)
             {
             case 1:  // J1939 "6 0FEEE 80 <data>" — skip "0FEEE 80 "
             case 2:  // spaced 29-bit id "17 FE 00 7B <data>" — skip "FE 00 7B "
@@ -3772,6 +3811,14 @@ static void autopid_task(void *pvParameters)
             else
                 snprintf(early_proto_cmd, sizeof(early_proto_cmd), "ATTP%02lX\r", v);
             have_early_proto_cmd = true;
+            // Record J1850 / K-line protocols like the Auto branch does:
+            // parse_elm327_response() needs them to strip the 3-byte header.
+            // CAN protocols are left as before (send_can_filter_cmd() and the
+            // test endpoints would otherwise switch 11/29-bit on their own).
+            if (autopid_kline_protocol((int32_t)v))
+            {
+                autopid_set_protocol_number((int32_t)v);
+            }
             ESP_LOGI(TAG, "Protocol is fixed: %s (early cmd: %s)", autopid_config->std_ecu_protocol, early_proto_cmd);
         }
         else
