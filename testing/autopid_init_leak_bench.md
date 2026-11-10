@@ -11,3 +11,5 @@ Moved from the `TESTING.md` test-kinds table on 2026-10-31 (the row's detail cel
 **Reproduced before the fix (2026-10-20):** nine standard rows frozen from the second cycle on (0 advances in 4 cycles), `polls_failed` +18, 27 service-01 requests at the gateway's address against 10 on 7DF, the standard row's transcript `> 010C` / `< 7F 01 11` (v6 refuses to decode it, the legacy firmware read it as RPM 68.25); PASS after it
 
 **2026-11-10 17:49, regression for the baseline's undo moving into every prelude of the firmware's own (`send_prelude_clean()`, the image `00ed81be...` of `testing/profile_protocol_bench.md`): `AUTOPID INIT LEAK PASS`, 22 checks, 0 failed.** The standard row's transcript still restores the baseline first (`ATSH7DF`, `ATCRA`, `ATCEA`, `ATFCSM0`) and answers `41 0C` (RPM 800) behind the custom row.
+
+**2026-11-10 22:32, regression for the poller forgetting the row it sent last when the tables are replaced, and for first contact's walk (the image `36ce9508...` of `testing/profile_protocol_bench.md`): `AUTOPID INIT LEAK PASS`, 22 checks, 0 failed.**

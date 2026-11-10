@@ -39,3 +39,5 @@ Not covered here, by construction: the lost answer. A real chip answers its `ATS
 - **The detection makes the second car current.** The restore activates the unit's own car again (`POST /api/autopid/vehicles/<key>/activate`), which puts its tables back; the bench compares them.
 - `stored_protocol` is the bring-up's read: an app that wrote the store later in the boot would not show until the next start. The as-found check compares it with a reset over the bridge and fails on such a drift, which is information.
 - With `--write` a run cut short between the flip and the way back leaves the store on the other protocol. The firmware works the same (it sets the protocol itself at every start); to put the store back, one `ATSP<p>` through the wire probe (`POST /api/obd_chip/probe {"kind":"probe","cmd":"ATSP6"}`, one write).
+
+**2026-11-10 22:32, regression for that evening's autopid changes (the image `36ce9508...` of `testing/profile_protocol_bench.md`), without `--write`: `PROTOCOL SAVE PASS`, 15 checks, 0 failed, no chip write.**

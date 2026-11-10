@@ -28,12 +28,29 @@ row. The unit's own car is never touched.
              and read the VIN (a row's own flow control, ATFCSH / ATFCSM1,
              used to stay in effect under the job: the VIN's reply stopped
              after its first frame and the job failed, "no ECU response")
+  pinned     no car is current and only rows that pin the OTHER protocol are
+             polled (a profile loaded by hand, or a stored protocol that was
+             silent at boot), the car's standard requests on the protocol
+             the chip holds. A restart: first contact must still find the
+             car by itself and store it on the protocol its standard
+             requests answer on (the identity check used to take the chip's
+             current protocol, the row's pin, for what the search found and
+             asked where the car does not answer: no identity that boot)
+  swap       the tables replaced by ONE row while ONE other row was being
+             polled, three times (ATSP7, ATSP6, ATSP7): every poll answered
+             behind each swap (the runner knows the row it sent last by its
+             index, and a reload of the tables did not reset that: the new
+             row went out without its own init, for good when it is the only
+             one)
   byprofile  the car answers no standard request (the simulator's 0100 and
              0902 silenced) and the Quick Setup's probe confirms it by the
              profile, whose first protocol is the OTHER one: the car is
              stored on the profile's protocol and NOTHING is saved to the
              chip (the save takes only a protocol a standard request
-             answered on). The profile's rows poll right, a restart reads
+             answered on). The request that confirms it is the profile's
+             FIRST one, whose reply carries a 29-bit id that is not a
+             legislated one (the probe used to read such a reply as data and
+             passed over it). The profile's rows poll right, a restart reads
              the same store
   write      (--write: TWO store writes, the flip and the way back) the
              car's standard requests on the other protocol: ONE ATSP at the
@@ -44,13 +61,13 @@ row. The unit's own car is never touched.
              tables and AutoPID settings as found, the simulator on its own
              profile and settings, the chip's store as found
 
-usage: profile_protocol_bench.py [--dut localhost:18081] [--write] [--only flip,byprofile,write]
+usage: profile_protocol_bench.py [--dut localhost:18081] [--write] [--only flip,pinned,swap,byprofile,write]
   run on the PC with the DUT through an ssh tunnel (`ssh -N -L
   18081:<dut>:80 rpi001`) and ECU sim v2 at its own address (lib/sim_net.py).
 Needs: the firmware on the DUT, the chip up with 6 in its store, ECU sim v2
 on the bus at 500 kbit/s, the /ws/obd bridge. Without --write: no write of
-the chip, three planned restarts, about 8 min. With it: two store writes,
-four more restarts, about 14 min.
+the chip, six planned restarts, about 7 min. With it: two store writes,
+four more restarts, about 10 min.
 """
 import json
 import os
@@ -375,8 +392,33 @@ def attach(key, order, std):
     return tbl, want
 
 
-def window(label, secs, want, proto):
-    """`secs` of polling: the values, the counters, the chip's memory guard"""
+def scan_result(js):
+    """the result document of the detection run `js` reports ({} when the
+    stored one is another run's; the two stamps are taken a moment apart)"""
+    st, res = http("/api/autopid/std_scan/result")
+    if isinstance(res, dict) and isinstance(js.get("ts"), (int, float)) and \
+            abs(res.get("ts", 0) - js["ts"]) <= 5:
+        return res
+    return {}
+
+
+def bench_car_current(held, keep, label):
+    """the bench's car detected and current (its standard requests on the
+    protocol the chip holds); staged from scratch when it is not"""
+    if vehicles().get("current") == VIN2:
+        return
+    check("%s: the bench's cars forgotten" % label, forget(keep))
+    own_car_current(keep)
+    check("%s: the simulator plays the bench's car on %s" % (label, FORMAT[held]), sim_car(FORMAT[held]))
+    check("%s: AutoPID on, a planned restart" % label,
+          apply_settings({"enabled": True, "std_enabled": True, "specific_enabled": True, "custom_enabled": True}))
+    check("%s: the unknown car is detected at first contact, without a request" % label, detected_by_itself(VIN2))
+
+
+def window(label, secs, want, proto, per_poll=True):
+    """`secs` of polling: the values, the counters, the chip's memory guard.
+    `per_poll` False = a table of one row: its init, and the ATM0 ahead of
+    its switch, go out once and not with every poll"""
     time.sleep(4)                       # a detection, an app or a boot just ended
     a0 = autopid()
     g0 = guard()
@@ -399,7 +441,7 @@ def window(label, secs, want, proto):
     check("%s: nothing saved, refused or held; %d ATM0 for %d polls; the store reads %s" % (
         label, switches, ok_n, g1.get("stored_protocol")),
         quiet and not g1.get("switch_owed") and digit(g1.get("stored_protocol", "")) == proto and
-        switches >= ok_n // max(rows, 1), (g0, g1))
+        (not per_poll or switches >= ok_n // max(rows, 1)), (g0, g1))
     errs = [ln for ln in ring() if re.match(r"^E[ (]", ln)]
     check("%s: no E line in the log ring" % label, not errs, errs[:3])
 
@@ -446,12 +488,53 @@ def leg_flip(held, keep):
     tbl, want = attach(VIN2, ["7", "6", "7", "6"], False)
     time.sleep(8)
     js = detect()
-    st, res = http("/api/autopid/std_scan/result")
-    res = res if isinstance(res, dict) else {}
-    check("a detection run with only the profile's rows live: done, the VIN read (%s)" % (res.get("vin") if res.get("ts") == js.get("ts") else js.get("error")),
-          js.get("status") == "done" and res.get("vin") == VIN2 and res.get("ts") == js.get("ts"), json.dumps(js)[:200])
+    res = scan_result(js)
+    check("a detection run with only the profile's rows live: done, the VIN read (%s)" % (res.get("vin") or js.get("error")),
+          js.get("status") == "done" and res.get("vin") == VIN2, json.dumps(js)[:200])
     ring_show("detection ", 1)
     window("only the profile's rows", 20, want, held)
+
+
+def leg_pinned(held, other, keep):
+    print("== pinned: no car current, only rows that pin ATSP%s are polled; the car's standard requests live on %s ==" % (other, held), flush=True)
+    bench_car_current(held, keep, "pinned")
+    check("the simulator answers the bench's car's standard requests", sim_car(FORMAT[held]))
+    tbl, want = attach(VIN2, [other, other], False)
+    st, r = http("/api/autopid/vehicles/" + VIN2, "DELETE")
+    v = vehicles()
+    st2, cfg = http("/api/autopid/config", timeout=30)
+    names = [p.get("name") for p in cfg.get("pids", [])] if isinstance(cfg, dict) else []
+    check("the car forgotten: no car current, its two ATSP%s rows stay live" % other,
+          st in (200, 204) and not v.get("current") and car(VIN2) is None and names == [p["name"] for p in tbl["pids"]],
+          (st, v.get("current"), names))
+    g0 = guard()
+    check("a planned restart", restart())
+    found = detected_by_itself(VIN2, 90)
+    ring_show("vehicle identity", 4)
+    ring_show("contact: a vehicle answers", 2)
+    check("first contact identified the car by itself while only rows pinned on %s answered" % other, found)
+    c = car(VIN2) or {}
+    g = guard()
+    say("the car: %s; guard %s" % (json.dumps({k: c.get(k) for k in ("key", "name", "protocol", "chip_protocol", "confirmed_by")}), g))
+    check("the car is stored on protocol %s, where its standard requests answer; nothing saved (the chip holds it)" % held,
+          c.get("protocol") == held and c.get("chip_protocol") == held and c.get("confirmed_by") == "obd" and
+          g.get("protocol_saves") == 0 and digit(g.get("stored_protocol", "")) == held and
+          digit(g0.get("stored_protocol", "")) == held, (c.get("protocol"), c.get("chip_protocol"), c.get("confirmed_by"), g))
+    tbl, want = attach(VIN2, [other, other], False)
+    window("pinned, the car known", 20, want, held)
+
+
+def leg_swap(held, other, keep):
+    print("== swap: the tables replaced by ONE row while ONE other row was being polled ==", flush=True)
+    bench_car_current(held, keep, "swap")
+    check("the simulator answers the bench's car's standard requests", sim_car(FORMAT[held]))
+    # a table of one row sends the row's init once, and the runner knows
+    # "the row I sent last" by its index: index 0 before the swap and after it
+    for label, order in (("one row on ATSP%s" % other, [other]),
+                         ("replaced by one row on ATSP%s" % held, [held]),
+                         ("replaced by the row on ATSP%s again" % other, [other])):
+        tbl, want = attach(VIN2, order, False)
+        window("swap, " + label, 10, want, held, per_poll=False)
 
 
 def leg_byprofile(held, other, keep):
@@ -479,6 +562,10 @@ def leg_byprofile(held, other, keep):
     check("the probe confirmed the car by its profile (a new car, on the profile's protocol %s)" % other,
           js.get("status") == "done" and key not in before and c.get("confirmed_by") == "profile" and
           c.get("protocol") == other, (json.dumps(js)[:160], key, c.get("confirmed_by"), c.get("protocol")))
+    res = scan_result(js)
+    check("the request that confirmed it is the profile's first one, %s on ATSP%s (a reply with the 29-bit id %s)" % (
+        rows[0][1], other, re.search(r"ATCRA([0-9A-F]{8})", rows[0][2]).group(1)),
+        re.sub(r"\s+", "", str(res.get("probe_answered", ""))).upper() == rows[0][1].upper(), res.get("probe_answered"))
     check("the profile's protocol was NOT saved to the chip (protocol_saves +0, the store reads %s)" % held,
           g1.get("protocol_saves", 0) == g0.get("protocol_saves", 0) and digit(g1.get("stored_protocol", "")) == held,
           (g0, g1))
@@ -559,6 +646,10 @@ def main():
     try:
         if not ONLY or "flip" in ONLY:
             leg_flip(held, keep)
+        if not ONLY or "pinned" in ONLY:
+            leg_pinned(held, other, keep)
+        if not ONLY or "swap" in ONLY:
+            leg_swap(held, other, keep)
         if not ONLY or "byprofile" in ONLY:
             leg_byprofile(held, other, keep)
         if WRITE and (not ONLY or "write" in ONLY):

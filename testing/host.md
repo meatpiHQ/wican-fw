@@ -40,3 +40,5 @@ production DISCO pong module with transport, RNG and NaCl test doubles:
 same-transport replies, exact UDP source, frame encoding, invalid addresses,
 crypto and send failures, and no cross-transport fallback. Report:
 `test-reports/2026-11-03_1549_host_microlink.md`.
+
+**2026-11-10, night:** two rules of that evening's autopid changes (`ap_veh_dpn_is_search`: the chip's current protocol is its search's result only while no row of the tables pinned one; `ap_chain_reply_hint`: what a chain tells the reply parser, carried from chain to chain). 151 tests PASS (`test-reports/2026-11-10_2214_host_autopid.md`); the reproductions are the device bench's (`testing/profile_protocol_bench.md`).
