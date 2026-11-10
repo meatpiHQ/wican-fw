@@ -656,7 +656,7 @@
       const streaming = !!job && el < ms; const restarting = !!job && !d.updateFail && el >= ms && el < ms + 1000; const lifted = !!job && !d.updateFail && el >= ms;
       const chip22 = !!d.chip22 && !lifted;
       return J({ ready: !down && !restarting, claim: streaming ? "exclusive" : "none", client_idle_ms: 4294967295, baud: down ? 0 : 2000000,
-        eeprom_guard: { rewrites: 0, blocked: 0, protocol_saves: 0, memory_off: 1 },
+        eeprom_guard: { rewrites: 0, blocked: 0, protocol_saves: 0, memory_off: 1, app_resets: 0, hidden_bytes: 0, pp_restores: 0, memory_refused: 0, requests_held: 0, switch_owed: false, protocol_kept: 0, stored_protocol: "6" },
         uart: { rx_bytes: 18, rx_chunks: 1, rx_max_chunk: 18, rx_overflows: 0, rx_buffered: down ? 34 : 0, tx_bytes: 212 },
         fw: { builtin: "V2.3.24", current: "V2.3.22, V2.3.24", chip: down ? "" : (chip22 ? "MIC3624 V2.3.22" : "MIC3624 V2.3.24"),
           outdated: !down && chip22,

@@ -21,6 +21,19 @@ reset (ATZ) is the protocol the chip comes back on.
                 have stepped once per switch word in the transcript. On an
                 image without the fix this leg reads <other>: the
                 reproduction.
+  refused ATM0  (--skip-refused drops it) fail closed, 2026-11-10: the memory
+                function switched ON on the bare wire, two bytes without a CR
+                left in the chip's line buffer through /ws/obd (an app's
+                unfinished word), then the engine's switch as the first word
+                of a test-a-PID call. The chip reads the driver's ATM0 as
+                `XXATM0` and answers `?`. The switch must NOT go out: the call
+                not ok, the transcript naming both refusals, memory_refused
+                and requests_held +1, a switch owed, five bytes on the wire
+                (the ATM0 alone), the store as found, and the next call
+                sending the prelude again with nothing owed. On an image
+                without the change the switch goes out with the memory
+                function ON and the store reads <other>: the reproduction
+                (two store writes, the flip and the restore)
   bring-up      a planned restart; memory_off reads 1 (the bring-up's ATM0);
                 then the app path's own switch over /ws/obd (ATTP<other> +
                 0100 answered, no ATM0 from the driver on that path) and the
@@ -44,7 +57,8 @@ reset (ATZ) is the protocol the chip comes back on.
                 as found, AutoPID back on when the bench switched it off
 
 usage: attp_store_bench.py [--dut localhost:18081] [--sim http://10.8.8.1]
-                           [--skip-bringup] [--skip-canary] [--psu auto]
+                           [--skip-refused] [--skip-bringup] [--skip-canary]
+                           [--psu auto]
   run on the PC with the DUT through test.ps1's ssh tunnel (the attpstore
   stage) and the simulator at its NCM address (lib/sim_net.py binds the
   requests to the simulator's own link). The simulator reboots at every id
@@ -75,6 +89,7 @@ def arg(name, default):
 DUT_HP = arg("--dut", "localhost:18081")
 DUT = "http://" + DUT_HP
 SIM = arg("--sim", bench_bus.SIM_URL)
+SKIP_REFUSED = "--skip-refused" in ARGS
 SKIP_BRINGUP = "--skip-bringup" in ARGS
 SKIP_CANARY = "--skip-canary" in ARGS
 PSU = arg("--psu", "")
@@ -121,6 +136,11 @@ def chip():
 
 def guard():
     return chip().get("eeprom_guard", {})
+
+
+def tx_bytes():
+    """the bytes the driver wrote to the chip since the boot"""
+    return chip().get("uart", {}).get("tx_bytes", 0)
 
 
 def wait_dut(limit):
@@ -196,12 +216,16 @@ def proto_digit(dpn):
     return s
 
 
+STORE_RAW = {"text": ""}    # the last store read in the chip's own words (`6`, `A6`)
+
+
 def store_read(e):
     """the stored protocol: the chip reset by ATZ comes back on it. Leaves
     the echo off and the memory function ON (the reset's default)."""
     banner = e.cmd("ATZ", wait_s=3.0)
     e.cmd("ATE0")
     dpn = e.cmd("ATDPN")
+    STORE_RAW["text"] = reply_of(dpn).replace("ATDPN", "").strip()
     return proto_digit(dpn), banner
 
 
@@ -272,6 +296,57 @@ def test_switch(other):
     return st, r, lines, switches
 
 
+def test_call(body):
+    """one test-a-PID call: the status, the answer and the transcript's lines"""
+    st, r = http(DUT, "/api/autopid/test", "POST", body, timeout=30)
+    tr = r.get("transcript", "") if isinstance(r, dict) else ""
+    lines = [ln.strip() for ln in str(tr).replace("\r", "\n").split("\n") if ln.strip()]
+    return st, r, lines
+
+
+def refused_leg(e, as_found, other, closed, covered):
+    """the refused ATM0 (see the file header). Returns nothing; the store is
+    put back when the image let the switch through."""
+    print("== the refused ATM0: an app's bytes in the chip's line buffer, then the engine's switch ==", flush=True)
+    if not closed:
+        print("%s image WITHOUT the fail-closed change (no memory_refused): the switch is expected to go out and write (the reproduction)" % now(), flush=True)
+    check("the simulator on the other id format", sim_format_to(other))
+    # steady first: the baseline out, nothing moved, so the next call's first word is its own
+    test_call({"cmd": "ATRV"})
+    st, r, lines = test_call({"cmd": "ATRV"})
+    words = [ln for ln in lines if ln.startswith(">")]
+    check("the test route is steady: a call without an init sends its word alone", st == 200 and len(words) == 1 and "ATRV" in words[0], words)
+    check("the memory function ON, on the bare wire (probe ATM1)", memory_on_unguarded())
+    e.drain()
+    e.ws.send(b"XX", e.opcode)      # no CR: the bytes stay in the chip's line buffer
+    time.sleep(0.3)
+    e.drain()
+    g1, t1 = guard(), tx_bytes()
+    st, r, lines = test_call({"cmd": "0100", "init": "ATSP" + other})
+    time.sleep(0.3)
+    seen = b"".join(p for _, p in e.ws.pump()).decode(errors="replace").replace("\r", " ")
+    g2, t2 = guard(), tx_bytes()
+    for ln in lines:
+        print("    " + ln, flush=True)
+    words = [ln for ln in lines if ln.startswith(">")]
+    check("the switch was the call's first word (the ATM0 ahead of it met the junk)", bool(words) and ("TP" + other) in words[0].replace(" ", "").upper(), words)
+    check("the chip answered ? to the driver's ATM0 and memory_off did not step", seen.lstrip().startswith("?") and g2.get("memory_off") == g1.get("memory_off"), (seen[:60], g1.get("memory_off"), g2.get("memory_off")))
+    if closed:
+        ok = isinstance(r, dict) and r.get("ok")
+        check("the call is not ok and the transcript names both refusals (the switch, then the request)", st == 200 and not ok and any("did not acknowledge ATM0" in ln for ln in lines) and any("a protocol switch is owed" in ln for ln in lines), (st, ok, lines))
+        check("memory_refused +1, requests_held +1, a switch owed", g2.get("memory_refused", 0) - g1.get("memory_refused", 0) == 1 and g2.get("requests_held", 0) - g1.get("requests_held", 0) == 1 and g2.get("switch_owed") is True, (g1, g2))
+        check("five bytes went over the wire: the ATM0 alone, neither the switch nor the request", t2 - t1 == 5, "tx_bytes +%d" % (t2 - t1))
+    got, _ = store_read(e)
+    moved = not check("the refused ATM0 did not let the switch write the store (ATDPN after ATZ = %s as found)" % as_found, got == as_found, "reads %s" % got)
+    if moved:
+        restore_store(e, as_found, "the refused ATM0", covered)
+    if closed:
+        st, r, lines = test_call({"cmd": "ATRV"})
+        g3 = guard()
+        words = [ln.replace(" ", "").upper() for ln in lines if ln.startswith(">")]
+        check("the next call sends the prelude again (its switch behind an acknowledged ATM0) and nothing is owed", any("ATTP" in w for w in words) and g3.get("switch_owed") is False and g3.get("memory_off", 0) > g2.get("memory_off", 0), (words, g3))
+
+
 def main():
     print("%s ATTP store bench: DUT %s, simulator %s" % (now(), DUT, SIM), flush=True)
     st, info = http(DUT, "/api/info")
@@ -287,6 +362,7 @@ def main():
     g0 = guard()
     fixed = "memory_off" in g0
     covered = "app_resets" in g0
+    closed = "memory_refused" in g0
     print("%s guard counters as found: %s" % (now(), g0), flush=True)
     print("%s image %s" % (now(), "CARRIES the fix (memory_off present)" if fixed else
                            "WITHOUT the fix: the engine and bring-up legs are expected to write (the reproduction)"), flush=True)
@@ -323,6 +399,13 @@ def main():
         sys.exit(1)
     other = "7" if as_found == "6" else "6"
     print("%s store as found %s (%s), the flip target %s (%s)" % (now(), as_found, FORMAT[as_found], other, FORMAT[other]), flush=True)
+    store_text = STORE_RAW["text"]
+    if "stored_protocol" in g0:
+        # the read-back of 2026-11-10: the bring-up reads the store (ATDPN
+        # right after the chip's reset) and the save writes only when the
+        # chip holds something else
+        check("the stored protocol the bring-up read is the one a reset shows (%r)" % store_text,
+              g0.get("stored_protocol") == store_text, (g0.get("stored_protocol"), store_text))
 
     # ---- an app's reset: a warm start, the ATM0 hidden, nothing shifted ----
     if covered:
@@ -370,6 +453,14 @@ def main():
     if moved:
         restore_store(e, as_found, "the engine's switch", covered)
 
+    # ---- the refused ATM0 (fail closed) ----
+    if SKIP_REFUSED:
+        print("(--skip-refused: the refused ATM0 is not exercised)", flush=True)
+    elif not covered:
+        print("(an image without app_resets: the refused ATM0 leg needs the store read's ATZ covered, not exercised)", flush=True)
+    else:
+        refused_leg(e, as_found, other, closed, covered)
+
     # ---- the bring-up's ATM0 ----
     if not SKIP_BRINGUP:
         print("== the bring-up: a planned restart, then the app path's own switch ==", flush=True)
@@ -382,6 +473,9 @@ def main():
         gb = guard()
         if fixed:
             check("the bring-up sent one ATM0 and the chip took it (memory_off 1)", gb.get("memory_off") == 1, gb)
+        if "stored_protocol" in gb:
+            check("the bring-up after the restart read the same store (%r), no save sent" % store_text,
+                  gb.get("stored_protocol") == store_text and gb.get("protocol_saves") == 0, gb)
         e = ElmWs()
         check("the simulator still on the other id format", sim_format_to(other))
         r1 = e.cmd("ATTP" + other)
