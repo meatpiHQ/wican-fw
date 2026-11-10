@@ -38,12 +38,14 @@ The reset makes the snapshot an app session like any other: it ends the
 session the chip had, and AutoPID, when it is on, sends its prelude again
 afterwards. Run it between legs, not inside one.
 
-A long answer can arrive short: the device's chip UART loses bytes now and
-then on an output of 500 bytes and more (its hardware FIFO overflows; the
-device counts it in /api/obd_chip `uart.rx_overflows` and logs `rx overflow
-(fifo) - input flushed`; found with this tool on 2026-11-11, 3 of 24 long
-reads). So every word is read with that counter on both sides, and read again
-when it moved; the snapshot says how often that happened (`reread`).
+A long answer could arrive short: until the driver's change of 2026-11-11
+the device's chip UART lost bytes now and then on an output of 250 bytes and
+more (its hardware FIFO ran over; the device counts it in /api/obd_chip
+`uart.rx_overflows` and logs `rx overflow (fifo) - input flushed`; found with
+this tool, 3 of 24 long reads; the bench for it is chip_uart_burst_bench.py).
+Every word is still read with that counter on both sides, and read again when
+it moved, for an image before that change; the snapshot says how often that
+happened (`reread`).
 
 usage: chip_nvm.py snapshot [--dut localhost:18081] [--out FILE]
        chip_nvm.py diff A.json [B.json] [--dut localhost:18081]
@@ -130,11 +132,16 @@ class Chip:
             frames = self.ws.pump()
             for _, payload in frames:
                 buf += payload
-            if b">" in buf:
+            # the prompt is a `>` at the start of a line with nothing behind
+            # it; a `>` inside a line is text (STSLCS: `VL_WAKE: OFF, >13.20V
+            # FOR 1 s`; until 2026-11-11 this took the first `>` for the end
+            # and that answer lost its last two lines)
+            if buf == b">" or buf.endswith((b"\r>", b"\n>")):
+                buf = buf[:-1]
                 break
             if not frames:
                 time.sleep(0.02)
-        text_out = buf.decode(errors="replace").split(">")[0]
+        text_out = buf.decode(errors="replace")
         lines = [ln.strip() for ln in text_out.replace("\n", "\r").split("\r")]
         return " | ".join(ln for ln in lines if ln)
 

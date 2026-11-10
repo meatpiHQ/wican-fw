@@ -239,17 +239,33 @@ def main():
              f"{seq_arg} --raw /tmp/atma_raw.bin"],
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     sender = None
+    early = []
     if SOURCE == "pcan":
-        time.sleep(2.5)  # capture init + ATMA armed
+        # The capture prints ARMED once ATMA is out. A fixed 2.5 s stood
+        # here until 2026-11-11: ssh and python on the Pi took 3.0 s that
+        # day, the first 0.5 s of every flood (1252 frames at 2500/s, 1948
+        # at 4000/s) went past a chip that was not monitoring yet, and the
+        # exactly-N check failed with no gap, no drop and no overflow.
+        armed = False
+        while True:
+            line = proc.stdout.readline()
+            if not line:
+                break            # the capture ended before it armed
+            if line.strip() == "ARMED":
+                armed = True
+                break
+            early.append(line)
+        check("the capture armed the monitor before the first frame", armed)
+        time.sleep(0.3)          # ATMA through the bridge and into the chip
         sender = PcanSender()
         sender.start()
         sender.join()
-    out = proc.communicate()[0]
+    out = "".join(early) + proc.communicate()[0]
     res = {}
     for line in out.splitlines():
         if line.startswith("RESULT "):
             res = json.loads(line[len("RESULT "):])
-        else:
+        elif line.strip() != "ARMED":
             print("   pi: " + line)
     time.sleep(1.0)
     after = counters() if not SERIAL else {}

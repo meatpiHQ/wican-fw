@@ -112,6 +112,7 @@ def main():
 
     # ATMA: no prompt comes back until the stop byte
     s.send(b"ATMA\r")
+    print("ARMED", flush=True)   # the flood bench starts its sender on this
     t0 = time.time()
     chunks = []
     total = 0
