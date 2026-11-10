@@ -62,6 +62,15 @@ Legs (bus / DUT setting):
                                 250 reads it): parked as unreadable although
                                 the chip's own unanswered requests sound the
                                 same; polling resumes when the traffic stops
+   c5  250k live / Automatic, nothing standard answers (the simulator only
+                                acknowledges: a J1939 truck's bus as the chip
+                                sees it); a detection that names a car
+                                profile pinned on protocol 6, as the Quick
+                                Setup sends it: the profile's protocol and
+                                requests stay off the bus, the guard counts
+                                the refusal and the job says why. Until
+                                2026-11-10 the job's profile probe did not
+                                ask the guard
   restore: the simulator, the vehicle store's protocol and every setting as
   found.
 
@@ -69,7 +78,7 @@ Run on the PC (IDF venv python: python-can + the PCAN on the DUT's bus, the
 simulator's REST over its USB network link, the DUT's HTTP through the tunnel):
   python can_autobaud_bench.py [dut host[:port]] [--sim http://10.8.8.1]
         [--pcan PCAN_USBBUS1] [--fps 200] [--window 8] [--only n1,c3,...]
-Takes about 9 minutes (18 DUT restarts, 2 simulator restarts).
+Takes about 10 minutes (19 DUT restarts, 3 simulator restarts).
 
 The simulator cannot leave the bus (its CAN controller survives a software
 restart and keeps acknowledging at its last bitrate, "enabled": false or
@@ -84,6 +93,7 @@ import sys
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 import can
@@ -117,11 +127,17 @@ while i < len(args):
 BASE = "http://" + DUT
 
 ALL_LEGS = ["c0", "n1", "n2", "n3", "n4", "n5", "n6", "n7", "n8", "n9", "n10",
-            "n11", "n12", "n13", "c1", "c2", "c3", "c4"]
+            "n11", "n12", "n13", "c1", "c2", "c3", "c4", "c5"]
 LEG_BUS = {"c0": 500, "n1": 500, "n2": 500, "n3": 500, "n4": 500, "n5": 500,
            "n6": 250, "n7": 250, "n8": 250, "n9": 250, "n10": 250,
            "n11": 250, "n12": 250, "n13": 250, "c1": 250, "c2": 250, "c3": 250,
-           "c4": 250}
+           "c4": 250, "c5": 250}
+# c5: a car profile as the Quick Setup names it with a detection, pinned on
+# a 500 kbit/s protocol (its init, and a request's own init)
+PROFILE_500 = {"profile": "Bench: a car at 500 kbit/s", "name": "Bench 500",
+               "protocol": "6", "init": "ATSP6;ATAT1;",
+               "cmds": [{"cmd": "2101", "init": "ATSP6;ATSH7E4;"}, "220101",
+                        {"cmd": "22F190", "init": "ATSH7E0;"}]}
 # n11: the adapter's bitrates in the order the node does NOT try them, the
 # bus's own last (the simulator, at 250k, acknowledges there again)
 WALK_RATES = [125, 1000, 100, 83, 95, 33, 500, 250]
@@ -978,6 +994,73 @@ def leg_c4(wire):
     wire.open(250)
 
 
+def leg_c5(wire):
+    print("--- c5: bus 250k live, nothing standard answers; a detection that "
+          "names a car profile pinned on protocol 6", flush=True)
+    # the simulator acknowledges and answers nothing; the bus has no ACK
+    # source while it restarts, so the adapter is quiet meanwhile
+    wire.traffic(0)
+    time.sleep(0.3)
+    bench_bus.sim_set(bitrate=250, enabled=False, base=SIM)
+    wire.traffic(FPS)
+    apply({"can_manager": CAN_OFF,
+           "autopid": {"enabled": True, "std_protocol": "0",
+                       "dtc_enabled": False}}, fresh=True)
+    ap, ok, took = autopid_wait(
+        lambda a: a.get("bus_guard", {}).get("bus") == "live"
+        and a.get("bus_guard", {}).get("bus_kbps") == 250, 30)
+    check("c5_bus_read", ok, f"{guard(ap)} after {took:.1f} s")
+    # the chip's search with nobody answering leaves the bus alone
+    bus_healthy(wire, "c5_before_the_job")
+    v0 = get("/api/autopid/vehicles")
+    keys0 = [e.get("key") for e in v0.get("vehicles", [])]
+    refused0 = autopid().get("bus_guard", {}).get("refused", 0)
+    t0 = time.time()
+    code, r = api("/api/autopid/vehicles/detect", "POST", PROFILE_500)
+    check("c5_job_started", code == 202, f"HTTP {code}: {r}")
+    st = {}
+    end = time.time() + 90
+    while time.time() < end:
+        code, st = api("/api/autopid/std_scan", timeout=6)
+        if code == 200 and isinstance(st, dict) \
+                and st.get("status") in ("done", "failed"):
+            break
+        time.sleep(1)
+    time.sleep(1)
+    t1 = time.time()
+    e = wire.errors(t0, t1)
+    flows, text = wire.flows(t0, t1)
+    metric("c5_error_frames", e)
+    check("c5_wire", e == 0 and flows,
+          f"{e} error frames {wire.error_span(t0, t1)}, {text}")
+    g = autopid().get("bus_guard", {})
+    why = g.get("refused_reason", "")
+    check("c5_profile_refused", g.get("refused", 0) > refused0
+          and "profile" in why and "250" in why,
+          f"refused {refused0} -> {g.get('refused', 0)}: {why}")
+    # a network the job only heard may make it "done" (the adapter's frames
+    # read as a J1939 source); a job that found nothing must say why
+    check("c5_job_says_why", st.get("status") == "done"
+          or ("profile" in str(st.get("error", ""))
+              and "250" in str(st.get("error", ""))),
+          json.dumps(st)[:200])
+    # the store as before the leg (such a network would be a new vehicle)
+    for ent in get("/api/autopid/vehicles").get("vehicles", []):
+        if ent.get("key") not in keys0:
+            code, _ = api("/api/autopid/vehicles/"
+                          + urllib.parse.quote(ent["key"], safe=""), "DELETE")
+            print(f"c5: forgot {ent.get('key')} ({ent.get('name')}): {code}")
+    if v0.get("current") \
+            and get("/api/autopid/vehicles").get("current") != v0["current"]:
+        api(f"/api/autopid/vehicles/{v0['current']}/activate", "POST", {})
+    v1 = get("/api/autopid/vehicles")
+    check("c5_store_as_before",
+          [x.get("key") for x in v1.get("vehicles", [])] == keys0
+          and v1.get("current") == v0.get("current"),
+          f"current {v1.get('current')}, "
+          f"{[x.get('key') for x in v1.get('vehicles', [])]}")
+
+
 # ---- the run -----------------------------------------------------------------------------
 
 def to_bus(wire, kbit, live):
@@ -1076,6 +1159,8 @@ def main():
                 leg_c3(wire)
             elif leg == "c4":
                 leg_c4(wire)
+            elif leg == "c5":
+                leg_c5(wire)
             seen_e |= set(own_e_lines())
             done += 1
             print(f"PROGRESS {done}/{len(legs)}", flush=True)

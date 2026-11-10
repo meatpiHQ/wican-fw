@@ -42,3 +42,5 @@ crypto and send failures, and no cross-transport fallback. Report:
 `test-reports/2026-11-03_1549_host_microlink.md`.
 
 **2026-11-10, night:** two rules of that evening's autopid changes (`ap_veh_dpn_is_search`: the chip's current protocol is its search's result only while no row of the tables pinned one; `ap_chain_reply_hint`: what a chain tells the reply parser, carried from chain to chain). 151 tests PASS (`test-reports/2026-11-10_2214_host_autopid.md`); the reproductions are the device bench's (`testing/profile_protocol_bench.md`).
+
+**2026-11-10, late:** the profile probe's chains before the bus guard (`autopid`, `test_guard_the_profile_probes_chains`: the prelude of the profile's protocol is judged like a chain, refused on a live bus at another bit rate and on an unreadable one, sent on the bus's own protocols, on a silent bus and for K-line / J1850; the sentence the job hands on). 152 tests PASS (`test-reports/2026-11-10_2308_host_autopid.md`); the reproduction is the device bench's (`testing/autobaud.md`, leg `c5`).
