@@ -1190,7 +1190,7 @@
     }
     if (method === "POST" && path === "/api/autopid/group") { if (body && typeof body.enabled === "boolean") state.groupOn = body.enabled; return J({ ok: true }); }
     if (method === "POST" && path === "/api/settings/submit") return J({ reboot: false });
-    if (method === "POST" && path === "/api/restart") { Object.values(S).forEach((x) => { x.pending = false; }); return J({ ok: true }); }
+    if (method === "POST" && path === "/api/restart") { state.restarts = (state.restarts || 0) + 1; Object.values(S).forEach((x) => { x.pending = false; }); return J({ ok: true }); }
     if (method === "POST" && path === "/api/faults/clear") { S.__faults = []; return J({ cleared: true }); }
     if (method === "POST" && path === "/api/vpn/keygen") return J({ public_key: "MockPubKey000000000000000000000000000000000=" });
     if (method === "POST" && path === "/api/autopid/dtc/scan") return J({ started: true }, 202);

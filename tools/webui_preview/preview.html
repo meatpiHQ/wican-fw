@@ -3304,7 +3304,7 @@
     }
     if (method === "POST" && path === "/api/autopid/group") { if (body && typeof body.enabled === "boolean") state.groupOn = body.enabled; return J({ ok: true }); }
     if (method === "POST" && path === "/api/settings/submit") return J({ reboot: false });
-    if (method === "POST" && path === "/api/restart") { Object.values(S).forEach((x) => { x.pending = false; }); return J({ ok: true }); }
+    if (method === "POST" && path === "/api/restart") { state.restarts = (state.restarts || 0) + 1; Object.values(S).forEach((x) => { x.pending = false; }); return J({ ok: true }); }
     if (method === "POST" && path === "/api/faults/clear") { S.__faults = []; return J({ cleared: true }); }
     if (method === "POST" && path === "/api/vpn/keygen") return J({ public_key: "MockPubKey000000000000000000000000000000000=" });
     if (method === "POST" && path === "/api/autopid/dtc/scan") return J({ started: true }, 202);
@@ -3633,13 +3633,47 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--primary);outline-of
 .conn-pill.offline .cdot{background:var(--danger);box-shadow:0 0 0 3px var(--danger-tint);animation:none}
 .conn-pill.reboot .cdot{background:var(--warning);box-shadow:0 0 0 3px var(--warning-tint)}
 .conn-pill .cid{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--text)}
-.conn-pill .cbar{width:1px;height:13px;background:var(--border-strong)}
+.conn-pill .cbar{width:1px;height:13px;flex:none;background:var(--border-strong)}
+.conn-pill #cp-faults{flex:none;white-space:nowrap}
 .conn-pill .cip{font-family:var(--mono);font-size:12px;color:var(--text-2)}
 .conn-pill .cusb{font-family:var(--mono);font-size:12px;color:var(--text-2);white-space:nowrap}
 .conn-pill .cusb b{font-weight:700;color:var(--text)}.conn-pill .cusb .ok{color:var(--success)}.conn-pill .cusb .warn{color:var(--warning)}
 .conn-pill .cusb[hidden],.conn-pill .cbar[hidden]{display:none}
 .conn-pill .ctag{font-size:10px;font-weight:700;color:var(--text-3);letter-spacing:.04em;
   padding:1px 5px;background:var(--surface-3);border-radius:4px}
+/* the car's name (2026-11-10): a first line inside the pill, above the id
+   and the address. Inside, not beside: with the sleep warning and pending
+   changes showing, the header has no spare width at 1024 px (every phone),
+   and a second line costs none. Click = the rename popover; the new name is
+   staged into Submit Changes like a setting. */
+.conn-pill{position:relative}
+.conn-pill .cmain{display:flex;flex-direction:column;gap:1px;min-width:0}
+.conn-pill .cline{display:flex;align-items:center;gap:9px}
+.conn-pill .cname{display:inline-flex;align-items:center;gap:6px;align-self:flex-start;max-width:100%;min-width:0;padding:0;
+  border:none;background:none;color:var(--text);font-size:13.5px;font-weight:700;line-height:18px;cursor:pointer}
+.conn-pill .cname[hidden]{display:none}
+.conn-pill .cname .t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:210px}
+.conn-pill .cname.staged .t{font-style:italic;color:var(--text-2)}
+.conn-pill .cname svg{width:11px;height:11px;flex:none;color:var(--text-2)}
+.conn-pill .cname .cnew{flex:none;padding:0 7px;border-radius:20px;background:var(--warning-tint);color:var(--warning);font-size:10.5px;line-height:16px}
+.conn-pill .cname .cnew[hidden]{display:none}
+.conn-pill.named{gap:12px;padding:4px 13px 5px 12px}
+.conn-pill.named .cline{gap:7px}
+.conn-pill.named .cid,.conn-pill.named .cip,.conn-pill.named .cusb{font-size:11px;line-height:15px}
+.conn-pill.named .cid{font-weight:400;color:var(--text-2)}
+.conn-pill.named .cbar{height:10px}
+.conn-pill.named .ctag{font-size:9px;line-height:12px;padding:0 4px}
+.cname-pop{position:absolute;top:calc(100% + 8px);left:-1px;z-index:40;width:348px;max-width:calc(100vw - 28px);padding:16px;
+  display:flex;flex-direction:column;gap:12px;background:var(--surface);border:1px solid var(--border-strong);border-radius:12px;
+  box-shadow:var(--shadow-lg);font-size:13px;color:var(--text)}
+.cname-pop .hd{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.cname-pop label{font-size:12px;font-weight:700;color:var(--text-2)}
+.cname-pop .cnt{font-family:var(--mono);font-size:11px;color:var(--text-2)}
+.cname-pop p{margin:0;font-size:12px;line-height:1.45;color:var(--text-2)}
+.cname-pop dl{margin:0;display:grid;grid-template-columns:max-content 1fr;gap:5px 16px;padding:10px 12px;background:var(--surface-2);
+  border:1px solid var(--border);border-radius:9px;font-size:12.5px}
+.cname-pop dt{font-weight:600;color:var(--text-2)}.cname-pop dd{margin:0}
+.cname-pop .acts{display:flex;justify-content:flex-end;gap:8px}
 .hspacer{flex:1}
 .hbtn{width:36px;height:36px;display:flex;align-items:center;justify-content:center;
   background:var(--surface-2);border:1px solid var(--border);border-radius:9px;color:var(--text-2);cursor:pointer}
@@ -4190,12 +4224,17 @@ input[type="range"]:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 4px var
     </a>
     <div class="conn-pill" id="connpill">
       <span class="cdot"></span>
-      <span class="cid" id="cp-id">WiCAN</span>
-      <span class="cbar"></span>
-      <span class="cip" id="cp-ip">-</span>
-      <span class="ctag" id="cp-tag">…</span>
-      <span class="cbar" id="cp-usbbar" hidden></span>
-      <span class="cusb" id="cp-usb" hidden></span>
+      <div class="cmain">
+        <button type="button" class="cname" id="cp-name" aria-haspopup="dialog" aria-expanded="false" hidden><span class="t" id="cp-name-t"></span><span class="cnew" id="cp-name-new" hidden>not set up</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg></button>
+        <div class="cline">
+          <span class="cid" id="cp-id">WiCAN</span>
+          <span class="cbar"></span>
+          <span class="cip" id="cp-ip">-</span>
+          <span class="ctag" id="cp-tag">…</span>
+          <span class="cbar" id="cp-usbbar" hidden></span>
+          <span class="cusb" id="cp-usb" hidden></span>
+        </div>
+      </div>
       <span class="chip crit" id="cp-faults" style="display:none;cursor:pointer" title="Latched device fault codes: click for details"></span>
     </div>
     <div class="hspacer"></div>
@@ -4726,18 +4765,32 @@ const store={
   pending:new Map(),dirty:new Set(),
   stage(c,v){this.pending.set(c,v);this.dirty.add(c);renderSubmit();},
   unstage(c){this.pending.delete(c);this.dirty.delete(c);renderSubmit();},
-  count(){return this.dirty.size;},
-  summary(){return[...this.dirty].map(niceName).join(", ");},
-  revert(){this.pending.clear();this.dirty.clear();renderSubmit();route();},
+  /* a car rename waiting for Submit (2026-11-10, Ali: the rename goes
+     through Submit and a restart like a setting, so the store file on the
+     flash is written once per submit, not once per edit): {key,name} */
+  veh:null,
+  stageVeh(key,name){this.veh={key,name};renderSubmit();},
+  unstageVeh(){this.veh=null;renderSubmit();},
+  async putVeh(){
+    if(!this.veh)return false;
+    try{await api("/api/autopid/vehicles/"+encodeURIComponent(this.veh.key),{method:"PUT",body:{name:this.veh.name}});}
+    catch(e){throw new Error("Car name: "+e.message);}
+    return true;
+  },
+  clear(){this.pending.clear();this.dirty.clear();this.veh=null;renderSubmit();},
+  count(){return this.dirty.size+(this.veh?1:0);},
+  summary(){return[...this.dirty].map(niceName).concat(this.veh?["Car name"]:[]).join(", ");},
+  revert(){this.clear();route();},
   /* Quick Setup's save (2026-10-01): the same PUT loop + submit as apply(),
      without the confirm modal (the wizard has its own review screen and
      enforces the AP password rule on its own step). Throws on a refused PUT
      so the caller can show the firmware's reason where the user is. */
   async commit(reason){
     for(const[c,v]of this.pending)await api("/api/settings/"+c,{method:"PUT",body:v});
+    const renamed=await this.putVeh();
     const r=await api("/api/settings/submit",{method:"POST"});
-    this.pending.clear();this.dirty.clear();renderSubmit();
-    if(r&&r.reboot)expectReboot(reason||"Applying settings");else{toast("Saved","ok");refreshSleep();}
+    this.clear();
+    if(r&&r.reboot)expectReboot(reason||"Applying settings");else if(renamed)await restartNow();else{toast("Saved","ok");refreshSleep();}
     return r;
   },
   async apply(){
@@ -4762,13 +4815,16 @@ const store={
         try{await api("/api/settings/"+c,{method:"PUT",body:v});}
         catch(e){throw new Error(niceName(c)+": "+e.message);}
       }
+      const renamed=await this.putVeh();
       const r=await api("/api/settings/submit",{method:"POST"});
-      this.pending.clear();this.dirty.clear();renderSubmit();
-      if(r&&r.reboot)expectReboot("Applying settings");else{toast("Saved, no restart needed","ok");refreshSleep();}
+      this.clear();
+      /* a rename alone changes no setting, so the submit asks for no
+         restart: the page asks for it, the rename restarts like a setting */
+      if(r&&r.reboot)expectReboot("Applying settings");else if(renamed)await restartNow();else{toast("Saved, no restart needed","ok");refreshSleep();}
     }catch(e){toast("Apply failed: "+e.message,"err");}
   },
 };
-function renderSubmit(){const b=$("#submitbtn");const n=store.count();paintSleepWarn();
+function renderSubmit(){const b=$("#submitbtn");const n=store.count();paintSleepWarn();paintCarName();
   b.classList.toggle("dirty",n>0);b.disabled=n===0;
   $("#submitlabel").textContent=n?("Submit Changes ("+n+")"):"Saved";
   b.title=n?store.summary():"No pending changes";}
@@ -4786,12 +4842,66 @@ function paintPill(){
   const b=st.bits||{};
   $("#cp-ip").textContent=w.ip||w.ap_ip||location.hostname;
   $("#cp-tag").textContent=conn.state!=="online"?(conn.state==="reboot"?"REBOOT":"OFFLINE"):(b.sta_connected?"STA":(w.ap_started||b.ap_enabled?"AP":"USB"));
-  paintUsbPill();
+  paintUsbPill();paintCarName();
   /* check-engine: latched device fault codes (health net 2026-07-19) */
   const nf=st.health&&st.health.faults||0;const fe=$("#cp-faults");
   fe.style.display=nf>0?"":"none";if(nf>0)fe.textContent="⚠ "+nf+" fault"+(nf>1?"s":"");
 }
 $("#cp-faults").onclick=()=>{location.hash="#/sysmon";};
+/* The car's name in the pill and on the browser tab (2026-11-10, a user's
+   request): the current car's name from the status poll's `vehicle` summary
+   (the vehicle store's `name`, set in Quick Setup). No current car = the pill
+   as before, one line. Click = the rename popover; Set name stages the new
+   name into Submit Changes (store.veh), the header shows it in italics until
+   the submit, which sends it with `PUT /api/autopid/vehicles/<key>` and
+   restarts. */
+const CAR_NAME_MAX=31;
+function paintCarName(){
+  const b=$("#cp-name");if(!b)return;
+  const v=vehSummary();
+  const staged=v&&store.veh&&store.veh.key===v.key?store.veh.name:null;
+  const name=v?(staged!=null?staged:(v.name||"")):"";
+  $("#connpill").classList.toggle("named",!!name);
+  b.hidden=!name;b.classList.toggle("staged",staged!=null);
+  $("#cp-name-t").textContent=name;
+  $("#cp-name-new").hidden=!(v&&v.pending===true);
+  b.title=name?(name+(staged!=null?": not saved yet, press Submit Changes":": rename this car")):"";
+  const tab=(v&&v.name?v.name+" · ":"")+"WiCAN Pro";
+  if(document.title!==tab)document.title=tab;
+  if(!name)closeCarNamePop();
+}
+function closeCarNamePop(){
+  const p=$("#cp-name-pop");if(!p)return;
+  p.remove();$("#cp-name").setAttribute("aria-expanded","false");
+  document.removeEventListener("mousedown",carNamePopOutside);
+}
+function carNamePopOutside(e){const p=$("#cp-name-pop");if(p&&!p.contains(e.target)&&!$("#cp-name").contains(e.target))closeCarNamePop();}
+function openCarNamePop(){
+  const v=vehSummary();if(!v)return;
+  const cur=v.name||"";
+  const inp=h("input",{id:"cp-name-input",type:"text",maxlength:String(CAR_NAME_MAX),value:store.veh&&store.veh.key===v.key?store.veh.name:cur,autocomplete:"off"});
+  const cnt=h("span",{class:"cnt"});
+  const set=h("button",{class:"btn pri",type:"button"},"Set name");
+  const sync=()=>{cnt.textContent=inp.value.length+" / "+CAR_NAME_MAX;set.disabled=!inp.value.trim();};
+  const apply=()=>{
+    const n=inp.value.trim().slice(0,CAR_NAME_MAX);if(!n)return;
+    if(n===cur)store.unstageVeh();else store.stageVeh(v.key,n);
+    closeCarNamePop();paintCarName();
+  };
+  inp.oninput=sync;set.onclick=apply;
+  inp.onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();apply();}else if(e.key==="Escape")closeCarNamePop();};
+  const pop=h("div",{class:"cname-pop",id:"cp-name-pop",role:"dialog","aria-label":"Car name"},
+    h("div",{class:"hd"},h("label",{for:"cp-name-input"},"Car name"),cnt),
+    inp,
+    h("p",{},"Saved with Submit Changes; WiCAN restarts."),
+    h("dl",{},h("dt",{},"VIN"),h("dd",{},v.vin?h("code",{},v.vin):"not read"),
+      h("dt",{},"Stored cars"),h("dd",{},String(v.cars||1)+" · ",h("a",{href:"#/setup/vehicle",onclick:closeCarNamePop},"Open Vehicles"))),
+    h("div",{class:"acts"},h("button",{class:"btn",type:"button",onclick:closeCarNamePop},"Cancel"),set));
+  $("#connpill").append(pop);$("#cp-name").setAttribute("aria-expanded","true");
+  sync();inp.focus();inp.select();
+  document.addEventListener("mousedown",carNamePopOutside);
+}
+$("#cp-name").onclick=()=>{if($("#cp-name-pop"))closeCarNamePop();else openCarNamePop();};
 function setConn(s,txt){
   const prev=conn.state;conn.state=s;
   const off=$("#offline");
@@ -5584,7 +5694,7 @@ async function route(){
   if(curSection&&curSection!==section&&store.count()){
     const stay=await new Promise(res=>modal({title:"Unsaved changes",
       body:"You have "+store.count()+" unsaved change(s). Submit them, discard, or stay on this page?",
-      actions:[{label:"Stay",fn:()=>res(true)},{label:"Discard",kind:"danger",fn:()=>{store.pending.clear();store.dirty.clear();renderSubmit();res(false);}},{label:"Submit",kind:"pri",fn:()=>{store.apply();res(true);}}]}));
+      actions:[{label:"Stay",fn:()=>res(true)},{label:"Discard",kind:"danger",fn:()=>{store.clear();res(false);}},{label:"Submit",kind:"pri",fn:()=>{store.apply();res(true);}}]}));
     if(stay){location.hash="#/"+curSection;return;}
   }
   curSection=section;paintNlBar();paintSdBar();paintVehBar();
