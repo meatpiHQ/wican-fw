@@ -22,10 +22,13 @@ Two bring-up changes of 2026-11-02 (Ali), both after that night's benches
                 reads 7. After the boot the log ring must carry "chip awake;
                 warm start (ATWS)" and "started: chip ... memory off", not
                 "soft reset not confirmed" nor "chip not ready; hardware
-                reset"; "bring-up done in N ms" under 1500; over /ws/obd
-                ATDPN reads the stored protocol again (the warm start dropped
-                the session; with AutoPID on that check is skipped);
-                memory_off 1 and pp_restores 0
+                reset" nor "ATPC not acknowledged" (since 2026-11-11 the
+                protocol is closed behind the banner: the warm start does not
+                end a CAN session on this chip, see the autobaud stage, which
+                reads that on the wire); "bring-up done in N ms" under 1500;
+                over /ws/obd ATDPN reads the stored protocol again (the warm
+                start reloaded the protocol number; with AutoPID on that
+                check is skipped); memory_off 1 and pp_restores 0
   PP 0F fault   the wire probe sends ATPP0FOFF (one EEPROM write: the enable
                 flag; the chip applies the vendor's D5 at its next reset);
                 the report reads 0F:95 F; a planned restart; the ring carries
@@ -272,12 +275,13 @@ def leg_warm_start(i, autopid_on):
     lines = ring_lines()
     warm = [l for l in lines if "warm start (ATWS)" in l]
     started = [l for l in lines if "started: chip" in l]
-    bad = [l for l in lines if "soft reset not confirmed" in l or "chip not ready; hardware reset" in l]
+    bad = [l for l in lines if "soft reset not confirmed" in l or "chip not ready; hardware reset" in l
+           or "ATPC not acknowledged" in l]
     ms = bringup_ms(lines)
     check("%s: the ring reads 'chip awake; warm start (ATWS)'" % label, len(warm) == 1, warm or lines[:6])
     check("%s: the ring reads 'started: chip ... memory off'" % label,
           len(started) == 1 and "memory off" in started[0], started)
-    check("%s: no 'soft reset not confirmed', no reset pulse" % label, not bad, bad)
+    check("%s: no 'soft reset not confirmed', no 'ATPC not acknowledged', no reset pulse" % label, not bad, bad)
     check("%s: bring-up done in under %d ms" % (label, BRINGUP_MAX_MS),
           ms is not None and ms < BRINGUP_MAX_MS, "%s ms" % ms)
     g = oc.get("eeprom_guard", {})
@@ -290,7 +294,7 @@ def leg_warm_start(i, autopid_on):
         e.cmd("ATE0")
         after = proto_digit(e.cmd("ATDPN"))
         e.close()
-        check("%s: ATDPN back on the stored protocol (the warm start dropped the session)" % label,
+        check("%s: ATDPN back on the stored protocol (the warm start reloaded the protocol number)" % label,
               after not in ("", "7"), after)
     return ms
 

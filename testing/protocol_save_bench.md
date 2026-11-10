@@ -41,3 +41,5 @@ Not covered here, by construction: the lost answer. A real chip answers its `ATS
 - With `--write` a run cut short between the flip and the way back leaves the store on the other protocol. The firmware works the same (it sets the protocol itself at every start); to put the store back, one `ATSP<p>` through the wire probe (`POST /api/obd_chip/probe {"kind":"probe","cmd":"ATSP6"}`, one write).
 
 **2026-11-10 22:32, regression for that evening's autopid changes (the image `36ce9508...` of `testing/profile_protocol_bench.md`), without `--write`: `PROTOCOL SAVE PASS`, 15 checks, 0 failed, no chip write.**
+
+**2026-11-11 00:02, regression for the protocol closed behind the bring-up's warm start (the image sha256 `359d87ed...` of `testing/autobaud.md`), without `--write`: `PROTOCOL SAVE PASS`, 15 checks, 0 failed, no chip write.** `ATDPN` behind the close reads the store as before.

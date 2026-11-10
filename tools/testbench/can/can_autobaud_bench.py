@@ -78,7 +78,7 @@ Run on the PC (IDF venv python: python-can + the PCAN on the DUT's bus, the
 simulator's REST over its USB network link, the DUT's HTTP through the tunnel):
   python can_autobaud_bench.py [dut host[:port]] [--sim http://10.8.8.1]
         [--pcan PCAN_USBBUS1] [--fps 200] [--window 8] [--only n1,c3,...]
-Takes about 10 minutes (19 DUT restarts, 3 simulator restarts).
+Takes about 8 minutes (20 DUT restarts, 3 simulator restarts).
 
 The simulator cannot leave the bus (its CAN controller survives a software
 restart and keeps acknowledging at its last bitrate, "enabled": false or
