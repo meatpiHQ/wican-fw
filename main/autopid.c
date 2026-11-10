@@ -1595,6 +1595,11 @@ static void autopid_task(void *pvParameters)
                 continue;
             }
 
+            // One request per PID and cycle: all parameters of a PID are decoded from the
+            // same response (profiles may carry dozens of parameters per PID).
+            bool pid_queried = false;
+            bool pid_ok = false;
+
             // Loop through parameters
             for(uint32_t p = 0; p < curr_pid->parameters_count; p++) 
             {
@@ -1651,39 +1656,42 @@ static void autopid_task(void *pvParameters)
 
                     if(curr_pid->cmd != NULL && strlen(curr_pid->cmd) > 0) 
                     {
-                        twai_message_t tx_msg;
-
-                        if(curr_pid->pid_type == PID_CUSTOM || curr_pid->pid_type == PID_SPECIFIC) 
+                        if(!pid_queried)
                         {
-                            if(curr_pid->init != NULL && strlen(curr_pid->init) > 0)
+                            twai_message_t tx_msg;
+                            pid_queried = true;
+
+                            if(curr_pid->pid_type == PID_CUSTOM || curr_pid->pid_type == PID_SPECIFIC) 
                             {
-                                send_commands(curr_pid->init, 2);
+                                if(curr_pid->init != NULL && strlen(curr_pid->init) > 0)
+                                {
+                                    send_commands(curr_pid->init, 2);
+                                }
+                            }
+
+                            ESP_LOGI(TAG, "Executing command: %s", curr_pid->cmd);
+                            DEBUG_LOGI(TAG, "Executing command: %s", curr_pid->cmd);
+                            if(elm327_process_cmd((uint8_t*)curr_pid->cmd, strlen(curr_pid->cmd), &tx_msg, &autopidQueue) == ESP_OK &&
+                               xQueueReceive(autopidQueue, &elm327_response, pdMS_TO_TICKS(1000)) == pdPASS &&
+                               strstr((char*)elm327_response.data, "error") == NULL)
+                            {
+                                ESP_LOGI(TAG, "Response received, length: %lu", elm327_response.length);
+                                xEventGroupSetBits(xautopid_event_group, ECU_CONNECTED_BIT);
+                                pid_ok = true;
+                            }
+                            else
+                            {
+                                ESP_LOGE(TAG, "No valid response for: %s", curr_pid->cmd);
                             }
                         }
 
-                        ESP_LOGI(TAG, "Executing command: %s", curr_pid->cmd);
-                        DEBUG_LOGI(TAG, "Executing command: %s", curr_pid->cmd);
-                        if(elm327_process_cmd((uint8_t*)curr_pid->cmd, 
-                                            strlen(curr_pid->cmd), 
-                                            &tx_msg, 
-                                            &autopidQueue) == ESP_OK)
                         {
-                            ESP_LOGI(TAG, "Command processed successfully");
-                            DEBUG_LOGI(TAG, "Command processed successfully");
-                            
-                            if(xQueueReceive(autopidQueue, &elm327_response, pdMS_TO_TICKS(1000)) == pdPASS)
                             {
-                                ESP_LOGI(TAG, "Response received, length: %lu", elm327_response.length);
-                                DEBUG_LOGI(TAG, "Response received, length: %lu", elm327_response.length);
-                                ESP_LOG_BUFFER_HEXDUMP(TAG, elm327_response.data, 1, ESP_LOG_INFO);
-                                if(strstr((char*)elm327_response.data, "error") == NULL)
+                                if(pid_ok)
                                 {
                                     double result;
 
                                     param->failed = false;
-
-                                    ESP_LOGI(TAG, "Response received, length: %lu", elm327_response.length);
-                                    xEventGroupSetBits(xautopid_event_group, ECU_CONNECTED_BIT);
                                     // Process response based on PID type
                                     if(curr_pid->pid_type == PID_CUSTOM || curr_pid->pid_type == PID_SPECIFIC) 
                                     {
@@ -1766,18 +1774,9 @@ static void autopid_task(void *pvParameters)
                                 else
                                 {   
                                     param->failed = true;
-                                    ESP_LOGE(TAG, "Failed to process command: %s", curr_pid->cmd);
+                                    ESP_LOGE(TAG, "Skipping %s, no valid response for %s", param->name, curr_pid->cmd);
                                 }
                             }
-                            else
-                            {
-                                param->failed = true;
-                                ESP_LOGE(TAG, "Failed Queue Receive: curr_pid->cmd timeout");
-                            }
-                        }
-                        else 
-                        {
-                            ESP_LOGE(TAG, "Failed to process command: %s", curr_pid->cmd);
                         }
                     }
                     else 
