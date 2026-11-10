@@ -14,10 +14,15 @@ chip follows its protocol (ATTP).
   python bench_bus.py restart                  (the simulator's own reboot forensics)
   python bench_bus.py sim --bitrate 250 [--id-format 29bit] [--enabled 1]
   python bench_bus.py sim --restore            (back to 500k / 11bit / enabled)
+  python bench_bus.py only iso9141             (ONE bus answers, the others off:
+                                                hs11_500 hs29_500 hs11_250 hs29_250
+                                                ms11 ms29 ch11 ch29 sw11 sw29
+                                                iso9141 kwp5 kwpfast vpw pwm)
 
 As a module: sim_get/sim_set/sim_status, sim_patch (any keys of any of its
-settings groups behind one reboot), sim_restart_state/sim_restart_delta,
-dut_can(). The simulator's REST is
+settings groups behind one reboot), sim_only (a one-bus state out of
+SIM_BUSES, on sim_patch), sim_tester, sim_bus_live,
+sim_restart_state/sim_restart_delta, dut_can(). The simulator's REST is
 reachable from the PC only (its USB network link, found by sim_net.py); its
 settings PUT replaces the whole object, hence GET, modify, PUT. A submit
 reboots it (about 7 s on its firmware of 2026-11-09, up to 20 s before) and
@@ -286,6 +291,100 @@ def sim_patch(groups, base=SIM_URL):
     raise SystemExit(f"bench_bus: the simulator did not come back in {SIM_REBOOT_WINDOW} s after {staged}")
 
 
+#: Every bus ECU sim v2 can play to a WiCAN PRO, for sim_only(): the CAN
+#: interface with its bit rate and id format, or the K-line protocol, or the
+#: J1850 mode. `kwp5` and `kwpfast` are the same simulator state (its KWP
+#: ECU answers the 5-baud and the fast init); the adapter picks the init.
+SIM_BUSES = {
+    "hs11_500": {"can": "hs", "kbps": 500, "fmt": "11bit"},
+    "hs29_500": {"can": "hs", "kbps": 500, "fmt": "29bit"},
+    "hs11_250": {"can": "hs", "kbps": 250, "fmt": "11bit"},
+    "hs29_250": {"can": "hs", "kbps": 250, "fmt": "29bit"},
+    "ms11": {"can": "ms", "kbps": 125, "fmt": "11bit"},
+    "ms29": {"can": "ms", "kbps": 125, "fmt": "29bit"},
+    "ch11": {"can": "ch", "kbps": 500, "fmt": "11bit"},
+    "ch29": {"can": "ch", "kbps": 500, "fmt": "29bit"},
+    "sw11": {"can": "sw", "fmt": "11bit"},
+    "sw29": {"can": "sw", "fmt": "29bit"},
+    "iso9141": {"kline": "iso9141"},
+    "kwp5": {"kline": "kwp"},
+    "kwpfast": {"kline": "kwp"},
+    "vpw": {"j1850": "vpw"},
+    "pwm": {"j1850": "pwm"},
+}
+_CAN_IFS = ("hs", "ms", "ch", "sw")
+
+
+def sim_tester(base=SIM_URL, **changes):
+    """ECU sim v2's bench outputs (GET /api/tester; POST with `changes`, e.g.
+    swcan="normal"): the single-wire CAN transceiver's mode, the DB9 J3
+    relay. Returns the state BEFORE the change. Not a setting: a simulator
+    reboot puts them back to its defaults."""
+    before = _http(f"{base}/api/tester")
+    if changes:
+        _http(f"{base}/api/tester", "POST", changes)
+    return before
+
+
+def sim_only(bus, base=SIM_URL):
+    """ECU sim v2 in a ONE-bus state: `bus` (a key of SIM_BUSES) answers and
+    every other bus is off, the way one car is. With every bus live at once
+    (its default) an adapter's automatic search settles on whatever it tries
+    first, and a request meant for one bus may be answered on another.
+
+    The other CAN interfaces are disabled outright (their nodes leave the
+    bus, as on a car that has no CAN on those pins), the K-line and J1850
+    ECUs are switched off. One simulator reboot (sim_patch); the single-wire
+    transceiver is put to `normal` for a single-wire bus. Returns
+    (previous, running) like sim_patch: sim_patch(previous) restores the
+    settings; the transceiver goes back with the reboot."""
+    if bus not in SIM_BUSES:
+        raise SystemExit(f"bench_bus: no bus {bus!r} (buses: {' '.join(SIM_BUSES)})")
+    spec = SIM_BUSES[bus]
+    ecu = {"enabled": True}
+    for b in _CAN_IFS:
+        on = spec.get("can") == b
+        ecu[b + "_enabled"] = on
+        ecu[b + "_obd11"] = on and spec["fmt"] == "11bit"
+        ecu[b + "_obd29"] = on and spec["fmt"] == "29bit"
+        ecu[b + "_uds"] = on
+        ecu[b + "_broadcast"] = False
+        if b != "sw":
+            ecu[b + "_j1939"] = False
+    if spec.get("can") in ("hs", "ms", "ch"):
+        ecu[spec["can"] + "_bitrate_kbps"] = spec["kbps"]
+    kline = {"enabled": "kline" in spec}
+    if "kline" in spec:
+        kline["protocol"] = spec["kline"]
+    previous, running = sim_patch({"ecu_sim": ecu, "kline": kline,
+                                   "j1850": {"mode": spec.get("j1850", "off")}}, base)
+    if spec.get("can") == "sw":
+        sim_tester(base, swcan="normal")
+        time.sleep(0.3)
+        running = sim_status(base)
+    return previous, running
+
+
+def sim_bus_live(status):
+    """Which buses answer in a /api/ecu/status, as SIM_BUSES-style words
+    ('hs11_500', 'iso9141 or kwp', 'vpw', ...): what a bench prints and
+    checks after sim_only()."""
+    out = []
+    if not isinstance(status, dict):
+        return out
+    for b in _CAN_IFS:
+        c = status.get(b + "_can") or {}
+        if c.get("enabled") and c.get("running") and (c.get("obd11") or c.get("obd29")):
+            fmt = "11" if c.get("obd11") and not c.get("obd29") else "29" if c.get("obd29") and not c.get("obd11") else "11+29"
+            out.append(b + fmt + ("_%d" % (c.get("bitrate", 0) // 1000) if b == "hs" else ""))
+    if (status.get("kline") or {}).get("enabled"):
+        out.append("kline")
+    mode = str((status.get("j1850") or {}).get("mode", "off")).lower()
+    if mode in ("vpw", "pwm") and (status.get("j1850") or {}).get("running", True):
+        out.append(mode)
+    return out
+
+
 def dut_can(dut):
     """GET /api/can of the DUT (`dut` = host[:port], e.g. localhost:8081)."""
     return _http(f"http://{dut}/api/can")
@@ -361,10 +460,18 @@ def main():
     sm.add_argument("--id-format", choices=("11bit", "29bit", "both"))
     sm.add_argument("--enabled", choices=("0", "1"))
     sm.add_argument("--restore", action="store_true")
-    for p in (st, rs, sm):
+    on = sub.add_parser("only", help="one bus answers, every other bus off (one simulator reboot)")
+    on.add_argument("bus", choices=sorted(SIM_BUSES))
+    for p in (st, rs, sm, on):
         p.add_argument("--sim", default=SIM_URL)
     a = ap.parse_args()
     sim_net.install(a.sim)
+
+    if a.what == "only":
+        prev, run = sim_only(a.bus, a.sim)
+        print("BENCH BUS previous (sim_patch restores it):", json.dumps(prev))
+        print("BENCH BUS answering now:", " ".join(sim_bus_live(run)) or "(nothing)")
+        return 0
 
     if a.what == "restart":
         print("simulator at     :", a.sim)
