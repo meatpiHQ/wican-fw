@@ -15,7 +15,8 @@ chip follows its protocol (ATTP).
   python bench_bus.py sim --bitrate 250 [--id-format 29bit] [--enabled 1]
   python bench_bus.py sim --restore            (back to 500k / 11bit / enabled)
 
-As a module: sim_get/sim_set/sim_status, sim_restart_state/sim_restart_delta,
+As a module: sim_get/sim_set/sim_status, sim_patch (any keys of any of its
+settings groups behind one reboot), sim_restart_state/sim_restart_delta,
 dut_can(). The simulator's REST is
 reachable from the PC only (its USB network link, found by sim_net.py); its
 settings PUT replaces the whole object, hence GET, modify, PUT. A submit
@@ -232,6 +233,57 @@ def sim_set(bitrate=None, id_format=None, enabled=None, base=SIM_URL):
         pass                            # the reply can lose to the restart
     want = _legacy_view(new)
     return prev, _sim_wait(want["bitrate"], want["id_format"], want["enabled"], base)
+
+
+def sim_patch(groups, base=SIM_URL):
+    """Any keys of ECU sim v2's settings, several groups behind ONE reboot:
+    `groups` = {"ecu_sim": {"hs_obd11": False, ...}, "kline": {...},
+    "j1850": {"mode": "off"}}. Each object is read, changed and PUT whole
+    (a PUT replaces the object), then one submit and the wait for the
+    reboot (the boot count of its restart history moves). Returns
+    (previous, running): `previous` holds the old values of the keys that
+    changed, in the same shape, so sim_patch(previous) restores; `running`
+    is /api/ecu/status after the reboot. Nothing changes = no reboot,
+    ({}, status). An unknown key is an error, not a silent no-op."""
+    previous = {}
+    staged = {}
+    for name, changes in groups.items():
+        raw = _http(f"{base}/api/settings/{name}")
+        if not isinstance(raw, dict):
+            raise SystemExit(f"bench_bus: the simulator has no settings group {name}")
+        unknown = [k for k in changes if k not in raw]
+        if unknown:
+            raise SystemExit(f"bench_bus: {name} has no key {unknown} (it has {sorted(raw)})")
+        old = {k: raw[k] for k in changes if raw[k] != changes[k]}
+        if not old:
+            continue
+        new = {k: v for k, v in raw.items() if k not in ("degraded", "pending_reboot")}
+        new.update(changes)
+        previous[name] = old
+        staged[name] = new
+    if not staged:
+        return {}, sim_status(base)
+    before = sim_restart_state(base)
+    for name, new in staged.items():
+        _http(f"{base}/api/settings/{name}", "PUT", new)
+        back = _http(f"{base}/api/settings/{name}")
+        wrong = [k for k in previous[name] if back.get(k) != new.get(k)]
+        if wrong:
+            raise SystemExit(f"bench_bus: the simulator did not stage {name} {wrong}")
+    try:
+        _http(f"{base}/api/settings/submit", "POST", {})
+    except (urllib.error.URLError, OSError):
+        pass                            # the reply can lose to the restart
+    time.sleep(3)                       # the restart fires ~1 s after submit
+    end = time.time() + SIM_REBOOT_WINDOW
+    while time.time() < end:
+        st = sim_status(base)
+        now = sim_restart_state(base) if st is not None else None
+        if st is not None and (before is None or now is None or
+                               (now["boot_count"] or 0) != (before["boot_count"] or 0)):
+            return previous, st
+        time.sleep(1)
+    raise SystemExit(f"bench_bus: the simulator did not come back in {SIM_REBOOT_WINDOW} s after {staged}")
 
 
 def dut_can(dut):

@@ -28,6 +28,13 @@ its answer was lost, the second call of the boot wrote again, `Expected 1 Was
 40 tests PASS (`test-reports/2026-11-10_1353_host_obd_chip.md`), autopid 148
 PASS after it (`2026-11-10_1413_host_autopid.md`).
 
+**2026-11-10, evening:** what the chip may learn (`autopid`,
+`ap_veh_chip_learns`: only a protocol a standard request answered on, never
+the protocol of a car confirmed by its profile). 149 tests PASS
+(`test-reports/2026-11-10_1702_host_autopid.md`); the reproduction is the
+device bench's (`testing/profile_protocol_bench.md`, the rule has no host
+harness around the detection job).
+
 **2026-11-03:** `.\test.ps1 host microlink` PASS, 8 tests. Compiles the
 production DISCO pong module with transport, RNG and NaCl test doubles:
 same-transport replies, exact UDP source, frame encoding, invalid addresses,
