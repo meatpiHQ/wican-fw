@@ -20,10 +20,25 @@ DUT's supply as the simulator reads it at its OBD pin 16 (`supply=13.87 V
 49 mA`); a stage that moves or reads the supply gets a yellow warning when
 it did not answer. It also names the simulator's debug console port. Since
 the simulator's firmware of 2026-11-09 the line carries the simulator's own
-restart history too (`boots N, unexpected M`, `PARKED`, `CRASH DUMP
-STORED`, from `GET /api/restart/history` on the simulator) and a yellow
-warning when it crashed since its power-on: fetch `/api/restart/coredump/raw`
-before the next crash overwrites it. **Every stage reads that history before
+restart history too (`boots N, unexpected M since its power-on`, `(K NEW)`,
+`PARKED`, `CRASH DUMP STORED`, from `GET /api/restart/history` on the
+simulator) and a yellow warning for what needs a look: resets ADDED since
+the bench last looked (with the newest crash on record named), a park, or a
+crash dump waiting in its flash (fetch `/api/restart/coredump/raw` before
+the next crash overwrites it, then `DELETE` it). The count alone is not a
+warning (2026-11-10): it lives until the simulator's next power-on and the
+simulator's own restart tracker bench crashes it on purpose, so until that
+date the preflight said "crashed since its power-on (unexpected 18)" at
+every stage for eighteen deliberate aborts of 2026-11-09 with nothing new
+and no dump stored, and one of them was reported as a simulator panic. What
+the bench last saw is in `test-reports/ecu_sim_seen.json` (`boot_count`,
+`unexpected`, the time): the first look only takes the baseline, fewer boots
+than last time means the simulator was power-cycled and counts from 0, and
+deleting the file takes a new baseline. Proof 2026-11-10 13:55 to 13:58: the
+first look quiet at 18, one deliberate abort (the simulator bench's
+`--only c`, the same `abort() ... task "cli_console"` at the same address
+as the record in question), the next look `(1 NEW)` with the warning naming
+boot 59's abort, the look after it quiet at 19. **Every stage reads that history before
 and after its body** (`Invoke-Stage`): a reset of the simulator nobody asked
 for, a park of its crash-loop brake (its ECU engines off until `POST
 /api/restart`) or a crash dump left behind FAILS the stage with `ECU SIM V2

@@ -271,8 +271,46 @@ function Get-SimRestartState { param([string]$Url)
     if ($r.coredump -and $r.coredump.present) { $dump = $true }
     $reason = ''
     if ($top) { $reason = [string]$top.reason }
+    # the newest crash still on record: a boot of its history ring, else the
+    # report it keeps in flash (the ring holds eight boots)
+    $lastCrash = ''
+    foreach ($rec in @($r.records)) {
+        if ($rec.crash -and $rec.crash.summary) { $lastCrash = "boot $($rec.seq), $($rec.crash.summary)"; break }
+    }
+    if (-not $lastCrash -and $r.report -and $r.report.crash -and $r.report.crash.summary) {
+        $lastCrash = "its stored report, $($r.report.crash.summary)"
+    }
     return [pscustomobject]@{ BootCount = [int]$r.boot_count; Unexpected = [int]$r.unexpected_resets;
-        Reason = $reason; Parked = $parked; Coredump = $dump; Crash = $crash }
+        Reason = $reason; Parked = $parked; Coredump = $dump; Crash = $crash; LastCrash = $lastCrash }
+}
+
+# What the bench last saw of ECU sim v2's unexpected-reset counter, kept in
+# test-reports\ecu_sim_seen.json. The counter lives until the simulator's
+# next power-on, and the simulator's own restart tracker bench crashes it on
+# purpose, so the number alone is no news: until 2026-11-10 the preflight
+# warned "crashed since its power-on" at every stage for crashes that were
+# days old and deliberate. Returns how many were ADDED since the last look
+# and when that look was; the first look only takes the baseline.
+function Update-SimSeen { param([string]$Url, $State)
+    $file = Join-Path $repo 'test-reports\ecu_sim_seen.json'
+    $seen = $null
+    try { if (Test-Path $file) { $seen = Get-Content $file -Raw | ConvertFrom-Json } } catch { $seen = $null }
+    $new = 0
+    $since = ''
+    if ($seen -and $seen.url -eq $Url) {
+        $since = [string]$seen.seen
+        # fewer boots than last time = it was power-cycled: the counter began at 0 again
+        if ($State.BootCount -lt [int]$seen.boot_count) { $new = $State.Unexpected }
+        else { $new = $State.Unexpected - [int]$seen.unexpected }
+        if ($new -lt 0) { $new = 0 }
+    }
+    try {
+        $dir = Split-Path $file
+        if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force $dir | Out-Null }
+        [pscustomobject]@{ url = $Url; boot_count = $State.BootCount; unexpected = $State.Unexpected
+            seen = (Get-Date -Format 'yyyy-MM-dd HH:mm') } | ConvertTo-Json | Set-Content -Path $file -Encoding utf8
+    } catch {}
+    return [pscustomobject]@{ New = $new; Since = $since }
 }
 
 function Invoke-Stage { param([string]$Name, [scriptblock]$Body)
@@ -348,7 +386,10 @@ function Invoke-BenchCheck {
         Supply   = ''        # the DUT's supply as the simulator reads it at pin 16
         SimTracker = $false  # the simulator's firmware has the restart tracker (2026-11-09 on)
         SimBoots = 0         # its boot count since its power-on
-        SimUnexpected = 0    # its resets nobody asked for
+        SimUnexpected = 0    # its resets nobody asked for, since its power-on
+        SimNew = 0           # how many of those are new since the bench last looked
+        SimSeen = ''         # when the bench last looked (Update-SimSeen)
+        SimLastCrash = ''    # the newest crash it still has on record
         SimParked = $false   # its crash-loop brake left its ECU engines off
         SimCoredump = $false # a crash dump sits in its flash
         PiOk     = $false
@@ -409,12 +450,15 @@ function Invoke-BenchCheck {
     } catch {}
     # the simulator's own reboot forensics (its restart tracker, 2026-11-09
     # on): a crash of the simulator is a bench fault, and a dump left in its
-    # flash is evidence to fetch before the next crash overwrites it
+    # flash is evidence to fetch before the next crash overwrites it. What
+    # counts as news is what was ADDED since the bench last looked.
     if ($b.SimUrl) {
         $sr = Get-SimRestartState $b.SimUrl
         if ($sr) {
             $b.SimTracker = $true; $b.SimBoots = $sr.BootCount; $b.SimUnexpected = $sr.Unexpected
-            $b.SimParked = $sr.Parked; $b.SimCoredump = $sr.Coredump
+            $b.SimParked = $sr.Parked; $b.SimCoredump = $sr.Coredump; $b.SimLastCrash = $sr.LastCrash
+            $seen = Update-SimSeen $b.SimUrl $sr
+            $b.SimNew = $seen.New; $b.SimSeen = $seen.Since
         }
     }
 
@@ -479,7 +523,8 @@ function Invoke-BenchCheck {
     $ecuTxt = if ($b.EcuSim) { $b.EcuSim -join '/' } else { 'none' }
     $simTxt = if ($b.SimUrl) { $b.SimUrl } else { 'NO ANSWER' }
     if ($b.SimTracker) {
-        $simTxt += "; boots $($b.SimBoots), unexpected $($b.SimUnexpected)"
+        $simTxt += "; boots $($b.SimBoots), unexpected $($b.SimUnexpected) since its power-on"
+        if ($b.SimNew -gt 0) { $simTxt += " ($($b.SimNew) NEW)" }
         if ($b.SimParked) { $simTxt += ', PARKED' }
         if ($b.SimCoredump) { $simTxt += ', CRASH DUMP STORED' }
     } elseif ($b.SimUrl) { $simTxt += '; no restart tracker (its firmware predates 2026-11-09)' }
@@ -491,11 +536,16 @@ function Invoke-BenchCheck {
     if (-not $b.Supply -and $What -in @('sleep', 'sleepmatrix', 'crashnote', 'logclock', 'sleeptrig', 'release', 'usbdetach', 'habackfill', 'attpstore')) {
         Write-Host "bench: WARNING the DUT's supply (ECU sim v2 /api/power) did not answer: this stage moves or reads it" -ForegroundColor Yellow
     }
-    if ($b.SimUnexpected -gt 0 -or $b.SimParked -or $b.SimCoredump) {
-        $why = "unexpected $($b.SimUnexpected)"
-        if ($b.SimParked) { $why += ', parked' }
-        if ($b.SimCoredump) { $why += ', a crash dump in its flash' }
-        Write-Host "bench: WARNING ECU sim v2 crashed since its power-on ($why): read its /api/restart/history and fetch /api/restart/coredump/raw before anything erases it" -ForegroundColor Yellow
+    # a warning for what needs a look: resets added since the last look, a
+    # park, a dump waiting in its flash. Not for the counter as such.
+    if ($b.SimNew -gt 0 -or $b.SimParked -or $b.SimCoredump) {
+        $why = @()
+        if ($b.SimNew -gt 0) { $why += "$($b.SimNew) reset(s) nobody asked for since the bench last looked ($($b.SimSeen))" }
+        if ($b.SimParked) { $why += 'its crash-loop brake has PARKED it (POST /api/restart on it)' }
+        if ($b.SimCoredump) { $why += 'a crash dump is in its flash (GET /api/restart/coredump/raw, then DELETE /api/restart/coredump)' }
+        $warn = "bench: WARNING ECU sim v2: $($why -join '; ')"
+        if ($b.SimLastCrash) { $warn += ". The newest crash on record: $($b.SimLastCrash)" }
+        Write-Host $warn -ForegroundColor Yellow
     }
     $script:conditions += "preflight: $wiring; serial=$serialTxt; dut=$(if ($b.DutOnline) { $b.DutVersion } else { 'offline' }) @ $DutIp; broker=$($b.Broker); ncm=$($b.UsbNcm); ap=$apTxt; ecu_sim=$simTxt (console $ecuTxt); supply=$supplyTxt"
 
