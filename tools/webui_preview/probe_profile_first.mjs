@@ -6,7 +6,9 @@
    own request and stored, and a car seen without its VIN can be folded into
    the entry it belongs to ("Same car as...").
 
-   Five page boots over the mock:
+   Six page boots over the mock (B2 since 2026-11-10: a profile that mixes
+   standard and manufacturer requests sends its first three MANUFACTURER
+   requests with the detection, and the step's words say what the job does):
      A  the step opens on section 1 with the two choices, detection the default,
         Detect waiting for the two ticks as before
      B  a profile chosen before the probe: the pill at the right edge of the
@@ -118,6 +120,35 @@ async function detect(p, name, wait = 4800) {
     const tb = p.btn(/Test profile/);
     check("B: Test profile is enabled", tb && !tb.disabled);
     check("B: no JS errors", p.errs.length === 0, p.errs.slice(0, 2));
+  }
+  /* B2 (2026-11-10): which requests go with the detection. The job only uses
+     them after the standard requests stayed silent, so a profile's standard
+     rows are passed over for its first three manufacturer requests; a
+     profile of standard rows only (B above) sends those as before */
+  {
+    const par = (name) => [{ name, expression: "B4", unit: "", class: "none" }];
+    const mixed = { car_model: "Toyota: Sienna 2021-", init: "ATSP6;ATAT1;", pids: [
+      { pid: "015B1", pid_init: "", parameters: par("HYB_SOC") },
+      { pid: "01A61", pid_init: "", parameters: par("ODOMETER") },
+      { pid: "221F9A2", pid_init: "ATSH7D2;ATFCSH7D2;ATFCSD300000;ATFCSM1;", parameters: par("HV_SOC") },
+      { pid: "0105", pid_init: "", parameters: par("COOLANT") },
+      { pid: "22 1F 5B", pid_init: "", parameters: par("HV_TEMP") },
+      { pid: "2101", pid_init: "ATSH7E2;", parameters: par("HV_V") },
+      { pid: "2103", pid_init: "ATSH7E2;", parameters: par("HV_A") }] };
+    const p = await openVehicle({ __name: "B2", detect: "profileonly", profiles: [mixed] });
+    await chooseProfile(p, "B2");
+    check("B2: the note under Detect says what the job does: standard requests on each CAN protocol first, the profile's own requests for a car that answers none",
+      /WiCAN looks for the car with standard requests on each CAN protocol, then reads the VIN and the standard PIDs/.test(p.text()) &&
+      /confirmed by the profile's own first requests instead/.test(p.text()) && !/pins the protocol the profile expects/.test(p.text()),
+      (p.text().match(/About 10 to 20 s[^]{0,260}/) || [""])[0]);
+    check("B2: section 1 no longer says the detection uses the profile's protocol", /confirmed by the profile's own requests, and the car is stored under this name either way/.test(p.text()) && !/uses the profile's protocol and requests/.test(p.text()));
+    await detect(p, "B2");
+    const probe = p.M().scanProbe || {};
+    const want = [{ cmd: "221F9A2", init: "ATSH7D2;ATFCSH7D2;ATFCSD300000;ATFCSM1;" }, "221F5B", { cmd: "2101", init: "ATSH7E2;" }];
+    check("B2: the detect body carries the profile's first three MANUFACTURER requests with their inits, the standard rows passed over",
+      probe.profile === "Toyota: Sienna 2021-" && JSON.stringify(probe.list) === JSON.stringify(want), probe.list);
+    check("B2: the car is confirmed by the first of them", /New vehicle: Toyota Sienna 2021/.test(p.text()) && /221F9A2/.test(p.text()), (p.text().match(/New vehicle[^\n]{0,200}/) || [""])[0]);
+    check("B2: no JS errors", p.errs.length === 0, p.errs.slice(0, 2));
   }
   /* C: a car that answers nothing standard */
   {

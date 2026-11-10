@@ -1030,7 +1030,9 @@
       const probeCmds = Array.isArray(probe.cmds) ? probe.cmds.length : 0;
       const nothingStd = state.detect === "profileonly";
       state.scanProbe = { profile: String(probe.profile || ""), name: String(probe.name || ""), cmds: probeCmds,
-        answered: probeCmds ? String(typeof probe.cmds[0] === "object" ? probe.cmds[0].cmd : probe.cmds[0]) : "" };
+        answered: probeCmds ? String(typeof probe.cmds[0] === "object" ? probe.cmds[0].cmd : probe.cmds[0]) : "",
+        /* the requests as the page sent them (2026-11-10: which three of the profile's it picks) */
+        list: probeCmds ? probe.cmds.map((c) => (typeof c === "object" ? { cmd: String(c.cmd), init: String(c.init || "") } : String(c))) : [] };
       state.scan = { status: "running", phase: "protocol", found: 0 };
       if (nothingStd && !probeCmds) {
         setTimeout(() => { state.scan = { status: "failed", phase: "idle", found: 0, error: "no ECU response (ignition on?)", stored: !!state.scanStored }; }, 1600);
