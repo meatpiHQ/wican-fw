@@ -20,7 +20,12 @@ What is read (nothing is written; every word is a display or a read):
   identity          ATI, AT@1, AT@2, STDI, STI, STMFR, VTI, VTD, VTPROI, VTVERS,
                     VT RD_MAC, VT RD_UDS, VT RDSN
   parameters        ATPPS (every programmable parameter with its on/off flag)
-  sleep and wake    STSLCS, VTPPSWS, VT POWERMANAGE
+  sleep and wake    STSLCS, VTPPSWS. Not `VT POWERMANAGE`, which was in the
+                    list until 2026-11-11: it reports how the chip last went
+                    to sleep and woke (`SLEEP: NONE | WAKE: NONE`, then
+                    `PWR EN | UART` after the unit's supply was cut for 4 s
+                    with no word sent, `CMD | PWR EN` after a sleep word).
+                    A status, not a setting
   user byte, area   ATRD, VT RD_EE (the 256 bytes in two reads)
   protocol tables   VT AT_PROTOCOL_ALL, VT ST_PROTOCOL_ALL, VT VT_PROTOCOL_ALL
                     (the definitions and the wake-up sequence each is linked to)
@@ -67,7 +72,7 @@ WORDS = (
     [("identity", w) for w in ("ATI", "AT@1", "AT@2", "STDI", "STI", "STMFR", "VTI", "VTD", "VTPROI",
                                "VTVERS", "VT RD_MAC", "VT RD_UDS", "VT RDSN")] +
     [("parameters", "ATPPS")] +
-    [("sleep and wake", w) for w in ("STSLCS", "VTPPSWS", "VT POWERMANAGE")] +
+    [("sleep and wake", w) for w in ("STSLCS", "VTPPSWS")] +
     [("user byte and area", w) for w in ("ATRD", "VT RD_EE 00, 80", "VT RD_EE 80, 80")] +
     [("protocol tables", w) for w in ("VT AT_PROTOCOL_ALL", "VT ST_PROTOCOL_ALL", "VT VT_PROTOCOL_ALL")] +
     [("wake sequences", "VT DISP_CAN_WM %d" % n) for n in range(1, 9)] +
