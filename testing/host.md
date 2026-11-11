@@ -74,6 +74,28 @@ standard row and not the custom one; released, the row is back; a row that is
 switched off stays off whatever the hold says. `autopid` 168 tests PASS
 (`test-reports/2026-11-11_2215_host_autopid.md`).
 
+**2026-11-12:** the pre-CAN protocols (GitHub issue #1045; the device half is
+[kline_accept_bench.md](kline_accept_bench.md)). `obd_chip`, `test_kline.c`,
+7 cases: a K-line ECU behind the fake chip, its late answers sent from a
+task. A request that starts the bus (`BUS INIT: ` in the answer so far)
+outlives the caller's 1.5 s and comes back with the reply; a request that
+starts none is still cut at the caller's time; `BUS INIT: ...ERROR` opens no
+session; the same protocol chosen again keeps a session and another one ends
+it; a bus request behind more than 4.5 s of silence gets `ATPC` first (the
+words on the wire: `ATPC`, the request) and one in time does not; `NO DATA`
+in a live session closes nothing; the rule's two parsers on the chip's own
+texts (`FB ERROR` and `FC RX TIMEOUT` are no data lines). `obd_chip` 48 tests
+PASS (`test-reports/2026-11-12_0203_host_obd_chip.md`). `autopid`,
+`test_precan.c`, 6 cases: the protocol table, the request header of each
+protocol (at the end of its prelude, and behind an init that takes the chip
+there from another protocol: the reproduction of that one is the device
+bench's, where the first build read `NO DATA` under the CAN header), the
+report's own replies and the bench's on all five protocols decoded by the
+expression that reads them on CAN (the first assertions read one the CAN way
+and get a wrong engine speed: the defect), two ECUs by address, the VIN from
+five messages and from one, and what the protocol hint must leave alone.
+`autopid` 174 tests PASS (`test-reports/2026-11-12_0142_host_autopid.md`).
+
 **2026-11-10, evening:** what the chip may learn (`autopid`,
 `ap_veh_chip_learns`: only a protocol a standard request answered on, never
 the protocol of a car confirmed by its profile). 149 tests PASS

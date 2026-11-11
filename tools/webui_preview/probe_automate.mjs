@@ -50,6 +50,15 @@ const check = (n, ok) => { console.log((ok ? "PASS " : "FAIL ") + n); if (!ok) p
   const stdProto = d().querySelector('.frow[data-key="std_protocol"]');
   check("std protocol/init rows head the Standard PIDs pane", !!stdProto && !cards[0].contains(stdProto) &&
     !!d().querySelector('.frow[data-key="std_init"]') && !!d().querySelector('.frow[data-key="std_enabled"]'));
+  /* the protocol a person may pin (2026-11-12): the five pre-CAN ones beside the four CAN
+     ones, each with its name and its ELM number, the K-line ones with their init */
+  const protoOpts = stdProto ? [...stdProto.querySelectorAll("select option")].map((o) => o.value + "=" + o.textContent.trim()) : [];
+  check("std protocol: Automatic and the nine legislated protocols, named (" + protoOpts.length + " options)",
+    protoOpts.length === 10 && protoOpts.map((o) => o.split("=")[0]).join("") === "0123456789" &&
+    /^1=SAE J1850 PWM.*protocol 1/.test(protoOpts[1]) && /^2=SAE J1850 VPW.*protocol 2/.test(protoOpts[2]) &&
+    /^3=ISO 9141-2, K-line with 5 baud init \(protocol 3\)$/.test(protoOpts[3]) && /^4=ISO 14230-4 KWP.*5 baud init.*protocol 4/.test(protoOpts[4]) &&
+    /^5=ISO 14230-4 KWP.*fast init.*protocol 5/.test(protoOpts[5]) && /^6=CAN 11-bit 500 kbit\/s/.test(protoOpts[6]) && /^9=CAN 29-bit 250 kbit\/s/.test(protoOpts[9]));
+  check("std protocol: no raw number left as an option's text", protoOpts.every((o) => !/^(\d)=$/.test(o)));
   check("no per-card 'Submit to apply' badges", ![...d().querySelectorAll(".chip")].some((c) => /Submit to apply/.test(c.textContent)));
   check("live badge present", d().body.textContent.includes("Applies live"));
   /* parameters are collapsible: hidden by default, caret expands */

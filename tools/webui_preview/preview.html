@@ -60,6 +60,11 @@
      "type": "string",
      "enum": [
       "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
       "6",
       "7",
       "8",
@@ -5182,7 +5187,7 @@ const HELP={
   std_init:"AT command chain sent once before standard-PID polling starts: optional, ';'-separated. No protocol preset or link word (STP, VTP, ATLNK): the OBD chip stores those every time they are sent.",
   custom_init:"AT command chain sent once before custom-PID polling starts: optional, ';'-separated. No protocol preset or link word (STP, VTP, ATLNK): the OBD chip stores those every time they are sent. For a PID on MS, single-wire or CH CAN choose its Bus.",
   specific_init:"AT command chain sent once before vehicle-specific polling starts, ahead of the per-PID inits: optional, ';'-separated. No protocol preset or link word (STP, VTP, ATLNK): the OBD chip stores those every time they are sent. For a PID on MS, single-wire or CH CAN choose its Bus.",
-  std_protocol:"Used for standard PIDs and the PID scan. Automatic lets the chip find the vehicle's protocol. A fixed protocol is never sent onto a bus that runs at another bit rate: polling pauses instead. 29-bit filters need a 29-bit protocol.",
+  std_protocol:"Used for standard PIDs and the PID scan. Automatic uses the protocol Detect my vehicle found for the car. A fixed CAN protocol is never sent onto a bus that runs at another bit rate: polling pauses instead. 29-bit filters need a 29-bit protocol. A K-line protocol (3 to 5, cars from before about 2008) starts its bus with the first request, which takes about three seconds, and WiCAN keeps the session open while it polls.",
   vehicle:"Name of the vehicle profile on this device. Choose profile searches the latest published list; the name stays editable.",
   min_event_interval_ms:"Rate limit for parameter-change events fed to rules.",
   "espnetlink.mode":"USB Ethernet (RNDIS, the default) keeps the data lines on and uses the cable as the uplink; the dongle ships ready for it. WiFi modem cuts the dongle's USB data after each pairing (best GPS reception): WiCAN re-pairs at every dongle boot, nothing persists on the dongle.",
@@ -5257,7 +5262,7 @@ const ENUMS={
   level:{none:"None",error:"Errors only",warn:"Warnings",info:"Info",debug:"Debug",verbose:"Verbose"},
   "vpn_manager.type":{wireguard:"WireGuard",tailscale:"Tailscale"},
   dtc_protocol:{obd:"OBD (modes 03 / 07 / 0A)",uds:"UDS (service 0x19)",auto:"Automatic"},
-  "autopid.std_protocol":{"0":"Automatic (chip detects)","6":"CAN 11-bit 500 kbit/s (ISO 15765-4, protocol 6)","7":"CAN 29-bit 500 kbit/s (ISO 15765-4, protocol 7)","8":"CAN 11-bit 250 kbit/s (ISO 15765-4, protocol 8)","9":"CAN 29-bit 250 kbit/s (ISO 15765-4, protocol 9)"},
+  "autopid.std_protocol":{"0":"Automatic (chip detects)","1":"SAE J1850 PWM, 41.6 kbit/s (protocol 1)","2":"SAE J1850 VPW, 10.4 kbit/s (protocol 2)","3":"ISO 9141-2, K-line with 5 baud init (protocol 3)","4":"ISO 14230-4 KWP, K-line with 5 baud init (protocol 4)","5":"ISO 14230-4 KWP, K-line with fast init (protocol 5)","6":"CAN 11-bit 500 kbit/s (ISO 15765-4, protocol 6)","7":"CAN 29-bit 500 kbit/s (ISO 15765-4, protocol 7)","8":"CAN 11-bit 250 kbit/s (ISO 15765-4, protocol 8)","9":"CAN 29-bit 250 kbit/s (ISO 15765-4, protocol 9)"},
   "can_manager.baud":v=>v==="auto"?"Automatic (from the bus traffic)":v+" kbit/s",
 };
 const PLACEHOLDER={
