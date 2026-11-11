@@ -1101,7 +1101,7 @@ function Show-Inventory {
     Write-Host '  j2534auto  - a tester states the bit rate on a silent bus (2026-10-17): with Automatic and a bus that only answers when asked, a J2534 CONNECT at a rate the node does not know is refused and said so (tx_refused, the W lines), a CONNECT at 500k is taken (adopted, writes and the ISO15765 reply flow, frames then prove it), after a restart an slcan client''s S6 does the same through the bridge, restore (3 planned restarts, ~4 min)'
     Write-Host '  j2534std   - a standard J2534 tool through the PassThru server (2026-10-19): udsoncan''s byte stream through the DLL replayed byte-exact (the 4-byte id first, the pad flag per message, TxDone and START_OF_MESSAGE indications, a multi-frame VIN, two ECUs on one channel, functional 7DF through a PASS filter, the reflash gate behind the id), then the installed wican_j2534.dll driven by udsoncan under the 32-bit Python; restore (2 planned restarts, ~1 min)'
     Write-Host '  j2534vpw   - J1850 VPW through the PassThru server (2026-11-11): ECU sim v2 on VPW alone, the J2534 server switched on for the run, CONNECT J1850VPW, a PASS filter on the functional reply target 6B, 01 00 and 01 0C each answered 48 6B 10 41 ..; the chip''s memory compared before and after (nothing written); the simulator and the settings restored (2 planned restarts, 2 simulator restarts, ~1 min). Until that day the channel''s init sent ATD behind ATTP2 and three ST pass filters, and never heard a VPW node'
-    Write-Host '  multibus   - Automate rows on MS, single-wire and CH CAN beside the car''s OBD protocol (2026-11-11): the Test route on each bus and its refusals, a bus at another speed than its usual one, seven rows polled over four buses (every row answered, about four changes of bus a round, the chip on the car''s protocol between the rounds), the rows of the other buses with the HS bus off, a bus that ends in CAN ERROR rested, an ELM app in the middle of it; the chip''s memory compared before and after (nothing written); ECU sim v2 with its four CAN buses (2 planned restarts, ~6 min)'
+    Write-Host '  multibus   - Automate rows on MS, single-wire and CH CAN beside the car''s OBD protocol (2026-11-11): the Test route on each bus and its refusals, a bus at another speed than its usual one, the words the chip stores (STP nn, VTP nnn, ATLNK) refused in a row that is on, in a test and in a car''s own init, a type init with one kept as typed, never sent and its rows on the car''s protocol not asked, seven rows polled over four buses (every row answered, about four changes of bus a round, the chip on the car''s protocol between the rounds), the rows of the other buses with the HS bus off, a bus that ends in CAN ERROR rested, nothing asked on any bus under the voltage pause, an ELM app in the middle of it; the chip''s memory compared before and after (nothing written); ECU sim v2 with its four CAN buses, which is the unit''s supply too (3 planned restarts, ~8 min)'
     Write-Host '  vpnpause   - the VPN pauses on networks marked Pause VPN (issue #976): the bench AP marked / unmarked, away on the dongle AP, home again; wg-bench on the Pi, the console for the away leg (~12 min)'
     Write-Host '  vpnroutes  - the split tunnel (issue #975): a request to a routed network leaves through wg-bench on the Pi, one to any other address through the station, judged at the receiver by the source address (~6 min)'
     Write-Host '  wgcycle    - WireGuard torn down while MQTT runs through it, N times (the beta.5 vpn_state crashes, 2026-11-02): wg-bench on the Pi, the broker at its tunnel address, a station trial to a network that does not exist drops the uplink each cycle; connects grows, MQTT returns, no reboot (~30 s per cycle, 10 cycles)'
@@ -1540,10 +1540,15 @@ try {
             # protocol (2026-11-11): a row's bus and speed, the chip taken
             # there through an AT user protocol defined in its RAM (no
             # preset, no link word: both are stored by the chip), the rows of
-            # a bus asked together, the chip home between the rounds. ECU sim
-            # v2 plays the four buses; Automate must be off at the start; the
-            # tables, the settings and the simulator are put back. Two
-            # planned restarts, no console, no PCAN.
+            # a bus asked together, the chip home between the rounds; those
+            # stored words refused in a row that is on, and a type init
+            # with one kept as typed, never sent, its rows on the car's
+            # protocol waiting; the voltage
+            # pause (the simulator is the unit's supply: the leg lowers it
+            # under the pause's threshold for half a minute). ECU sim v2
+            # plays the four buses; Automate must be off at the start; the
+            # tables, the settings, the supply and the simulator are put
+            # back. Three planned restarts, no console, no PCAN.
             Invoke-Stage 'Automate rows on MS, single-wire and CH CAN' {
                 $py = $script:BenchPy
                 $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", $BenchHost)

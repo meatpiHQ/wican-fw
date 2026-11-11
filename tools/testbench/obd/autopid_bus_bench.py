@@ -21,6 +21,20 @@ interfaces answer the same OBD requests):
   speed     the simulator's MS CAN at 250 and its CH CAN at 125 kbit/s: a
             test with `bus_kbps` is answered, one at the bus's usual speed
             is not
+  store     the words the chip stores every time it takes them (a preset
+            `STP nn` / `VTP nnn`, a link word `ATLNK..`) are refused where a
+            table of AutoPID is saved: a row that is switched on, the Test
+            route, a car's own init. A row that is switched off may keep one
+            (a file an earlier build stored loads that way)
+  hold      a type init in the settings with such a word (`custom_init`
+            `STP53;ATSH726`, as an earlier build stored it): accepted and
+            kept as typed across a restart, never sent, and the rows of that
+            type on the car's protocol are not asked (a header meant for MS
+            CAN does not go out on the car's own bus); the rows of the type
+            on MS, CH and single-wire CAN go on; the status names the init
+            and the word, a Test of a row that waits is refused with the
+            reason. With the word out of the init the poll leg finds every
+            row answered
   poll      seven rows (three on the car's protocol, two on MS CAN, one on
             CH CAN, one on single-wire CAN), Automate on: every row has the
             simulator's value, every bus counts answers and no failure, the
@@ -36,6 +50,12 @@ interfaces answer the same OBD requests):
             they are answered again behind the rest. There is no listener
             on these buses, so a wrong speed is found out by sending, and
             the rest keeps those tries off a live bus
+  pause     the supply under the voltage pause's threshold (the car is
+            parked): no row of any bus is asked, the simulator counts no
+            request, the chip stays on the car's protocol; with the supply
+            back the rows of every bus are answered again. A request on a
+            sleeping body bus can wake its modules: the pause that keeps the
+            car's own bus quiet keeps the other buses quiet too
   app       an ELM app over /ws/obd in the middle of it (`ATZ`, `0100`):
             answered on the car's protocol; ten seconds after its last word
             the rows of every bus are answered again
@@ -44,24 +64,26 @@ interfaces answer the same OBD requests):
             reads the car's protocol and the link table as found
 
 The unit's tables, its Automate settings and the simulator are put back as
-found (planned restarts: Automate on, Automate back). AutoPID must be off at
-the start.
+found (planned restarts: Automate on with the held init, the init as found,
+Automate back). AutoPID must be off at the start.
 
-usage: autopid_bus_bench.py [--dut localhost:18081] [--only test,speed,poll,guard,park,app]
+usage: autopid_bus_bench.py [--dut localhost:18081] [--only test,speed,store,hold,poll,guard,park,pause,app]
   the DUT through an ssh tunnel (`ssh -N -L 18081:<dut>:80 rpi001`), ECU sim
-  v2 at its own address. About 6 min.
+  v2 at its own address (it is the unit's supply too). About 8 min.
 """
 import json
 import os
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "lib"))
 sys.path.insert(0, HERE)
 import bench_bus  # noqa: E402
+import bench_psu  # noqa: E402
 import chip_nvm   # noqa: E402
 
 ARGS = sys.argv[1:]
@@ -73,10 +95,12 @@ def arg(name, default):
 
 DUT_HP = arg("--dut", "localhost:18081")
 DUT = "http://" + DUT_HP
-ONLY = [x for x in arg("--only", "test,speed,poll,guard,park,app").split(",") if x]
+ONLY = [x for x in arg("--only", "test,speed,store,hold,poll,guard,park,pause,app").split(",") if x]
 SIM_GROUPS = ("ecu_sim", "kline", "j1850")
 PERIOD_MS = 2000
 RPM = "[B3:B4]/4"
+#: a type init as an earlier build stored it for a car's MS CAN: a preset, then the header of a module on that bus
+HELD_INIT = "STP53;ATSH726"
 #: name, request (one reply asked for, so the chip does not wait out its timeout), expression, value, bus
 ROWS = [
     ("bus_obd_rpm", "010C1", RPM, 800, None),
@@ -186,8 +210,8 @@ def sim_back(found, tester):
     return sim_groups() == found
 
 
-def test_call(bus=None, kbps=None, cmd="010C1", init=None):
-    body = {"cmd": cmd, "expression": RPM, "type": "custom"}
+def test_call(bus=None, kbps=None, cmd="010C1", init=None, kind="custom"):
+    body = {"cmd": cmd, "expression": RPM, "type": kind}
     if bus is not None:
         body["bus"] = bus
     if kbps is not None:
@@ -281,13 +305,157 @@ def leg_speed(found_live):
     check("speed: the simulator's buses at their usual speeds again", all(b in live for b in found_live), " ".join(live))
 
 
-def leg_poll():
+def leg_store():
+    """the words the chip stores are refused wherever a table of AutoPID is saved"""
+    def with_row(init, enabled=True, cmd="224101"):
+        t = tables()
+        t["pids"].append({"name": "bus_store_row", "type": "custom", "cmd": cmd, "init": init, "group": "default", "period_ms": 0,
+                          "enabled": enabled, "parameters": [{"name": "bus_store_row", "expression": "B4", "unit": ""}]})
+        return t
+
+    def said(got):
+        return got[1] if isinstance(got[1], str) else json.dumps(got[1])
+
+    st, before = http("/api/autopid/config")
+    for word, init, cmd in (("STP53", "STP53;ATSH726", "224101"), ("VTP2C3", "ATSH726;vtp 2c3", "224101"),
+                            ("ATLNKMSPB", "ATLNKMS PB", "224101"), ("STP53", "", "STP53")):
+        got = http("/api/autopid/config", "PUT", with_row(init, True, cmd))
+        check("store: a row that is on with %s as its %s is refused, with the row, the word and the way out" % (word, "init" if init else "request"),
+              got[0] == 400 and "bus_store_row" in said(got) and word in said(got) and "Bus" in said(got), (got[0], said(got)[:140]))
+    st, after = http("/api/autopid/config")
+    check("store: the refused tables changed nothing", after == before)
+    got = http("/api/autopid/config", "PUT", with_row("STP53;ATSH726", False))
+    st, kept = http("/api/autopid/config")
+    row = next((p for p in (kept.get("pids") or []) if p.get("name") == "bus_store_row"), {}) if isinstance(kept, dict) else {}
+    check("store: the same row switched off is accepted and kept as written", got[0] == 200 and row.get("init") == "STP53;ATSH726" and row.get("enabled") is False,
+          (got[0], row.get("init"), row.get("enabled")))
+    got = http("/api/autopid/config", "PUT", with_row("STPBR 250000;ATSH726"))
+    check("store: a bit rate word (STPBR) is RAM: accepted in a row that is on", got[0] == 200, got)
+    for name, got in (("a preset in the init", test_call(None, None, "010C1", "STP53")), ("a link word in the init", test_call(None, None, "010C1", "ATLNKMS PB")),
+                      ("a preset as the request", test_call(None, None, "STP53"))):
+        check("store: the Test route refuses %s with 400 and the reason" % name, got[0] == 400 and "stored by the OBD chip" in said(got), (got[0], said(got)[:120]))
+    st, veh = http("/api/autopid/vehicles")
+    key = veh.get("current") if isinstance(veh, dict) else ""
+    if key:
+        got = http("/api/autopid/vehicles/" + urllib.parse.quote(key, safe=""), "PUT", {"specific_init": "ATSH7E0;STP53"})
+        st, veh1 = http("/api/autopid/vehicles")
+        check("store: the current car's own init with a preset is refused (400), the store as it was", got[0] == 400 and "stored by the OBD chip" in said(got) and veh1 == veh,
+              (got[0], said(got)[:120]))
+    else:
+        say("NOTE no current car in the vehicle store: its route is not asked")
+
+
+def leg_hold():
+    """a type init with a word the chip stores: kept as typed, never sent, the rows behind it wait"""
+    st, r = http("/api/autopid/config", "PUT", tables())
+    if not check("hold: the tables with a bus per row are accepted", st == 200, r):
+        return False
+    # the settings take the init as it is (an earlier build stored such a one), and it is there after the restart
+    if not check("hold: custom_init %s is accepted by the settings and kept as typed across a restart (Automate on, a planned restart)" % HELD_INIT,
+                 apply("autopid", {"enabled": True, "custom_init": HELD_INIT}), settings("autopid").get("custom_init")):
+        return False
+    time.sleep(2 * PERIOD_MS / 1000.0 + 2)
+    held = (stats().get("stats") or {}).get("held")
+    check("hold: the status names the init and the word (stats.held)", held == {"custom_init": "STP53"}, held)
+    rounds = 4
+    delta, changes, seen = watch(rounds * PERIOD_MS / 1000.0)
+    check("hold: the rows of that type on the car's protocol are not asked (neither answered nor failed)",
+          delta["obd"]["ok"] == 0 and delta["obd"]["failed"] == 0, delta["obd"])
+    for bus in OTHER:
+        rows = len([r for r in ROWS if r[4] == bus])
+        check("hold: the rows of that type on %s go on, every one answered" % bus,
+              delta[bus]["ok"] >= rows * (rounds - 1) and delta[bus]["failed"] == 0, delta[bus])
+    vals = values()
+    waiting = [name for name, _, _, _, bus in ROWS if bus is None]
+    check("hold: the rows that wait have no value, the others have the simulator's",
+          all(vals.get(n) is None for n in waiting) and all(vals.get(name) == want for name, _, _, want, bus in ROWS if bus and want is not None),
+          {n: vals.get(n) for n, _, _, _, _ in ROWS})
+    st, ring = http("/api/logs/ring", timeout=30)
+    text = ring if isinstance(ring, str) else json.dumps(ring)
+    check("hold: the unit says so as a W line, with the init and the word", "custom_init holds STP53" in text, text.count("custom_init holds STP53"))
+    # a Test of a row that waits is refused with the reason; a row with its Bus chosen, and another type, are asked
+    got = test_call(None)
+    said = got[1] if isinstance(got[1], str) else json.dumps(got[1])
+    check("hold: a Test of a row that waits is refused (409) and names the init, the word and the way out",
+          got[0] == 409 and "custom_init holds STP53" in said and "Bus" in said, (got[0], said[:160]))
+    st, r = test_call("ms")
+    tr = (r.get("transcript") or "") if isinstance(r, dict) else ""
+    check("hold: a Test of a row on MS CAN is asked and answered, and nothing of the held init is sent",
+          st == 200 and isinstance(r, dict) and r.get("ok") and r.get("value") == 800 and
+          not any(w in tr for w in ("> STP", "> VTP", "> ATLNK", "ATSH726")), tr.replace("\n", " | ")[:200])
+    st, r = test_call(None, kind="std")
+    check("hold: a Test of a standard PID is asked on the car's protocol (its type's init is clean)",
+          st == 200 and isinstance(r, dict) and r.get("ok") and r.get("value") == 800, r if not isinstance(r, dict) else (r.get("raw"), r.get("error")))
+    chip = chip_nvm.Chip(DUT_HP)
+    try:
+        chip.cmd("ATE0")
+        proto = chip.cmd("ATDPN")
+        chip.cmd("ATPC")
+    finally:
+        chip.close()
+    # a preset reads `53 [ST]`; the car's protocol reads 6 (A6 behind a search), a slot of another bus its letter
+    check("hold: the chip is not on a preset (ATDPN)", proto.strip() != "" and "[" not in proto and "53" not in proto, proto)
+    return True
+
+
+def leg_pause():
+    """the voltage pause covers the rows of every bus"""
+    ap, sl = settings("autopid"), settings("sleep_manager")
+    below = ap.get("pause_below_mv") or (sl.get("sleep_mv") if ap.get("pause_follow_sleep") else 0) or 0
+    psu = bench_psu.open_psu(None, verbose=False)
+    v0 = psu.voltage_setpoint()
+    try:
+        if not check("pause: a voltage pause is in effect under the supply (%.2f V under %.2f V), and the unit would not go to sleep within the leg" % (
+                below / 1000.0, v0), below > 0 and v0 * 1000 > below + 300 and not (sl.get("enabled") and (sl.get("sleep_delay_min") or 0) < 2),
+                "pause_below_mv %s, follow the sleep voltage %s, sleep %s after %s min" % (
+                    ap.get("pause_below_mv"), ap.get("pause_follow_sleep"), sl.get("enabled"), sl.get("sleep_delay_min"))):
+            return
+        low = below / 1000.0 - 0.6
+        s0 = bench_bus.sim_status().get("requests")
+        time.sleep(PERIOD_MS / 1000.0 + 0.5)
+        s1 = bench_bus.sim_status().get("requests")
+        check("pause: polling, the simulator counts the requests", isinstance(s0, int) and isinstance(s1, int) and s1 > s0, "%s -> %s" % (s0, s1))
+        psu.set_voltage(low)
+        t0 = time.time()
+        paused = False
+        while time.time() - t0 < 40 and not paused:
+            time.sleep(1)
+            paused = bool((stats().get("stats") or {}).get("paused_voltage"))
+        check("pause: with the supply at %.1f V the poller pauses" % low, paused, "%.0f s" % (time.time() - t0))
+        time.sleep(2)                   # a request that was under way ends
+        s2 = bench_bus.sim_status().get("requests")
+        delta, changes, seen = watch(3 * PERIOD_MS / 1000.0)
+        s3 = bench_bus.sim_status().get("requests")
+        check("pause: no row of any bus is asked", all(delta[b]["ok"] == 0 and delta[b]["failed"] == 0 for b in ("obd",) + OTHER), delta)
+        check("pause: the simulator counts no request on any of its buses", s3 == s2, "%s -> %s" % (s2, s3))
+        check("pause: the chip is on the car's protocol and does not change bus", changes == 0 and set(seen) == {"obd"},
+              "%d changes, found on %s" % (changes, sorted(set(seen), key=str)))
+    finally:
+        psu.set_voltage(v0)
+        psu.close()
+    t1 = time.time()
+    paused = True
+    while time.time() - t1 < 60 and paused:
+        time.sleep(1)
+        paused = bool((stats().get("stats") or {}).get("paused_voltage"))
+    check("pause: with the supply back at %.1f V the poller goes on" % v0, not paused, "%.0f s" % (time.time() - t1))
+    time.sleep(2 * PERIOD_MS / 1000.0 + 1)
+    delta, _, _ = watch(3 * PERIOD_MS / 1000.0)
+    for bus in ("obd",) + OTHER:
+        check("pause: the rows on %s are answered again" % bus, delta[bus]["ok"] >= 2 and delta[bus]["failed"] == 0, delta[bus])
+
+
+def leg_poll(found_init, after_hold):
     st, r = http("/api/autopid/config", "PUT", tables())
     if not check("poll: the tables with a bus per row are accepted", st == 200, r):
         return False
-    if not check("poll: Automate on (a planned restart)", apply("autopid", {"enabled": True})):
+    if not check("poll: Automate on%s (a planned restart)" % (", the word out of custom_init" if after_hold else ""),
+                 apply("autopid", {"enabled": True, "custom_init": found_init})):
         return False
     time.sleep(2 * PERIOD_MS / 1000.0 + 2)
+    if after_hold:
+        held = (stats().get("stats") or {}).get("held")
+        check("poll: with the word out of the init nothing is held, and the rows that waited are asked again (the checks below)", held == {}, held)
     rounds = 6
     delta, changes, seen = watch(rounds * PERIOD_MS / 1000.0)
     vals = values()
@@ -342,6 +510,9 @@ def leg_park():
     text = ring if isinstance(ring, str) else json.dumps(ring)
     check("park: the unit says why, once, as a W line", text.count("requests in a row ended in CAN ERROR") == 1,
           text.count("requests in a row ended in CAN ERROR"))
+    # the rows of the other buses went unanswered while the simulator restarted and backed off (four periods):
+    # one such period first, or a row is met once in the window (single-wire CAN, 2026-11-11 15:37)
+    time.sleep(4 * PERIOD_MS / 1000.0 + 1)
     delta, _, _ = watch(3 * PERIOD_MS / 1000.0)
     check("park: resting, the rows on MS CAN are not answered and the other buses go on",
           delta["ms"]["ok"] == 0 and all(delta[b]["ok"] >= 2 and delta[b]["failed"] == 0 for b in ("obd", "ch", "sw")), delta)
@@ -410,18 +581,23 @@ def main():
             leg_test()
         if "speed" in ONLY:
             leg_speed(("hs11_500", "ms11", "ch11", "sw11"))
-        if any(x in ONLY for x in ("poll", "guard", "park", "app")):
-            polling = leg_poll()
+        if "store" in ONLY:
+            leg_store()
+        held = "hold" in ONLY and leg_hold()
+        if any(x in ONLY for x in ("poll", "guard", "park", "pause", "app")):
+            polling = leg_poll(found_ap.get("custom_init", ""), held)
         if polling and "guard" in ONLY:
             leg_guard(live)
         if polling and "park" in ONLY:
             leg_park()
+        if polling and "pause" in ONLY:
+            leg_pause()
         if polling and "app" in ONLY:
             leg_app()
     except SystemExit:
         pass
     finally:
-        check("Automate as found (a planned restart when it changed)", apply("autopid", {k: found_ap[k] for k in ("enabled",)}))
+        check("Automate as found (a planned restart when it changed)", apply("autopid", {k: found_ap[k] for k in ("enabled", "custom_init")}))
         if isinstance(found_cfg, dict):
             st, r = http("/api/autopid/config", "PUT", found_cfg)
             st, back = http("/api/autopid/config")

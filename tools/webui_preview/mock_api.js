@@ -25,6 +25,18 @@
     { name: "abrp", type: "abrp", enabled: true, url: "", period_s: 10, auth: "api_key_query", auth_token: "", auth_name: "", basic_username: "", basic_password: "", api_key: "", query: "", cert_set: "", car_model: "hyundai:ioniq5:22:77", retain: true, full_first: true, networks: "Garage" },
   ] });
   ov("autopid", { enabled: true, vehicle: "Corolla 2021" });
+  /* a probe's own Automate values, e.g. { custom_init: "STP53;ATSH726" } (2026-11-11) */
+  if ((window.__mockPreset || {}).autopid) ov("autopid", window.__mockPreset.autopid);
+  /* the word of a chain that the OBD chip stores at every send (a protocol preset, a link word): the firmware's rule */
+  const storesWord = (chain) => String(chain || "").split(";").map((e) => e.replace(/[ \t]/g, "").toUpperCase())
+    .find((s) => s.startsWith("ATLNK") || (s !== "STPC" && /^(STP|VTP)[0-9A-F]{1,3}$/.test(s))) || "";
+  /* the type inits the device holds (stats.held): read at its boot, like the firmware, so a
+     save shows here after a restart alone (a probe may write state.held itself) */
+  const HELD_AT_BOOT = {};
+  for (const k of ["std_init", "custom_init", "specific_init"]) {
+    const w = storesWord(S.autopid && S.autopid.values[k]);
+    if (w) HELD_AT_BOOT[k] = w;
+  }
   if ((window.__mockPreset || {}).j1939Active === true) ov("j1939", { enabled: true, mode: "active" });
   else if ((window.__mockPreset || {}).j1939Listening === true) ov("j1939", { enabled: true });
   ov("data_logger", { enabled: false });
@@ -692,7 +704,13 @@
       })).concat([{ name: "gps_speed", unit: "km/h", value: 61.6, ts_us: nowUs - 1.2e6, external: true }]),
       stats: { running: state.groupOn && !state.busGuard, paused_voltage: false, paused_bus: !!state.busGuard, paused_diag: false, polls_ok: state.polls, polls_failed: 2, pids: 4, filters: 1,
         passive_ok: 0, passive_failed: 0, passive_published: 0, passive_requested: 0, passive_refused: 0, j1939_listening: j1939Listening() || j1939Active(), j1939_active: j1939Active(),
-        period_floor_ms: 50, sub_floor_pids: 0, now_us: nowUs },
+        period_floor_ms: 50, sub_floor_pids: 0, now_us: nowUs,
+        /* the buses the rows ask on (2026-11-11): state.buses = what a probe wants to see, e.g. a resting bus */
+        buses: state.buses || { now: "obd", changes: 0, obd: { ok: state.polls, failed: 0 },
+          ms: { ok: 0, failed: 0, parks: 0, parked: false, retry_s: 0 }, sw: { ok: 0, failed: 0, parks: 0, parked: false, retry_s: 0 },
+          ch: { ok: 0, failed: 0, parks: 0, parked: false, retry_s: 0 } },
+        /* a type init with a word the OBD chip stores: not sent, its PIDs on the car's OBD protocol wait (2026-11-11) */
+        held: state.held || HELD_AT_BOOT },
       /* the bus guard (2026-10-03): state.busGuard = a parked poller's reason */
       bus_guard: state.busGuard
         ? { bus: "live", bus_kbps: 250, verdict: "park", parked: true, reason: state.busGuard }
@@ -1105,7 +1123,15 @@
         return T("", 204);
       }
     }
-    if (method === "PUT" && path === "/api/autopid/config") { state.autopidCfg = body || state.autopidCfg; return J({ ok: true }); }
+    if (method === "PUT" && path === "/api/autopid/config") {
+      /* as the firmware (2026-11-11): a row that is switched on with a protocol preset or a link word in its request
+         or init is refused, the OBD chip stores those every time they are sent; a row that is switched off may keep it */
+      for (const p of (body && body.pids) || []) {
+        const word = storesWord(p.cmd) || storesWord(p.init);
+        if (word && p.enabled !== false) return J({ error: "pid " + p.name + ": " + word + " is stored by the OBD chip; use the row's Bus" }, 400);
+      }
+      state.autopidCfg = body || state.autopidCfg; return J({ ok: true });
+    }
     const q = new URLSearchParams((full || "").split("?")[1] || "");
     if (method === "POST" && path === "/api/autopid/dbc") { const n = q.get("name") || "dbc"; state.dbcs = [...(state.dbcs || []), { name: n, messages: 1, signals: 1, bytes: String((opts && opts.body) || "").length }]; return J({ ok: true, name: n, messages: 1, signals: 1 }); }
     if (method === "POST" && path === "/api/fs/mkdir") { const p = q.get("path"); if (!p) return J({ error: "invalid path" }, 400); state.dirs.add(p); return J({ ok: true }); }   /* query string, like the firmware */
@@ -1217,6 +1243,10 @@
       const expr = body && body.expression;
       const exprs = body && Array.isArray(body.expressions) ? body.expressions : null;
       state.lastTest = body;   // what the page asked for (the row's bus rides here, probe_row_bus.mjs)
+      /* as the firmware (2026-11-11): the type's init is held, a PID of that type on the car's OBD protocol is not asked */
+      const heldNow = state.held || HELD_AT_BOOT, initKey = ((body && body.type) || "") + "_init";
+      if (heldNow[initKey] && !(body && body.bus && body.bus !== "obd") && !/^PGN:/i.test((body && body.cmd) || ""))
+        return J({ error: initKey + " holds " + heldNow[initKey] + ", which the OBD chip stores every time it is sent: PIDs of this type on the car's OBD protocol are not asked. Take it out of the init, or choose the PID's Bus" }, 409);
       const raw = "7EC 10 27 62 01 01 FF F7 E7\n7EC 21 FF 84 84 84 84 84 84";
       const sent = [];
       for (const chain of [body && body.init]) for (const c of String(chain || "").split(";")) if (c.trim()) sent.push(c.trim());

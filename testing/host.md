@@ -49,6 +49,31 @@ at most, and coming home with two buses at max rate, the rest after three
 gets through), and the class that keeps such rows out of the HS bus guard's
 hands. `autopid` 163 tests PASS (`test-reports/2026-11-11_1427_host_autopid.md`).
 
+**2026-11-11, later:** the words the OBD chip stores every time it takes them
+(`autopid`, `test_store_words.c`, 5 cases). Which words they are (`STP 53`,
+`vtp 2c3`, `ATLNKMS PB`, anywhere in a chain) and which RAM words only look
+like them (`STPBR 250000`, `STPTO`, `STPO`, `STPC`); no chain keeps one behind
+the sanitizing every chain of the tables goes through; the parser refuses a row
+that is switched on, names the row, the word and the Bus field, and lets a
+switched-off row keep the word; a file as an earlier build stored it is
+repaired once (the two rows that were on switched off, the clean row left on,
+the word still in the file, a second pass a no-op); the settings migration
+takes the word out of the three type inits and of nothing else. Written with
+the change, so there is no red run before it: the parser accepted such a row
+until then (the device half shows that, `testing/autopid_bus_bench.md`).
+`autopid` 168 tests PASS (`test-reports/2026-11-11_1523_host_autopid.md`).
+
+**2026-11-11, evening:** the settings migration is gone again and its case
+with it (Ali: "keep STP53 and simply not send it": a type's init keeps the
+word, it is never sent, and the rows behind it wait). In its place
+`test_store_a_type_init_with_one_holds_its_rows`: with the hold on the custom
+type the custom row of the car's protocol is not enabled and the scheduler
+never picks it in twelve picks, while the custom row on MS CAN, a J1939 group
+and a standard row are picked; the hold on the standard type holds the
+standard row and not the custom one; released, the row is back; a row that is
+switched off stays off whatever the hold says. `autopid` 168 tests PASS
+(`test-reports/2026-11-11_2215_host_autopid.md`).
+
 **2026-11-10, evening:** what the chip may learn (`autopid`,
 `ap_veh_chip_learns`: only a protocol a standard request answered on, never
 the protocol of a car confirmed by its profile). 149 tests PASS

@@ -2139,6 +2139,18 @@
     { name: "abrp", type: "abrp", enabled: true, url: "", period_s: 10, auth: "api_key_query", auth_token: "", auth_name: "", basic_username: "", basic_password: "", api_key: "", query: "", cert_set: "", car_model: "hyundai:ioniq5:22:77", retain: true, full_first: true, networks: "Garage" },
   ] });
   ov("autopid", { enabled: true, vehicle: "Corolla 2021" });
+  /* a probe's own Automate values, e.g. { custom_init: "STP53;ATSH726" } (2026-11-11) */
+  if ((window.__mockPreset || {}).autopid) ov("autopid", window.__mockPreset.autopid);
+  /* the word of a chain that the OBD chip stores at every send (a protocol preset, a link word): the firmware's rule */
+  const storesWord = (chain) => String(chain || "").split(";").map((e) => e.replace(/[ \t]/g, "").toUpperCase())
+    .find((s) => s.startsWith("ATLNK") || (s !== "STPC" && /^(STP|VTP)[0-9A-F]{1,3}$/.test(s))) || "";
+  /* the type inits the device holds (stats.held): read at its boot, like the firmware, so a
+     save shows here after a restart alone (a probe may write state.held itself) */
+  const HELD_AT_BOOT = {};
+  for (const k of ["std_init", "custom_init", "specific_init"]) {
+    const w = storesWord(S.autopid && S.autopid.values[k]);
+    if (w) HELD_AT_BOOT[k] = w;
+  }
   if ((window.__mockPreset || {}).j1939Active === true) ov("j1939", { enabled: true, mode: "active" });
   else if ((window.__mockPreset || {}).j1939Listening === true) ov("j1939", { enabled: true });
   ov("data_logger", { enabled: false });
@@ -2806,7 +2818,13 @@
       })).concat([{ name: "gps_speed", unit: "km/h", value: 61.6, ts_us: nowUs - 1.2e6, external: true }]),
       stats: { running: state.groupOn && !state.busGuard, paused_voltage: false, paused_bus: !!state.busGuard, paused_diag: false, polls_ok: state.polls, polls_failed: 2, pids: 4, filters: 1,
         passive_ok: 0, passive_failed: 0, passive_published: 0, passive_requested: 0, passive_refused: 0, j1939_listening: j1939Listening() || j1939Active(), j1939_active: j1939Active(),
-        period_floor_ms: 50, sub_floor_pids: 0, now_us: nowUs },
+        period_floor_ms: 50, sub_floor_pids: 0, now_us: nowUs,
+        /* the buses the rows ask on (2026-11-11): state.buses = what a probe wants to see, e.g. a resting bus */
+        buses: state.buses || { now: "obd", changes: 0, obd: { ok: state.polls, failed: 0 },
+          ms: { ok: 0, failed: 0, parks: 0, parked: false, retry_s: 0 }, sw: { ok: 0, failed: 0, parks: 0, parked: false, retry_s: 0 },
+          ch: { ok: 0, failed: 0, parks: 0, parked: false, retry_s: 0 } },
+        /* a type init with a word the OBD chip stores: not sent, its PIDs on the car's OBD protocol wait (2026-11-11) */
+        held: state.held || HELD_AT_BOOT },
       /* the bus guard (2026-10-03): state.busGuard = a parked poller's reason */
       bus_guard: state.busGuard
         ? { bus: "live", bus_kbps: 250, verdict: "park", parked: true, reason: state.busGuard }
@@ -3219,7 +3237,15 @@
         return T("", 204);
       }
     }
-    if (method === "PUT" && path === "/api/autopid/config") { state.autopidCfg = body || state.autopidCfg; return J({ ok: true }); }
+    if (method === "PUT" && path === "/api/autopid/config") {
+      /* as the firmware (2026-11-11): a row that is switched on with a protocol preset or a link word in its request
+         or init is refused, the OBD chip stores those every time they are sent; a row that is switched off may keep it */
+      for (const p of (body && body.pids) || []) {
+        const word = storesWord(p.cmd) || storesWord(p.init);
+        if (word && p.enabled !== false) return J({ error: "pid " + p.name + ": " + word + " is stored by the OBD chip; use the row's Bus" }, 400);
+      }
+      state.autopidCfg = body || state.autopidCfg; return J({ ok: true });
+    }
     const q = new URLSearchParams((full || "").split("?")[1] || "");
     if (method === "POST" && path === "/api/autopid/dbc") { const n = q.get("name") || "dbc"; state.dbcs = [...(state.dbcs || []), { name: n, messages: 1, signals: 1, bytes: String((opts && opts.body) || "").length }]; return J({ ok: true, name: n, messages: 1, signals: 1 }); }
     if (method === "POST" && path === "/api/fs/mkdir") { const p = q.get("path"); if (!p) return J({ error: "invalid path" }, 400); state.dirs.add(p); return J({ ok: true }); }   /* query string, like the firmware */
@@ -3331,6 +3357,10 @@
       const expr = body && body.expression;
       const exprs = body && Array.isArray(body.expressions) ? body.expressions : null;
       state.lastTest = body;   // what the page asked for (the row's bus rides here, probe_row_bus.mjs)
+      /* as the firmware (2026-11-11): the type's init is held, a PID of that type on the car's OBD protocol is not asked */
+      const heldNow = state.held || HELD_AT_BOOT, initKey = ((body && body.type) || "") + "_init";
+      if (heldNow[initKey] && !(body && body.bus && body.bus !== "obd") && !/^PGN:/i.test((body && body.cmd) || ""))
+        return J({ error: initKey + " holds " + heldNow[initKey] + ", which the OBD chip stores every time it is sent: PIDs of this type on the car's OBD protocol are not asked. Take it out of the init, or choose the PID's Bus" }, 409);
       const raw = "7EC 10 27 62 01 01 FF F7 E7\n7EC 21 FF 84 84 84 84 84 84";
       const sent = [];
       for (const chain of [body && body.init]) for (const c of String(chain || "").split(";")) if (c.trim()) sent.push(c.trim());
@@ -5149,9 +5179,9 @@ const HELP={
   pause_below_mv:"Polling stops below this battery voltage and resumes 0.3 V above it. 0 = no fixed threshold.",
   pause_follow_sleep:"With no fixed threshold, pause PID requests whenever the battery is below the Power Saving sleep voltage; they resume above its wake-up voltage.",
   pause_mode:"What a voltage pause stops. Pause requests only: the J1939 rows, read from WiCAN's own CAN listener and transmitting nothing, keep running. Pause everything: those stop too.",
-  std_init:"AT command chain sent once before standard-PID polling starts: optional, ';'-separated.",
-  custom_init:"AT command chain sent once before custom-PID polling starts: optional, ';'-separated.",
-  specific_init:"AT command chain sent once before vehicle-specific polling starts, ahead of the per-PID inits: optional, ';'-separated.",
+  std_init:"AT command chain sent once before standard-PID polling starts: optional, ';'-separated. No protocol preset or link word (STP, VTP, ATLNK): the OBD chip stores those every time they are sent.",
+  custom_init:"AT command chain sent once before custom-PID polling starts: optional, ';'-separated. No protocol preset or link word (STP, VTP, ATLNK): the OBD chip stores those every time they are sent. For a PID on MS, single-wire or CH CAN choose its Bus.",
+  specific_init:"AT command chain sent once before vehicle-specific polling starts, ahead of the per-PID inits: optional, ';'-separated. No protocol preset or link word (STP, VTP, ATLNK): the OBD chip stores those every time they are sent. For a PID on MS, single-wire or CH CAN choose its Bus.",
   std_protocol:"Used for standard PIDs and the PID scan. Automatic lets the chip find the vehicle's protocol. A fixed protocol is never sent onto a bus that runs at another bit rate: polling pauses instead. 29-bit filters need a 29-bit protocol.",
   vehicle:"Name of the vehicle profile on this device. Choose profile searches the latest published list; the name stays editable.",
   min_event_interval_ms:"Rate limit for parameter-change events fed to rules.",
@@ -5741,6 +5771,18 @@ const PROFILES_URL="https://raw.githubusercontent.com/meatpiHQ/wican-fw/main/veh
    the car's OBD protocol */
 function busArgs(pd){
   return pd&&["ms","sw","ch"].includes(pd.bus)?{bus:pd.bus,...(Number(pd.bus_kbps)?{bus_kbps:Number(pd.bus_kbps)}:{})}:{};
+}
+/* the first word of an AT chain that the OBD chip stores every time it takes it: a
+   protocol preset (STP 53, VTP 2C3) or a link word (ATLNKMS PB). The firmware refuses
+   one in a PID that is switched on (autopid_bus.h); this is the same rule, so the
+   page can say why before Apply does. STPBR and friends (a bit rate, RAM) and STPC
+   (close the protocol) are not presets. */
+function storeWord(chain){
+  for(const el of String(chain||"").split(";")){
+    const s=el.replace(/[ \t]/g,"").toUpperCase();
+    if(s.startsWith("ATLNK")||(s!=="STPC"&&/^(STP|VTP)[0-9A-F]{1,3}$/.test(s)))return s;
+  }
+  return "";
 }
 function profileToPids(car,keepPids,keepFilters){
   const fixUnit=u=>typeof u==="string"?u.replace(/\uFFFD/g,"°"):u;
@@ -6871,6 +6913,23 @@ PAGES.automate=async(view,sub)=>{
     const groupRows={};
     if(av&&sch)for(const g of Object.keys(GROUP_KEYS))groupRows[g]=await settingsForm("autopid",GROUP_KEYS[g],{values:av,schema:sch,visible:false});
     const groupHead=g=>groupRows[g]?h("div",{style:"margin-bottom:14px"},...groupRows[g]):null;
+    /* a protocol preset or a link word in a type's init (2026-11-11, Ali: "keep STP53 and
+       simply not send it"): the setting keeps it as typed, WiCAN never sends it (the OBD
+       chip stores such a word at every send), and the PIDs of that type on the car's OBD
+       protocol wait while it is there. The field says so as it is typed (the same rule as
+       the firmware's, storeWord); the table under it says what the device does now
+       (stats.held), which follows a saved setting after the restart */
+    const INIT_KEY={std:"std_init",custom:"custom_init",specific:"specific_init"};
+    const TYPE_PIDS={std:"standard PIDs",custom:"custom PIDs",specific:"vehicle-specific PIDs"};
+    const initNotes=[];
+    for(const g of Object.keys(INIT_KEY)){
+      const frow=(groupRows[g]||[]).find(r=>r.dataset&&r.dataset.key===INIT_KEY[g]);if(!frow)continue;
+      const el=h("div",{class:"help init-held",style:"display:none;color:var(--danger)"});frow.append(el);
+      const inp=frow.querySelector(".ctl input");
+      const paint=()=>{const w=storeWord(inp?inp.value:av[INIT_KEY[g]]);el.style.display=w?"":"none";
+        el.textContent=w?w+" is stored by the OBD chip every time it is sent, so WiCAN does not send it, and does not ask the "+TYPE_PIDS[g]+" on the car's OBD protocol while it is here. Take "+w+" out of this field"+(g==="std"?".":", and choose the Bus of the PIDs that are on MS CAN, single-wire CAN or CH CAN."):"";};
+      frow.addEventListener("input",paint);frow.addEventListener("change",paint);initNotes.push(paint);paint();}
+    const paintInitNotes=()=>initNotes.forEach(f=>f());
     let cfg=await api("/api/autopid/config");
     if(typeof cfg==="string"){try{cfg=JSON.parse(cfg);}catch{cfg={};}}
     cfg.pids=cfg.pids||[];cfg.groups=cfg.groups&&cfg.groups.length?cfg.groups:[{name:"default",enabled_default:true,period_ms:1000}];
@@ -6983,12 +7042,16 @@ PAGES.automate=async(view,sub)=>{
        2.5 s while the page is open and update in place (typing is never
        interrupted). Edits mark the table "Unsaved edits" until Apply. */
     const live={};const liveSubs=new Set();let liveTimer=null,liveSince=0;
+    let liveBuses={}; /* stats.buses of the last look: which bus rests after CAN ERRORs */
+    let liveHeld={};  /* stats.held of the last look: the type inits the device holds, {setting: word} */
     async function pollLive(){
       /* the page is built before the router attaches it: only stop once it has been on screen */
       if(!view.isConnected){if(Date.now()-liveSince>8000){clearInterval(liveTimer);liveTimer=null;}return;}
       const r=await tryGet("/api/autopid");
       if(r&&Array.isArray(r.params)){
         for(const p of r.params)live[p.name]={value:p.value,unit:p.unit};
+        liveBuses=(r.stats&&r.stats.buses)||{};
+        liveHeld=(r.stats&&r.stats.held)||{};
         for(const f of liveSubs)f();
       }
     }
@@ -7041,13 +7104,39 @@ PAGES.automate=async(view,sub)=>{
         for(const pd of cfg.pids){if(pd.enabled!==false&&!isPgn(pd))n[busOf(pd)]++;}
         const other=["ms","sw","ch"].filter(b=>n[b]);
         busStrip.style.display=other.length?"flex":"none";
-        if(!other.length)return;
+        if(!other.length){delete busStrip.dataset.key;return;}
         const rows=k=>k+" row"+(k===1?"":"s");
+        /* a bus nobody acknowledges on rests (three CAN ERRORs in a row, 30 s, then
+           longer): say so here, it is the only sign of a wrong Bus speed */
+        const resting=other.filter(b=>liveBuses[b]&&liveBuses[b].parked);
+        const retry=b=>{const s=Number(liveBuses[b]&&liveBuses[b].retry_s)||0;return s?" The next try comes in "+s+" s.":"";};
+        const key=other.map(b=>b+n[b]+(resting.includes(b)?"r":"")).join()+"|"+n.obd;
+        if(busStrip.dataset.key===key){ /* nothing to repaint between two looks but the countdown */
+          for(const el of busStrip.querySelectorAll("[data-retry]"))el.textContent=retry(el.dataset.retry);
+          return;}
+        busStrip.dataset.key=key;
+        const up=s=>s.charAt(0).toUpperCase()+s.slice(1);
         busStrip.replaceChildren(h("span",{class:"chip"},"this round"),h("span",{class:"chip"},"OBD protocol: "+rows(n.obd)),
-          ...other.map(b=>h("span",{class:"chip"},BUS_NAME[b]+": "+rows(n[b]))),
-          h("span",{class:"chip",title:"To each other bus once, and back to the car's OBD protocol"},(other.length+1)+" bus changes"));};
+          ...other.map(b=>resting.includes(b)
+            ?h("span",{class:"chip warn",title:"Three requests in a row were not acknowledged"},h("i",{class:"d"}),BUS_NAME[b]+": resting, no answer")
+            :h("span",{class:"chip"},BUS_NAME[b]+": "+rows(n[b]))),
+          h("span",{class:"chip",title:"To each other bus once, and back to the car's OBD protocol"},(other.length+1)+" bus changes"),
+          ...resting.map(b=>h("div",{class:"help",style:"flex-basis:100%"},up(BUS_NAME[b])+" is resting: three requests in a row were not acknowledged. The Bus speed of its PIDs is not the car's, or the car has no such bus. WiCAN tries again by itself, first after 30 seconds, then less often, so a wrong speed does not disturb a live bus.",
+            h("span",{"data-retry":b},retry(b)))));};
+      /* the device holds this table's init (it carries a word the OBD chip stores): the
+         PIDs of the table on the car's OBD protocol are not asked, say so and how many */
+      const heldNote=h("div",{class:"help held-note",style:"display:none;color:var(--danger);margin-top:10px"});
+      const paintHeld=()=>{
+        const w=liveHeld[INIT_KEY[type]]||"";
+        heldNote.style.display=w?"":"none";
+        if(!w){delete heldNote.dataset.key;return;}
+        const n=mine().filter(pd=>pd.enabled!==false&&!isPgn(pd)&&busOf(pd)==="obd").length;
+        const key=w+"|"+n;if(heldNote.dataset.key===key)return;heldNote.dataset.key=key;
+        heldNote.textContent=(n?n+" PID"+(n===1?"":"s")+" of this table on the car's OBD protocol "+(n===1?"is":"are")+" not asked":"The PIDs of this table on the car's OBD protocol are not asked")+
+          ": the "+(LABELS[INIT_KEY[type]]||INIT_KEY[type])+" hold "+w+", which the OBD chip stores every time it is sent, so WiCAN does not send it. Take "+w+" out of the init"+
+          (type==="std"?"":", choose the Bus of the PIDs that are on MS CAN, single-wire CAN or CH CAN")+", then Apply Configuration and restart.";};
       let attached=false; /* unsubscribe only once the table has been on the page and left it */
-      const refreshLive=()=>{if(tbl.isConnected)attached=true;else if(attached){liveSubs.delete(refreshLive);return;}for(const f of cells.values())f();};
+      const refreshLive=()=>{if(tbl.isConnected)attached=true;else if(attached){liveSubs.delete(refreshLive);return;}for(const f of cells.values())f();paintBusStrip();paintHeld();};
       liveSubs.add(refreshLive);
       const liveCell=(el,fn)=>{cells.set(el,()=>fn(el));fn(el);return el;};
       const pidRow=pd=>{
@@ -7055,6 +7144,9 @@ PAGES.automate=async(view,sub)=>{
         const isOpen=open.has(pd);
         const on=pd.enabled!==false;
         const n=pd.parameters.length;
+        /* a protocol preset or a link word in the request or the init: the firmware
+           keeps such a PID switched off (the OBD chip stores the word at every send) */
+        const stored=storeWord(pd.cmd)||storeWord(pd.init);
         const row=h("div",{class:"pidrow"+(on?"":" off")+(isOpen?" open":"")});
         const sw=switchCtl(on,v=>{pd.enabled=v;row.classList.toggle("off",!v);markDirty();},{sm:true,noText:true,title:"Poll this PID"});
         const caret=h("button",{class:"btn sm gh caret",type:"button",
@@ -7073,7 +7165,7 @@ PAGES.automate=async(view,sub)=>{
               :h("input",{class:"mono",value:pd.cmd||"",placeholder:"010C1",title:isPgn(pd)?pgnLabel(pd)+". PGN:<hex>[@<source>][?]: a J1939 group read from the listener":"The OBD/UDS request sent on the bus, or PGN:<hex> for a J1939 group",onchange:e=>{pd.cmd=e.target.value;if(isPgn(pd)){delete pd.rxheader;delete pd.init;}markDirty();rebuild(true);}}),
           ...(hasRx?[isPgn(pd)?h("span",{class:"dim",title:"A J1939 group has no reply header: it is heard, not asked"},"J1939")
               :h("input",{class:"mono",value:pd.rxheader||"",placeholder:"7E8",title:"Optional reply-header filter when several ECUs answer",onchange:e=>{pd.rxheader=e.target.value;markDirty();}})]:[]),
-          h("div",{class:"vals"},caret,summary),
+          h("div",{class:"vals"},caret,stored?h("span",{class:"chip warn",title:stored+" is stored by the OBD chip every time it is sent. Open the PID to see what to do."},h("i",{class:"d"}),stored+": not sent"):summary),
           h("div",{class:"acts"},testBtn,
             h("button",{class:"btn sm gh danger",type:"button",title:"Remove this PID and all its parameters",onclick:()=>{cfg.pids.splice(cfg.pids.indexOf(pd),1);markDirty();rebuild(true);}},ic("trash")))));
         if(isOpen){
@@ -7092,7 +7184,7 @@ PAGES.automate=async(view,sub)=>{
                 h("option",{value:"0",selected:!Number(pd.bus_kbps)},"Usual ("+BUS_OWN[pd.bus]+" kbit/s)"),
                 ...BUS_SPEEDS.filter(k=>k!==BUS_OWN[pd.bus]).map(k=>h("option",{value:String(k),selected:Number(pd.bus_kbps)===k},k+" kbit/s"))))]:[])]:[]),
             isPgn(pd)?fld("J1939",h("span",{class:"help",style:"display:block;padding-top:6px"},pgnLabel(pd)+". No init, no reply header: the listener keeps the newest message of every group, this row decodes it (B0 = the first data byte)."))
-              :fld("PID init (optional AT chain)",h("input",{class:"mono",value:pd.init||"",placeholder:"ATSP6;ATSH7E4;",title:"Sent before this PID's request whenever the poller switches to it. ATH0, ATS0 and ATE1 are ignored: the poller reads replies with headers and spaces on.",onchange:e=>{pd.init=e.target.value;markDirty();}})));
+              :fld("PID init (optional AT chain)",h("input",{class:"mono",value:pd.init||"",placeholder:"ATSP6;ATSH7E4;",title:"Sent before this PID's request whenever the poller switches to it. ATH0, ATS0 and ATE1 are ignored: the poller reads replies with headers and spaces on. No protocol preset or link word (STP, VTP, ATLNK): choose the Bus instead.",onchange:e=>{const was=storeWord(pd.init);pd.init=e.target.value;markDirty();if(was!==storeWord(pd.init))rebuild(true);}})));
           const prmHead=h("div",{class:"prm prm-head"},h("span",{}),h("span",{},"Parameter"),h("span",{},"Expression"),h("span",{},"Unit"),h("span",{class:"r"},"Live"),h("span",{}));
           const prmRows=pd.parameters.map(pr=>{
             const pon=pr.enabled!==false;
@@ -7109,6 +7201,7 @@ PAGES.automate=async(view,sub)=>{
               pd.parameters.length>1?h("button",{class:"btn sm gh danger",type:"button",title:"Remove this parameter",onclick:()=>{pd.parameters.splice(pd.parameters.indexOf(pr),1);markDirty();rebuild(true);}},ic("trash")):h("span",{}));
             return prow;});
           row.append(h("div",{class:"det"},fields,
+            ...(stored?[h("div",{class:"help pidl-err",style:"margin:8px 0 2px"},stored+" is stored by the OBD chip every time it is sent, and a PID's init is sent again at every poll round, so WiCAN does not send it and keeps this PID switched off. Take "+stored+" out of the "+(storeWord(pd.cmd)?"request":"PID init")+(busRow(pd)?", choose the Bus this PID is on (MS CAN, single-wire CAN or CH CAN), then switch it on.":" and switch the PID on again."))]:[]),
             ...(busOf(pd)!=="obd"?[h("div",{class:"help",style:"margin:8px 0 2px"},"Rows on another bus are asked together, one bus after the other, so a round changes bus once per bus and not once per row. The choice is kept with the row on this device: nothing is stored in the OBD chip. The PID init of such a row must not pick a protocol (no ATSP, ATTP, STP or VTP).")]:[]),
             h("div",{class:"dlabel"},"Parameters decoded from the reply"),
             prmHead,...prmRows,
@@ -7128,7 +7221,7 @@ PAGES.automate=async(view,sub)=>{
         paintBusStrip();
         refreshLive();
       };
-      tbl.append(tools,list,busStrip,errLine);
+      tbl.append(tools,list,heldNote,busStrip,errLine);
       rebuild();tbl.rebuild=()=>rebuild(true);
       startLive();
       return tbl;
@@ -7233,7 +7326,7 @@ PAGES.automate=async(view,sub)=>{
         if(store.pending.has("autopid"))paintBanner("unsaved");else{staged=null;paintBanner(false);}});
       const stageCar=car=>{if(!av)return;
         av.vehicle=String(car.car_model||"").slice(0,maxName);av.specific_init=car.init||"";av.specific_enabled=true;
-        stageAv();if(rows)rows.load();};
+        stageAv();if(rows)rows.load();paintInitNotes();};
       const snapshot=()=>({pids:cfg.pids.filter(pd=>pidType(pd)==="specific").map(pd=>JSON.parse(JSON.stringify(pd))),
         filters:(cfg.filters||[]).filter(f=>f.profile).map(f=>JSON.parse(JSON.stringify(f))),
         vehicle:av?av.vehicle:"",init:av?av.specific_init:"",en:av?av.specific_enabled:true,dirty:cfgDirty,pending:store.pending.has("autopid")});
@@ -7253,7 +7346,7 @@ PAGES.automate=async(view,sub)=>{
         if(cfg.filters||(s.filters||[]).length)cfg.filters=(cfg.filters||[]).filter(f=>!f.profile).concat(s.filters||[]);
         if(av){av.vehicle=s.vehicle;av.specific_init=s.init;av.specific_enabled=s.en;
           if(s.pending)stageAv();else store.unstage("autopid");
-          if(rows)rows.load();}
+          if(rows)rows.load();paintInitNotes();}
         staged=null;paintBanner(false);markDirty(s.dirty);tbl.rebuild();
         toast("Profile discarded","");};
       /* the Choose profile button rides on the settings row's control (the
@@ -8114,9 +8207,14 @@ PAGES.dashboard=async(view)=>{
     /* rows whose own init sets a protocol this bus cannot take are not sent: say so while it happens */
     const refusing=!off&&!parked&&guard.refused>0&&guard.refused_ms<60000&&!!guard.refused_reason;
     stateEl.replaceChildren(off?chip("Automate off",""):st.paused_voltage?chip("Paused: battery below the threshold","warn"):parked?chip("Paused: nothing is sent to this bus","warn"):st.running?chip("Polling","ok"):chip("Not polling",""));
-    busEl.style.display=(parked||refusing)?"":"none";
+    /* a type's init with a word the OBD chip stores (stats.held): that init is not sent and its PIDs on the car's OBD protocol wait */
+    const held=off?[]:Object.entries(st.held||{});
+    busEl.style.display=(parked||refusing||held.length)?"":"none";
     if(parked)busEl.replaceChildren(banner("warn","alert",h("b",{},"Polling is paused to protect the vehicle bus. "),cap(why)+". ",h("a",{href:"#/automate/settings"},"Open Automate settings")));
-    else if(refusing)busEl.replaceChildren(banner("warn","alert",h("b",{},"Some rows are not sent to protect the vehicle bus. "),cap(guard.refused_reason)+". ",h("a",{href:"#/automate/parameters"},"Open Automate parameters")));
+    else busEl.replaceChildren(...[
+      refusing?banner("warn","alert",h("b",{},"Some rows are not sent to protect the vehicle bus. "),cap(guard.refused_reason)+". ",h("a",{href:"#/automate/parameters"},"Open Automate parameters")):null,
+      held.length?banner("warn","alert",h("b",{},"Some PIDs are not asked. "),held.map(([k,w])=>"The "+(LABELS[k]||k)+" hold "+w).join("; ")+
+        ": the OBD chip stores such a word every time it is sent, so WiCAN does not send it, and does not ask the PIDs behind it on the car's OBD protocol. ",h("a",{href:"#/automate/parameters"},"Open Automate parameters")):null].filter(Boolean));
     if(off){stripEl.style.display="none";showEmpty(h("span",{},"Automate is off: turn polling on under ",h("a",{href:"#/automate/settings"},"Automate → Settings"),"."));return;}
     if(!(a.params||[]).length){stripEl.style.display="none";showEmpty(h("span",{},"Nothing to show yet: add parameters under ",h("a",{href:"#/automate/parameters"},"Automate → Parameters"),"."));return;}
     stripEl.style.display="";paintGroups(a);paintStats(st);
