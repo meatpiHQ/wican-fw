@@ -38,6 +38,13 @@ What is read (nothing is written; every word is a display or a read):
                     such a preset SURVIVES the warm start, ATDPN keeps
                     reading `53 [ST]` and says nothing about the store (bench
                     2026-11-11), hence the temporary protocol first
+  link table        ATDPCLK (the transceiver each CAN protocol slot talks
+                    on), read last, behind the warm start of the stored
+                    protocol read: an `ATLNK..` word writes it (kept through
+                    a power-off, bench 2026-11-11), `VTSET_CAN` changes it in
+                    RAM until a reset. `VT AT_PROTOCOL_ALL` shows such a RAM
+                    definition as well, so take a snapshot behind a warm
+                    start, not in the middle of a session that defined a slot
 
 The reset makes the snapshot an app session like any other: it ends the
 session the chip had, and AutoPID, when it is on, sends its prelude again
@@ -79,6 +86,7 @@ WORDS = (
     [("wake sequences", "VT DISP_ISO_WM %d" % n) for n in range(1, 9)]
 )
 STORED_PROTOCOL = "stored protocol (ATTPn, ATZ, ATDPN, twice)"
+LINK_TABLE = "link table (ATDPCLK behind the warm start)"
 
 
 class Chip:
@@ -184,6 +192,7 @@ def snapshot(dut_hp):
         for _, word in WORDS:
             cells[word] = chip.read(word)
         cells[STORED_PROTOCOL] = chip.stored_protocol()
+        cells[LINK_TABLE] = chip.read("ATDPCLK")
         chip.cmd("ATPC")            # the session this tool opened is none: say so to the chip
     finally:
         REREAD[0] = chip.reread

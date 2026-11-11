@@ -337,7 +337,16 @@ def sim_only(bus, base=SIM_URL):
     ECUs are switched off. One simulator reboot (sim_patch); the single-wire
     transceiver is put to `normal` for a single-wire bus. Returns
     (previous, running) like sim_patch: sim_patch(previous) restores the
-    settings; the transceiver goes back with the reboot."""
+    settings; the transceiver goes back with the reboot.
+
+    Several calls in a row: `previous` holds the keys THIS call changed, so
+    no single one of them leads back to the start (2026-11-11: MS CAN stayed
+    off after ms11, ch11, sw11 and the first call's `previous`). Keep the
+    three groups as found (sim_get) and patch back what differs.
+
+    Behind the reboot an interface may answer late (CH CAN 8 s on
+    2026-11-11, its status already `running`): ask until it answers before
+    judging anything on the first request."""
     if bus not in SIM_BUSES:
         raise SystemExit(f"bench_bus: no bus {bus!r} (buses: {' '.join(SIM_BUSES)})")
     spec = SIM_BUSES[bus]
