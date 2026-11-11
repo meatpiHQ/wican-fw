@@ -624,7 +624,7 @@
                     <tr>
                         <td>Password:</td>
                         <td>
-                            <input type="text" id="pass_value" name="pass_value" value="TomatoSauce" disabled />
+                            <input type="password" id="pass_value" name="pass_value" value="" placeholder="empty = unchanged" autocomplete="new-password" disabled />
                         </td>
                     </tr>
                     <tr>
@@ -2307,7 +2307,7 @@ function loadAutoTable(jsonData) {
 			document.getElementById("mqtt_en").disabled = false;
 			document.getElementById("batt_alert").disabled = false;
 		}
-		if(document.getElementById("ap_pass_value").value.length < 8 || document.getElementById("ap_pass_value").value.length > 63 || document.getElementById("pass_value").value.length < 8 || document.getElementById("pass_value").value.length > 63) {
+		if(document.getElementById("ap_pass_value").value.length < 8 || document.getElementById("ap_pass_value").value.length > 63 || (document.getElementById("pass_value").value.length != 0 && (document.getElementById("pass_value").value.length < 8 || document.getElementById("pass_value").value.length > 63))) {
             showNotification("AP/Station password len, min=0 max=64", "red");
 			document.getElementById("submit_button").disabled = true;
 		} else if(document.getElementById("ssid_value").value.length < 1 || document.getElementById("ssid_value").value.length > 32) {
