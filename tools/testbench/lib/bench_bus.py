@@ -344,9 +344,11 @@ def sim_only(bus, base=SIM_URL):
     off after ms11, ch11, sw11 and the first call's `previous`). Keep the
     three groups as found (sim_get) and patch back what differs.
 
-    Behind the reboot an interface may answer late (CH CAN 8 s on
-    2026-11-11, its status already `running`): ask until it answers before
-    judging anything on the first request."""
+    Before ECU sim v2's firmware of 2026-11-11 an interface could answer
+    late behind the reboot (CH CAN 8 s, its status already `running`), and
+    on MS CAN alone its answers showed on the HS pins too. Both are fixed
+    there; a bench that meets an older simulator should ask until the bus
+    answers before judging anything on the first request."""
     if bus not in SIM_BUSES:
         raise SystemExit(f"bench_bus: no bus {bus!r} (buses: {' '.join(SIM_BUSES)})")
     spec = SIM_BUSES[bus]

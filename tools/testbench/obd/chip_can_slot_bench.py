@@ -39,9 +39,11 @@ cannot pay a write for it.
 
 No preset, no link word, no `ATSP`: nothing here writes the chip. AutoPID
 must be off. The simulator's settings and its single-wire transceiver are
-put back as found. With the simulator in a one-bus state the unit's own CAN
-node (on the HS pins) counts receive errors and may be demoted to listening:
-the bench restarts the unit once at the end when that node is not as found.
+put back as found. The unit's own CAN node (on the HS pins) must count no
+receive error through all of it: the other buses are other pins. (ECU sim
+v2 before its firmware of 2026-11-11 put its MS CAN answers on the HS pins
+too; the bench restarts the unit once at the end when that node is not as
+found.)
 
 usage: chip_can_slot_bench.py [--dut localhost:18081] [--rounds 5]
   the DUT through an ssh tunnel (`ssh -N -L 18081:<dut>:80 rpi001`), ECU sim
@@ -172,12 +174,13 @@ def heard(before):
 
 
 def wait_bus(chip, limit=30.0):
-    """The simulator's bus behind one of its restarts. Its interfaces do not
-    all answer at once: on 2026-11-11 CH and single-wire CAN took up to 9 s
-    while its status already said running (the request was on the bus and
-    acknowledged, a listen-only adapter saw it, and the simulator's own
-    request counter did not move). That is the rig's matter, so the bench
-    waits for it here and judges the chip on the requests after it.
+    """The simulator's bus behind one of its restarts. Before its firmware
+    of 2026-11-11 its interfaces did not all answer at once: CH and
+    single-wire CAN took up to 9 s while its status already said running
+    (the request was on the bus and acknowledged, a listen-only adapter saw
+    it, and the simulator's own request counter did not move). That is the
+    rig's matter, so the bench waits for it here, prints the wait (0.2 s
+    since that firmware) and judges the chip on the requests after it.
     (seconds to the first answer, "") or (None, why). A request the
     simulator HEARD and the chip has no answer to is not waited for."""
     t0 = time.time()
@@ -381,6 +384,12 @@ def main():
         check("the simulator's settings as found", sim_back(sim0, tester0))
 
     can1 = bench_bus.dut_can(DUT_HP)
+    # ECU sim v2 before its firmware of 2026-11-11 put its MS CAN answers on
+    # the HS pins as well while it was on MS CAN alone: 128 receive errors here
+    check("the unit's own CAN node (HS pins) counted no receive error while the chip talked on the other buses",
+          isinstance(can0, dict) and isinstance(can1, dict) and can1.get("rx_errors") == can0.get("rx_errors"),
+          "%s -> %s" % ((can0 or {}).get("rx_errors") if isinstance(can0, dict) else can0,
+                        (can1 or {}).get("rx_errors") if isinstance(can1, dict) else can1))
     if isinstance(can0, dict) and isinstance(can1, dict) and can1.get("state") != can0.get("state"):
         say("the unit's own CAN node is %s (as found %s; %s receive errors, counted in the one-bus states): a planned restart" % (
             can1.get("state"), can0.get("state"), can1.get("rx_errors")))
