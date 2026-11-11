@@ -3330,6 +3330,7 @@
       // ATCRA, request, ATCRA off)
       const expr = body && body.expression;
       const exprs = body && Array.isArray(body.expressions) ? body.expressions : null;
+      state.lastTest = body;   // what the page asked for (the row's bus rides here, probe_row_bus.mjs)
       const raw = "7EC 10 27 62 01 01 FF F7 E7\n7EC 21 FF 84 84 84 84 84 84";
       const sent = [];
       for (const chain of [body && body.init]) for (const c of String(chain || "").split(";")) if (c.trim()) sent.push(c.trim());
@@ -5736,6 +5737,11 @@ const PROFILES_URL="https://raw.githubusercontent.com/meatpiHQ/wican-fw/main/veh
    here 2026-10-27: the edit had sat in a stale clone since 2026-10-21, so
    builds up to 6.0.0-beta.4 imported the PIDs alone. Returns
    {pids, filters, renamed}. */
+/* a row's bus and speed as the firmware takes them (autopid_bus.h): nothing for
+   the car's OBD protocol */
+function busArgs(pd){
+  return pd&&["ms","sw","ch"].includes(pd.bus)?{bus:pd.bus,...(Number(pd.bus_kbps)?{bus_kbps:Number(pd.bus_kbps)}:{})}:{};
+}
 function profileToPids(car,keepPids,keepFilters){
   const fixUnit=u=>typeof u==="string"?u.replace(/\uFFFD/g,"°"):u;
   const taken=new Set([...(keepPids||[]),...(keepFilters||[])].flatMap(pd=>(pd.parameters||(pd.name?[pd]:[])).map(pr=>pr.name)));
@@ -5744,7 +5750,8 @@ function profileToPids(car,keepPids,keepFilters){
     let k=2;while(taken.has(n+"_"+k))k++;taken.add(n+"_"+k);renamed.push(n+" to "+n+"_"+k);return n+"_"+k;};
   for(const pp of((car&&car.pids)||[])){
     const prm=(pp.parameters||[]).map(x=>({...x,name:uniq(String(x.name||"")),unit:fixUnit(x.unit),expression:String(x.expression||"")}));
-    pids.push({name:(prm.length===1&&prm[0].name)||pp.pid,cmd:pp.pid,init:pp.pid_init||"",group:"default",period_ms:0,type:"specific",parameters:prm});
+    pids.push({name:(prm.length===1&&prm[0].name)||pp.pid,cmd:pp.pid,init:pp.pid_init||"",group:"default",period_ms:0,type:"specific",parameters:prm,
+      ...busArgs({bus:pp.bus||(car&&car.bus),bus_kbps:pp.bus_kbps||(car&&car.bus_kbps)})});
   }
   for(const pf of((car&&car.filters)||[])){
     const fid=Number(pf.frame_id);if(!fid)continue;
@@ -6944,7 +6951,7 @@ PAGES.automate=async(view,sub)=>{
       btn.disabled=true;const was=btn.textContent;btn.textContent="Testing…";
       try{
         const r=await api("/api/autopid/test",{method:"POST",body:{cmd:pd.cmd||"",init:pd.init||"",rxheader:pd.rxheader||"",
-          type:pidType(pd),expressions:params.map(pr=>pr.expression)}});
+          type:pidType(pd),expressions:params.map(pr=>pr.expression),...busArgs(pd)}});
         const vals=Array.isArray(r.values)?r.values:(params.length===1?[r.value]:[]);
         const rows=params.map((pr,i)=>({name:pr.name||"-",value:vals[i],unit:pr.unit||""}));
         const tr=String(r.transcript||"").split("\n").filter(Boolean);
@@ -7002,6 +7009,16 @@ PAGES.automate=async(view,sub)=>{
       const cells=new Map(); /* live cells -> refresh fn */
       const paramNames=pd=>(pd.parameters||[]).map(p=>p.name).filter(Boolean);
       const groupRate=pd=>{const g=(cfg.groups||[]).find(x=>x.name===(pd.group||"default"));const p=g?(Number(g.period_ms)||0):1000;return p?p+" ms":"max rate";};
+      /* a row's bus (autopid_bus.h, mockup board 8): the car's OBD protocol, or one of
+         the buses only the OBD chip reaches. A standard PID is the car's OBD protocol
+         by definition, and a J1939 group is heard, not asked: neither has the field */
+      const BUSES=[["obd","The car's OBD protocol","pins 6 and 14"],["ms","MS CAN","125 kbit/s, pins 3 and 11"],
+        ["sw","Single-wire CAN","33.3 kbit/s, pin 1"],["ch","CH CAN","500 kbit/s, pins 12 and 13"]];
+      const BUS_OWN={ms:125,sw:33.3,ch:500};
+      const BUS_SPEEDS=[500,250,125,100,95.2,83.3,50,33.3];
+      const BUS_NAME={ms:"MS CAN",sw:"single-wire CAN",ch:"CH CAN"};
+      const busRow=pd=>!isPgn(pd)&&pidType(pd)!=="std";
+      const busOf=pd=>(busRow(pd)&&BUS_NAME[pd.bus])?pd.bus:"obd";
       const mine=()=>cfg.pids.filter(pd=>pidType(pd)===type);
       const matches=pd=>{if(!filter)return true;const f=filter.toLowerCase();
         return[pd.name,pd.cmd,...paramNames(pd)].some(s=>String(s||"").toLowerCase().includes(f));};
@@ -7016,6 +7033,19 @@ PAGES.automate=async(view,sub)=>{
         h("button",{class:"btn sm gh",type:"button",onclick:()=>{open.clear();rebuild(true);}},"Collapse all"),
         h("span",{class:"grow"}),countChip,dirtyChip);
       const list=h("div",{class:"pidl-rows"});
+      /* the round as the poller walks it (every table, not this tab alone): shown
+         once a polled row is on another bus */
+      const busStrip=h("div",{class:"rowflex",style:"display:none;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px"});
+      const paintBusStrip=()=>{
+        const n={obd:0,ms:0,sw:0,ch:0};
+        for(const pd of cfg.pids){if(pd.enabled!==false&&!isPgn(pd))n[busOf(pd)]++;}
+        const other=["ms","sw","ch"].filter(b=>n[b]);
+        busStrip.style.display=other.length?"flex":"none";
+        if(!other.length)return;
+        const rows=k=>k+" row"+(k===1?"":"s");
+        busStrip.replaceChildren(h("span",{class:"chip"},"this round"),h("span",{class:"chip"},"OBD protocol: "+rows(n.obd)),
+          ...other.map(b=>h("span",{class:"chip"},BUS_NAME[b]+": "+rows(n[b]))),
+          h("span",{class:"chip",title:"To each other bus once, and back to the car's OBD protocol"},(other.length+1)+" bus changes"));};
       let attached=false; /* unsubscribe only once the table has been on the page and left it */
       const refreshLive=()=>{if(tbl.isConnected)attached=true;else if(attached){liveSubs.delete(refreshLive);return;}for(const f of cells.values())f();};
       liveSubs.add(refreshLive);
@@ -7054,6 +7084,13 @@ PAGES.automate=async(view,sub)=>{
                rate as the placeholder instead of a bare 0 (Ali, 2026-09-17: "the
                cycle time for every PID is 0" after loading a profile) */
             fld("Cycle (ms)",h("input",{class:"mono",type:"number",min:"0",value:pd.period_ms||"",placeholder:"group: "+groupRate(pd),title:"Empty = the group's rate, "+groupRate(pd)+". A value here overrides it for this PID only.",onchange:e=>{pd.period_ms=Number(e.target.value)||0;markDirty();}})),
+            ...(busRow(pd)?[fld("Bus",h("select",{title:"Where this PID is asked: on the car's OBD protocol, or on one of the other CAN buses of the OBD connector. Nothing is stored in the OBD chip for it.",
+                onchange:e=>{delete pd.bus_kbps;if(e.target.value==="obd")delete pd.bus;else pd.bus=e.target.value;markDirty();rebuild(true);}},
+                ...BUSES.map(([v,l,d])=>h("option",{value:v,selected:v===busOf(pd)},l+" ("+d+")")))),
+              ...(busOf(pd)!=="obd"?[fld("Bus speed",h("select",{title:"For a car whose "+BUS_NAME[pd.bus]+" does not run at the usual speed",
+                onchange:e=>{const k=Number(e.target.value)||0;if(k)pd.bus_kbps=k;else delete pd.bus_kbps;markDirty();}},
+                h("option",{value:"0",selected:!Number(pd.bus_kbps)},"Usual ("+BUS_OWN[pd.bus]+" kbit/s)"),
+                ...BUS_SPEEDS.filter(k=>k!==BUS_OWN[pd.bus]).map(k=>h("option",{value:String(k),selected:Number(pd.bus_kbps)===k},k+" kbit/s"))))]:[])]:[]),
             isPgn(pd)?fld("J1939",h("span",{class:"help",style:"display:block;padding-top:6px"},pgnLabel(pd)+". No init, no reply header: the listener keeps the newest message of every group, this row decodes it (B0 = the first data byte)."))
               :fld("PID init (optional AT chain)",h("input",{class:"mono",value:pd.init||"",placeholder:"ATSP6;ATSH7E4;",title:"Sent before this PID's request whenever the poller switches to it. ATH0, ATS0 and ATE1 are ignored: the poller reads replies with headers and spaces on.",onchange:e=>{pd.init=e.target.value;markDirty();}})));
           const prmHead=h("div",{class:"prm prm-head"},h("span",{}),h("span",{},"Parameter"),h("span",{},"Expression"),h("span",{},"Unit"),h("span",{class:"r"},"Live"),h("span",{}));
@@ -7072,6 +7109,7 @@ PAGES.automate=async(view,sub)=>{
               pd.parameters.length>1?h("button",{class:"btn sm gh danger",type:"button",title:"Remove this parameter",onclick:()=>{pd.parameters.splice(pd.parameters.indexOf(pr),1);markDirty();rebuild(true);}},ic("trash")):h("span",{}));
             return prow;});
           row.append(h("div",{class:"det"},fields,
+            ...(busOf(pd)!=="obd"?[h("div",{class:"help",style:"margin:8px 0 2px"},"Rows on another bus are asked together, one bus after the other, so a round changes bus once per bus and not once per row. The choice is kept with the row on this device: nothing is stored in the OBD chip. The PID init of such a row must not pick a protocol (no ATSP, ATTP, STP or VTP).")]:[]),
             h("div",{class:"dlabel"},"Parameters decoded from the reply"),
             prmHead,...prmRows,
             h("div",{style:"margin-top:8px"},h("button",{class:"btn sm",type:"button",onclick:()=>{pd.parameters.push({name:"",expression:"",unit:""});markDirty();rebuild(true);}},ic("plus"),"Add parameter"))));
@@ -7087,9 +7125,10 @@ PAGES.automate=async(view,sub)=>{
           shown.length?h("div",{class:"pidl-head"},h("span",{}),h("span",{},"PID"),h("span",{},"Request"),...(hasRx?[h("span",{},"RX ID")]:[]),h("span",{},"Parameters"),h("span",{})):null,
           ...shown.map(pidRow),
           all.length?(shown.length?null:h("div",{class:"empty"},"No PID matches the filter")):h("div",{class:"empty"},emptyMsg));
+        paintBusStrip();
         refreshLive();
       };
-      tbl.append(tools,list,errLine);
+      tbl.append(tools,list,busStrip,errLine);
       rebuild();tbl.rebuild=()=>rebuild(true);
       startLive();
       return tbl;

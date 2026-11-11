@@ -1216,6 +1216,7 @@
       // ATCRA, request, ATCRA off)
       const expr = body && body.expression;
       const exprs = body && Array.isArray(body.expressions) ? body.expressions : null;
+      state.lastTest = body;   // what the page asked for (the row's bus rides here, probe_row_bus.mjs)
       const raw = "7EC 10 27 62 01 01 FF F7 E7\n7EC 21 FF 84 84 84 84 84 84";
       const sent = [];
       for (const chain of [body && body.init]) for (const c of String(chain || "").split(";")) if (c.trim()) sent.push(c.trim());

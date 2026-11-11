@@ -35,6 +35,20 @@ let in a second time, another task and a request are refused meanwhile, one
 release frees the chip and no holder is remembered. `obd_chip` 41 tests PASS
 (`test-reports/2026-11-11_0906_host_obd_chip.md`).
 
+**2026-11-11, afternoon:** the bus of a row (`autopid`, `test_bus.c`, 11 cases;
+the device half is [autopid_bus_bench.md](autopid_bus_bench.md)). The config
+words and the refused ones, the speed of a bus as a divisor of 500 kbit/s (and
+the 8/7 form for 95.2), the chain to MS, single-wire and CH CAN with no preset,
+link word or stored protocol in it and the slot defined before it is chosen,
+what a row of another bus may carry (a bit rate word yes, a protocol, a slot
+definition or a reset no), the config parse, the scheduler asking the rows of
+a bus together (two changes of bus where the plain order makes five), an
+excursion asking every row of the other buses once, early by a quarter period
+at most, and coming home with two buses at max rate, the rest after three
+`CAN ERROR` replies (30 s, doubled to ten minutes, ended by one frame that
+gets through), and the class that keeps such rows out of the HS bus guard's
+hands. `autopid` 163 tests PASS (`test-reports/2026-11-11_1427_host_autopid.md`).
+
 **2026-11-10, evening:** what the chip may learn (`autopid`,
 `ap_veh_chip_learns`: only a protocol a standard request answered on, never
 the protocol of a car confirmed by its profile). 149 tests PASS
