@@ -54,9 +54,19 @@ AutoPID must be off (its requests would land between the words). Two
 planned restarts, one of them with the slow bring-up (about 8.5 s, one W
 line). Two writes of the chip's store (the preset and its removal).
 
-usage: chip_word_class_bench.py [--dut localhost:18081] [--no-reset]
+Other words alone: `--words "STPTO 300;STPO;STPC"` classifies just those
+(2026-11-12: the words that begin like a preset and are none, which AutoPID
+lets pass in a table). No preset is chosen then, so the bench itself writes
+nothing; a word that turns out to be stored costs the one write that shows
+it. `ATM0` goes first and must be acknowledged, as the firmware has it ahead
+of every word of its own. With `--slot` the words go out behind an AT user
+protocol defined in the chip's RAM (MS CAN as slot B: `VTSET_CAN B,..`,
+`ATTPB`), which is how a row of another bus reaches the chip; the two
+slot words are rows of their own. `STPTOR` joins the live reads.
+
+usage: chip_word_class_bench.py [--dut localhost:18081] [--no-reset] [--words "W1;W2"] [--slot]
   the DUT through an ssh tunnel (`ssh -N -L 18081:<dut>:80 rpi001`).
-About 10 min for the twenty rows.
+About 10 min for the twenty rows, about 4 min for three words.
 """
 import json
 import os
@@ -105,6 +115,12 @@ WORDS = [
     ("bit rate", "VTPBR 83333"),        # the vendor's word for it
 ]
 LIVE = ["ATDPN", "VTPBRD", "STPBRR"]
+#: a run of other words alone: no preset, so nothing is written by the bench itself
+EXTRA = [w.strip() for w in arg("--words", "").split(";") if w.strip()]
+SLOT = "--slot" in ARGS
+if EXTRA:
+    WORDS = ([("slot", "VTSET_CAN B,81,04,MS_CAN"), ("slot", "ATTPB")] if SLOT else []) + [("asked", w) for w in EXTRA]
+    LIVE = LIVE + ["STPTOR"]
 CHECKS = []
 PLANNED = [0]
 
@@ -240,6 +256,8 @@ def main():
 
     chip = chip_nvm.Chip(DUT_HP)
     chip.cmd("ATE0")
+    if EXTRA:
+        check("ATM0 acknowledged ahead of the words (the memory function off, as the firmware has it)", "OK" in chip.cmd("ATM0"))
     base = state(chip)
     say("the state before the first word: %d cells; live %s" % (
         len(base), ", ".join("%s=%s" % (w, base["live " + w]) for w in LIVE)))

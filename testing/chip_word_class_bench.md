@@ -1,8 +1,10 @@
 # OBD chip option words: which are RAM, and what the chip keeps
 
-Command: `python tools\testbench\obd\chip_word_class_bench.py [--dut localhost:18081] [--no-reset]` (PC, the DUT through an ssh tunnel `ssh -N -L 18081:<dut>:80 rpi001`)
+Command: `python tools\testbench\obd\chip_word_class_bench.py [--dut localhost:18081] [--no-reset] [--words "W1;W2"] [--slot]` (PC, the DUT through an ssh tunnel `ssh -N -L 18081:<dut>:80 rpi001`)
 
 Needs: main fw on DUT + rpi001 + the `/ws/obd` bridge, AutoPID off. No simulator, no bus (no request is sent). Prints `CHIP WORDS DONE` and a table. About 10 min, two planned restarts (one with a slow bring-up of about 8.5 s and one W line), two writes of the chip's store (the one preset it chooses, and the way back). A measurement: it fails only when an option word is kept by the chip, when something changed that no word explains, or when the unit or the chip's stored protocol is not as found at the end.
+
+With `--words "STPTO 300;STPO;STPC"` it classifies those words alone (about 4 min): no preset is chosen, so the bench writes nothing itself, `ATM0` goes first and must be acknowledged, and `STPTOR` joins the live reads. With `--slot` on top the words go out behind an AT user protocol defined in the chip's RAM (`VTSET_CAN B,81,04,MS_CAN`, `ATTPB`), the two slot words as rows of their own.
 
 The index row and the other stages: [../TESTING.md](../TESTING.md). The tool it reads the chip with: `chip_nvm.py` ([protocol_baseline_bench.md](protocol_baseline_bench.md)).
 
@@ -42,6 +44,23 @@ The protocol work may set per-bus options on the OBD chip: the K-line's baud rat
 - **What this corrects.** The finding of 2026-11-01 that "an ST or VT switch writes the store too" was right in its conclusion and wrong in its reason: it took the write for the memory function's (an answered request with memory on), and `ATM0` for the cure. And the statement "nothing wrote the chip" of the baseline's MS, CH and single-wire CAN legs ([protocol_baseline_bench.md](protocol_baseline_bench.md)) is WRONG: each of those legs chose a preset. The snapshot could not see it, because it reads the store behind `ATTP3` and a warm start, which is also what takes the preset out again. Counted from the logs, the benches of 2026-11-10 and 2026-11-11 chose a preset about thirty times (the two baseline runs, the probes, this bench), none of them booked.
 - **What it means for the firmware today.** After a session on a preset (an app, a profile row with `STP53;` as its init) the chip stays on that preset across every restart of the unit: the bring-up's read of the stored protocol finds `53 [ST]`, and requests go out on that bus until an AT protocol is chosen. The way back is `ATTPn` and a reset.
 - Earlier the same day, the first form of the bench cut the unit's supply for 4 s as its last step and failed: `ATDPN` `53 [ST]` and `VT POWERMANAGE` `SLEEP: PWR EN | WAKE: UART` after it. That is how the stored preset was first seen. `VT POWERMANAGE` (how the chip last went to sleep and woke) is a status, not a setting, and came off `chip_nvm`'s list.
+
+**2026-11-12 00:31, the same unit and chip, store 6, the image of the store-word change (ELF `d6a6d77e8fe3755e`), `--words "STPTO 300;STPO;STPC"`: `CHIP WORDS DONE`, 3 rows, 8 checks, 0 failed, 2 planned restarts.**
+
+The three words that begin like a protocol preset and are none. AutoPID refuses a preset in its tables (`STP nn`, `VTP nnn`) and lets these pass, until this run on the datasheet's word alone, and the datasheet was wrong about `STP nn`.
+
+| Word | What it is | Answer on the car's protocol (6) | Class |
+|---|---|---|---|
+| `STPTO 300` | the protocol's timeout | `OK` | no readable cell moved |
+| `STPO` | open the protocol | `OK` | no readable cell moved |
+| `STPC` | close the protocol | `OK` | no readable cell moved |
+
+- **All three are taken on a legislated AT protocol** (the bit-rate words are not: they answer `?` there).
+- **None changed a stored cell that can be read**: 42 cells (the programmable parameters, the sleep configuration, the user area, the protocol tables, the wake sequences) and the live reads the same behind each word, behind the warm start and behind the hardware reset; `ATDPN` `6` throughout, the firmware's read of the store `6`, `protocol_saves` 0.
+- **`STPTOR` answers `?` on this chip**, so the timeout has no read-back and the bench cannot show that its value is gone after a reset. What it shows is the same as for the sixteen option words above: nothing the chip stores where it can be read was touched, the programmable parameters included (`ATPPS`, where the default of the ELM timeout `ATST` lives).
+- Each word was sent once, on the car's protocol, which is where a row of the tables without a `bus` sends its init. Behind a RAM slot (`--slot`) they were not sent: a second take of each for the same question.
+
+So the three stay where they were: not presets, passed by AutoPID's tables (`STPC` still refused in a row of another bus, where it would close the slot under the poller).
 
 ## Traps
 
