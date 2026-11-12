@@ -21,7 +21,8 @@ chip follows its protocol (ATTP).
 
 As a module: sim_get/sim_set/sim_status, sim_patch (any keys of any of its
 settings groups behind one reboot), sim_only (a one-bus state out of
-SIM_BUSES, on sim_patch), sim_tester, sim_bus_live,
+SIM_BUSES, on sim_patch), sim_tester, sim_dtcs (its trouble codes),
+sim_bus_live,
 sim_restart_state/sim_restart_delta, dut_can(). The simulator's REST is
 reachable from the PC only (its USB network link, found by sim_net.py); its
 settings PUT replaces the whole object, hence GET, modify, PUT. A submit
@@ -324,6 +325,21 @@ def sim_tester(base=SIM_URL, **changes):
     if changes:
         _http(f"{base}/api/tester", "POST", changes)
     return before
+
+
+def sim_dtcs(base=SIM_URL, stored=None, pending=None, permanent=None, mil=None):
+    """ECU sim v2's trouble codes (GET /api/ecu/dtcs: `mil_on`, and `dtcs`
+    with the lists `stored`, `pending`, `permanent`). With a list or the lamp
+    given, that is posted first; a list left out stays as it is. Returns what
+    the simulator holds afterwards. Not a setting: its reboot (a settings
+    submit, sim_only) loads the list of its profile again."""
+    lists = {k: v for k, v in (("stored", stored), ("pending", pending), ("permanent", permanent)) if v is not None}
+    body = {"dtcs": lists} if lists else {}
+    if mil is not None:
+        body["mil_on"] = bool(mil)
+    if body:
+        _http(f"{base}/api/ecu/dtcs", "POST", body)
+    return _http(f"{base}/api/ecu/dtcs")
 
 
 def sim_only(bus, base=SIM_URL):

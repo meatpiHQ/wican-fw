@@ -26,7 +26,10 @@ Test call on the four other pre-CAN protocols:
             5 baud init (`ATSP5;`, `ATSP4;`), SAE J1850 VPW and PWM (`ATSP2;`,
             `ATSP1;`). Each answers twice with 800 rpm from its own frame,
             with its own request header behind the init's word; a K-line one
-            starts its bus once for the two calls. Automate is still off
+            starts its bus once for the two calls. Then what these protocols
+            split over messages of seven data bytes, asked through the same
+            route: five trouble codes (two messages of three) and the VIN
+            (five messages), each read whole. Automate is still off
             here: a poller on another protocol would take the chip back to
             its own between two calls
   pin       `std_protocol` takes `3` (it is the car's protocol, as 6 to 9
@@ -35,6 +38,13 @@ Test call on the four other pre-CAN protocols:
             after round, the simulator counts one slow init for all of it
             (no restart of the bus between two requests), and a Test call in
             the middle is answered and does not end the session. Then the
+            car's trouble codes, asked while the rows are polled: five stored
+            and four pending ones are all read (these protocols carry three
+            codes a message, so that is two messages each; until 2026-11-12
+            the first message stood alone and a car with more than three
+            codes showed three), seven stored in three messages, the freeze
+            frame, and the clear with an empty list behind it; the scans do
+            not start the bus again. Then the
             ignition off and on (the simulator's K-line ECU gone for twelve
             seconds, then back): the rows are answered again by a new start
             of the bus, with nobody's help. Then a ten
@@ -42,7 +52,8 @@ Test call on the four other pre-CAN protocols:
             (the ECU ends it after five seconds without one). Then the same
             rows with `std_protocol` 2 and the simulator as a J1850 VPW car
             (the detection does not try J1850 yet: it is pinned by hand):
-            answered, with no session and no keep-alive
+            answered, with no session and no keep-alive, and the same five
+            and seven trouble codes read there
   detect    (--detect, off by default: it costs two writes of the OBD chip's
             stored protocol, both the one save a detection makes by design)
             "Detect my vehicle" with the simulator as the K-line car: no CAN
@@ -100,6 +111,11 @@ HEADER = {"1": "ATSH616AF1", "2": "ATSH686AF1", "3": "ATSH686AF1", "4": "ATSHC13
 # the simulator as each of the other pre-CAN cars: its bus, the protocol, how the reply starts
 OTHERS = [("kwpfast", "5", "F1 10 41 0C", "ISO 14230-4, fast init"), ("kwp5", "4", "F1 10 41 0C", "ISO 14230-4, 5 baud init"),
           ("vpw", "2", "48 6B 10 41 0C", "SAE J1850 VPW"), ("pwm", "1", "41 6B 10 41 0C", "SAE J1850 PWM")]
+# the car's trouble codes for the scan: more than one message of three holds
+FIVE = ["P0300", "P0420", "P0171", "P0101", "P0442"]
+SEVEN = FIVE + ["C0035", "U0100"]
+PENDING = ["P0172", "P0301", "P0302", "P0303"]
+DTC_KEYS = ("dtc_enabled", "dtc_allow_clear")
 CHECKS = []
 PLANNED = [0]
 
@@ -214,6 +230,24 @@ def answered(c):
     return c["http"] == 200 and isinstance(c["value"], (int, float)) and abs(c["value"] - 800) < 1
 
 
+def test_raw(cmd, proto):
+    """a request through the Test route: the chip's message lines, and the bytes of the payload the firmware made of them"""
+    st, r = http("/api/autopid/test", "POST", {"cmd": cmd, "init": "ATSP%s;" % proto, "expressions": ["B0"]})
+    r = r if isinstance(r, dict) else {}
+    lines = [ln.strip() for ln in str(r.get("raw", "")).replace("\r", "\n").split("\n") if ln.strip() and "BUS INIT" not in ln]
+    b = [int(x, 16) for x in str(r.get("payload") or "").split()]
+    if b and b[0] >> 4 == 1:            # the frames a CAN ECU would have sent: a first frame and its rows
+        data = b[2:8]
+        for i in range(8, len(b), 8):
+            data += b[i + 1:i + 8]
+        return lines, data[:((b[0] & 0x0F) << 8) | b[1]]
+    return lines, b[1:1 + (b[0] & 0x0F)] if b else []
+
+
+def dtc_bytes(code):
+    return [("PCBU".index(code[0]) << 6) | (int(code[1]) << 4) | int(code[2], 16), int(code[3:5], 16)]
+
+
 def chip_kline():
     """the driver's view of the K-line session (GET /api/obd_chip `kline`)"""
     st, oc = http("/api/obd_chip")
@@ -263,6 +297,7 @@ def leg_test():
 
 
 def leg_others():
+    vin_want = (lambda c: c.get("vin", c.get("key")))(own_car())    # the simulator's ECUs carry the VIN of the unit's own car
     for bus, proto, shape, name in OTHERS:
         prev, run = bench_bus.sim_only(bus)
         time.sleep(3)
@@ -283,6 +318,15 @@ def leg_others():
                   k1.get("starts", 0) - k0.get("starts", 0) == 1 and k1.get("up") is True, k1)
         else:
             check("others: %s: no K-line session in the driver (the bus is not a started one)" % name, k1.get("up") is False, k1)
+        # what these protocols split over messages of seven data bytes: the trouble codes (three a message) and the VIN
+        bench_bus.sim_dtcs(stored=FIVE, pending=[], mil=True)
+        code_lines, codes = test_raw("03", proto)
+        vin_lines, vin = test_raw("0902", proto)
+        say("FACT %s: 03 -> %s; 0902 -> %s" % (name, " | ".join(code_lines), " | ".join(vin_lines)))
+        check("others: %s: five trouble codes in two messages and the VIN in five, each read whole through the Test call" % name,
+              len(code_lines) == 2 and codes == [0x43, len(FIVE)] + [b for c in FIVE for b in dtc_bytes(c)] and
+              len(vin_lines) == 5 and vin[:3] == [0x49, 0x02, 0x01] and bytes(vin[3:]).decode("ascii", "replace") == vin_want,
+              (len(code_lines), codes, len(vin_lines), bytes(vin[3:]).decode("ascii", "replace")))
     prev, run = bench_bus.sim_only("iso9141")           # the K-line car again for the legs behind
     check("others: the simulator is the ISO 9141-2 car again", bench_bus.sim_bus_live(run) == ["kline"], " ".join(bench_bus.sim_bus_live(run)))
     time.sleep(3)
@@ -298,12 +342,74 @@ def leg_pin():
         http("/api/settings/autopid", "PUT", cur)      # not submitted: nothing restarts, nothing is kept
 
 
+def dtc_scan():
+    """a trouble code scan on request: its report (`fresh` false when the scan left the report before it standing)"""
+    st, g = http("/api/autopid/dtc")
+    ts0 = ((g.get("report") or {}).get("ts")) if isinstance(g, dict) else None
+    st, r = http("/api/autopid/dtc/scan", "POST", {})
+    if st not in (200, 202):
+        return {"error": "the scan was refused: %s %s" % (st, str(r)[:120])}
+    t0 = time.time()
+    while time.time() - t0 < 60:
+        time.sleep(1)
+        st, g = http("/api/autopid/dtc")
+        if isinstance(g, dict) and not g.get("scanning"):
+            rep = dict(g.get("report") or {})
+            rep["fresh"] = rep.get("ts") != ts0
+            return rep
+    return {"error": "the scan did not end"}
+
+
+def poll_codes(car, clear):
+    """inside the poll, the rows being asked: the car's trouble codes, more of them than one message of three holds"""
+    found = bench_bus.sim_dtcs()
+    k0, c0 = kline(), chip_kline()
+    bench_bus.sim_dtcs(stored=FIVE, pending=PENDING, mil=True)
+    r5 = dtc_scan()
+    bench_bus.sim_dtcs(stored=SEVEN, pending=[], mil=True)
+    r7 = dtc_scan()
+    frz = r5.get("freeze") or {}
+    say("FACT %s, five stored and four pending: valid %s error %r, stored %s, pending %s, lamp %s, count %s, from %s; freeze frame of %s with %d values" % (
+        car, r5.get("valid"), r5.get("error"), r5.get("stored"), r5.get("pending"), r5.get("mil"), r5.get("mil_count"),
+        [s.get("ecu") for s in r5.get("sources") or []], frz.get("dtc"), len(frz.get("params") or {})))
+    say("FACT %s, seven stored: stored %s, new %s, pending %s, count %s" % (car, r7.get("stored"), r7.get("new"), r7.get("pending"), r7.get("mil_count")))
+    check("codes: %s: five stored codes are all read (two messages of three), and the four pending ones, the lamp on, the count 5" % car,
+          r5.get("fresh") and r5.get("valid") and sorted(r5.get("stored") or []) == sorted(FIVE) and
+          sorted(r5.get("pending") or []) == sorted(PENDING) and r5.get("mil") is True and r5.get("mil_count") == 5,
+          (r5.get("error"), r5.get("stored"), r5.get("pending"), r5.get("mil_count")))
+    check("codes: %s: the freeze frame is read with it (its code one of the stored ones, its values decoded)" % car,
+          frz.get("dtc") in FIVE and len(frz.get("params") or {}) >= 3, (frz.get("dtc"), sorted(frz.get("params") or {})))
+    check("codes: %s: seven stored codes in three messages, a chassis and a network code among them, the two that came named as new" % car,
+          r7.get("fresh") and sorted(r7.get("stored") or []) == sorted(SEVEN) and sorted(r7.get("new") or []) == ["C0035", "U0100"] and
+          not r7.get("pending") and r7.get("mil_count") == 7, (r7.get("error"), r7.get("stored"), r7.get("new")))
+    if clear:
+        st, r = http("/api/autopid/dtc/clear", "POST", {"confirm": True, "mode": "always"})
+        left = bench_bus.sim_dtcs()
+        r0 = dtc_scan()
+        say("FACT %s, the clear: %s %s; the simulator holds %s; the scan behind it: stored %s, lamp %s" % (
+            car, st, str(r)[:160], left, r0.get("stored"), r0.get("mil")))
+        check("codes: %s: the clear empties the car's list (service 04), and the scan behind it reads no code and the lamp off" % car,
+              st == 200 and isinstance(r, dict) and r.get("cleared") is True and not (left.get("dtcs") or {}).get("stored") and
+              r0.get("fresh") and r0.get("valid") and not r0.get("stored") and r0.get("mil") is False, (st, r, r0.get("stored")))
+    k1, c1, p1 = kline(), chip_kline(), (stats().get("stats") or {})
+    time.sleep(3 * PERIOD_MS / 1000.0)
+    p2 = stats().get("stats") or {}
+    check("codes: %s: the scans did not start the bus again, and the rows are answered behind them" % car,
+          k1.get("inits_slow", 0) == k0.get("inits_slow", 0) and c1.get("starts", 0) == c0.get("starts", 0) and
+          c1.get("closed", 0) == c0.get("closed", 0) and p2.get("polls_ok", 0) - p1.get("polls_ok", 0) >= len(ROWS) * 2 and
+          p2.get("polls_failed", 0) == p1.get("polls_failed", 0),
+          (c1, "polls ok +%d failed +%d" % (p2.get("polls_ok", 0) - p1.get("polls_ok", 0), p2.get("polls_failed", 0) - p1.get("polls_failed", 0))))
+    codes = found.get("dtcs") or {}
+    bench_bus.sim_dtcs(stored=codes.get("stored", []), pending=codes.get("pending", []), permanent=codes.get("permanent", []),
+                       mil=found.get("mil_on", False))
+
+
 def leg_poll():
     group, pids = rows_table(PERIOD_MS)
     st, r = http("/api/autopid/config", "PUT", {"groups": [group], "pids": pids, "filters": []})
     if not check("poll: the tables are accepted", st == 200, r):
         return
-    ok, why = apply({"enabled": True, "std_protocol": "3"})
+    ok, why = apply({"enabled": True, "std_protocol": "3", "dtc_enabled": True, "dtc_allow_clear": True})
     if not check("poll: Automate on with the protocol pinned to 3 (a planned restart)", ok, why):
         return
     time.sleep(8)
@@ -329,6 +435,7 @@ def leg_poll():
           "inits_slow +%d, messages in +%d" % (inits, k1.get("messages_in", 0) - k0.get("messages_in", 0)))
     check("poll: a Test call in the middle is answered and does not end the session", answered(mid) and inits == 0,
           (mid["error"], mid["raw"], mid["tail"]))
+    poll_codes("ISO 9141-2", True)
     # the ignition off and on: the K-line ECU is gone for a while and comes back without the session. The chip
     # prints NO DATA from then on and starts nothing by itself; the driver closes a session that has not answered
     # for 4.5 s, the next request then starts the bus (and fails while the car is off, and goes through once it is on)
@@ -389,6 +496,7 @@ def leg_poll():
           vals.get("kl_rpm") == 800 and vals.get("kl_speed") is not None and vals.get("kl_temp") is not None and
           p5.get("polls_ok", 0) - p4.get("polls_ok", 0) >= len(ROWS) * 3 and p5.get("polls_failed", 0) == p4.get("polls_failed", 0) and
           c5.get("up") is False and p5.get("kline_keepalives", 0) == 0, (vals, c5))
+    poll_codes("SAE J1850 VPW", False)
 
 
 def guard():
@@ -531,7 +639,7 @@ def main():
     except SystemExit:
         pass
     finally:
-        ok, why = apply({k: ap[k] for k in ("enabled", "std_protocol", "std_init")})
+        ok, why = apply({k: ap[k] for k in ("enabled", "std_protocol", "std_init") + DTC_KEYS})
         check("Automate's settings as found (a planned restart when one changed)", ok, why)
         v = vehicles()
         for c in v.get("vehicles", []):
