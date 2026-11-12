@@ -51,7 +51,7 @@ Test call on the four other pre-CAN protocols:
             second period: the poller's one short request keeps the session
             (the ECU ends it after five seconds without one). Then the same
             rows with `std_protocol` 2 and the simulator as a J1850 VPW car
-            (the detection does not try J1850 yet: it is pinned by hand):
+            (pinned by hand here; the stage precan has the car found):
             answered, with no session and no keep-alive, and the same five
             and seven trouble codes read there
   detect    (--detect, off by default: it costs two writes of the OBD chip's
@@ -475,7 +475,7 @@ def leg_poll():
           st == 200 and keeps >= 4 and k3.get("inits_slow", 0) == k2.get("inits_slow", 0) and c3.get("closed", 0) == c2.get("closed", 0) and
           p3.get("polls_ok", 0) - p2.get("polls_ok", 0) >= len(ROWS) * 2 and p3.get("polls_failed", 0) == p2.get("polls_failed", 0) and
           c3.get("up") is True, c3)
-    # SAE J1850 is pinned by hand (the detection walks the K-line only): the same rows on a VPW car
+    # SAE J1850 pinned by hand (found by the unit itself: precan_contact_bench.py): the same rows on a VPW car
     group["period_ms"] = PERIOD_MS
     st, r = http("/api/autopid/config", "PUT", {"groups": [group], "pids": pids, "filters": []})
     prev, run = bench_bus.sim_only("vpw")

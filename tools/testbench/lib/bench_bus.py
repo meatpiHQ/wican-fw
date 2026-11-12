@@ -22,7 +22,7 @@ chip follows its protocol (ATTP).
 As a module: sim_get/sim_set/sim_status, sim_patch (any keys of any of its
 settings groups behind one reboot), sim_only (a one-bus state out of
 SIM_BUSES, on sim_patch), sim_tester, sim_dtcs (its trouble codes),
-sim_bus_live,
+sim_rx_seq (the CAN frames it has received), sim_bus_live,
 sim_restart_state/sim_restart_delta, dut_can(). The simulator's REST is
 reachable from the PC only (its USB network link, found by sim_net.py); its
 settings PUT replaces the whole object, hence GET, modify, PUT. A submit
@@ -340,6 +340,17 @@ def sim_dtcs(base=SIM_URL, stored=None, pending=None, permanent=None, mil=None):
     if body:
         _http(f"{base}/api/ecu/dtcs", "POST", body)
     return _http(f"{base}/api/ecu/dtcs")
+
+
+def sim_rx_seq(base=SIM_URL):
+    """How many CAN frames ECU sim v2 has received from the bus so far (the
+    `seq` of its receive log, GET /api/ecu/rxlog): the witness that somebody
+    asked, whether the simulator answered or not. 0 when it does not say."""
+    try:
+        log = _http(f"{base}/api/ecu/rxlog")
+        return int(log.get("seq", 0)) if isinstance(log, dict) else 0
+    except (urllib.error.URLError, OSError, ValueError):
+        return 0
 
 
 def sim_only(bus, base=SIM_URL):

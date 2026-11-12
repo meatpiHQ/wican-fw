@@ -15,7 +15,7 @@
 # land in test-reports\logs\<run>\ (gitignored).
 #
 param(
-    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'bleram', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'profilee2e', 'slcan', 'j2534auto', 'j2534std', 'j2534vpw', 'multibus', 'kline', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'wgcycle', 'tspublic', 'tlschain', 'habackfill', 'garage', 'espnleasy', 'espnlapn', 'usbgps', 'usbdetach', 'abrp', 'backup', 'fwupdate', 'espnlota', 'logclock', 'sdformat', 'obdfw', 'chipprompt', 'carname', 'destnets', 'canselftest', 'attpstore', 'obdbringup', 'sleepword', 'sleeptrig', 'chipwake', 'connections', 'stackaudit', 'dwc2', 'logsinks', 'release', 'all', 'list')]
+    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'bleram', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'profilee2e', 'slcan', 'j2534auto', 'j2534std', 'j2534vpw', 'multibus', 'kline', 'precan', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'wgcycle', 'tspublic', 'tlschain', 'habackfill', 'garage', 'espnleasy', 'espnlapn', 'usbgps', 'usbdetach', 'abrp', 'backup', 'fwupdate', 'espnlota', 'logclock', 'sdformat', 'obdfw', 'chipprompt', 'carname', 'destnets', 'canselftest', 'attpstore', 'obdbringup', 'sleepword', 'sleeptrig', 'chipwake', 'connections', 'stackaudit', 'dwc2', 'logsinks', 'release', 'all', 'list')]
     [string]$What,
     [Parameter(Position = 1)][string]$Component,
     [ValidateSet('6.0.2', '6.1')][string]$Idf = '6.1',  # the ESP-IDF the build stages use (6.1 since 6.0.0-beta.5, 2026-10-27; 6.0.2 stays installed; build.ps1 -Idf has the same table)
@@ -51,7 +51,10 @@ param(
     [switch]$Detect,          # kline stage: add "Detect my vehicle" on the
                               # K-line car (the car's protocol is saved in
                               # the OBD chip: one write, and one more when
-                              # the bench's own car is detected again)
+                              # the bench's own car is detected again);
+                              # precan stage: a car never seen stored at
+                              # start-up, the detection on an ISO 14230-4
+                              # car, and the way back (three writes)
     [switch]$NoConsole,       # PC bench stages: do not open the DUT's console
                               # port beside the run (Start-ConsoleTail)
     [switch]$Factory,         # backup stage: run b9 too, a REAL factory reset of
@@ -1109,6 +1112,7 @@ function Show-Inventory {
     Write-Host '  j2534vpw   - J1850 VPW through the PassThru server (2026-11-11): ECU sim v2 on VPW alone, the J2534 server switched on for the run, CONNECT J1850VPW, a PASS filter on the functional reply target 6B, 01 00 and 01 0C each answered 48 6B 10 41 ..; the chip''s memory compared before and after (nothing written); the simulator and the settings restored (2 planned restarts, 2 simulator restarts, ~1 min). Until that day the channel''s init sent ATD behind ATTP2 and three ST pass filters, and never heard a VPW node'
     Write-Host '  multibus   - Automate rows on MS, single-wire and CH CAN beside the car''s OBD protocol (2026-11-11): the Test route on each bus and its refusals, a bus at another speed than its usual one, the words the chip stores (STP nn, VTP nnn, ATLNK) refused in a row that is on, in a test and in a car''s own init, a type init with one kept as typed, never sent and its rows on the car''s protocol not asked, seven rows polled over four buses (every row answered, about four changes of bus a round, the chip on the car''s protocol between the rounds), the rows of the other buses with the HS bus off, a bus that ends in CAN ERROR rested, nothing asked on any bus under the voltage pause, an ELM app in the middle of it; the chip''s memory compared before and after (nothing written); ECU sim v2 with its four CAN buses, which is the unit''s supply too (3 planned restarts, ~8 min)'
     Write-Host '  kline      - a K-line car through the firmware''s own paths (GitHub issue #1045, 2026-11-12): ECU sim v2 as an ISO 9141-2 car alone; the Test call with ATSP3 as its init on a unit whose own car is CAN (the bus started once for three calls, the protocol''s own request header behind the init, 800 rpm from the three byte header, a call behind 6.5 s of silence starts the bus again), std_protocol takes 3, three rows polled with it pinned and no restart of the bus between two requests, the ignition off and on under the poll, a ten second period kept alive by the poller''s one short request, the same rows with std_protocol 2 on a J1850 VPW car, and the same Test call on ISO 14230-4 (fast and 5 baud init) and SAE J1850 VPW and PWM; the chip''s memory compared before and after (nothing written). -Detect adds Detect my vehicle on the K-line car and the way back (the car''s protocol is saved in the OBD chip: one write there, one back, one more restart) (3 planned restarts, ~6 min)'
+    Write-Host '  precan     - a pre-CAN car found without being asked for (2026-11-13): ECU sim v2 as an ISO 9141-2 car alone at start-up (the stored CAN protocol stays silent, the walk goes on behind CAN and finds the car on protocol 3, the rows are answered), a CAN vehicle that answers nothing standard (traffic on the CAN pins: SAE J1850 and the K-line are left alone), nobody there at all (the walk goes round with a growing gap), a J1850 VPW car that turns up in that boot (found on protocol 2), and the unit''s own CAN car again; the chip''s memory compared before and after (nothing written). -Detect adds a car never seen (a J1850 VPW one, found and stored at start-up by a detection nobody asked for), Detect my vehicle on an ISO 14230-4 car and the way back (the car''s protocol is saved in the OBD chip: three writes, three more restarts) (5 planned restarts, ~6 min)'
     Write-Host '  vpnpause   - the VPN pauses on networks marked Pause VPN (issue #976): the bench AP marked / unmarked, away on the dongle AP, home again; wg-bench on the Pi, the console for the away leg (~12 min)'
     Write-Host '  vpnroutes  - the split tunnel (issue #975): a request to a routed network leaves through wg-bench on the Pi, one to any other address through the station, judged at the receiver by the source address (~6 min)'
     Write-Host '  wgcycle    - WireGuard torn down while MQTT runs through it, N times (the beta.5 vpn_state crashes, 2026-11-02): wg-bench on the Pi, the broker at its tunnel address, a station trial to a network that does not exist drops the uplink each cycle; connects grows, MQTT returns, no reboot (~30 s per cycle, 10 cycles)'
@@ -1594,6 +1598,37 @@ try {
                     $out = & $py -u "$repo\tools\testbench\obd\kline_accept_bench.py" --dut 'localhost:18081' @extra 2>&1 | ForEach-Object { Write-Host $_; $_ }
                     Save-StageLog 'kline_accept' $out
                     if (-not ($out | Select-String -Quiet '^KLINE ACCEPT PASS')) { throw 'no KLINE ACCEPT PASS (ECU sim v2 reachable with its K-line and J1850 buses? the DUT on the bench AP? Automate off?)' }
+                } finally {
+                    if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
+                }
+            }
+        }
+        'precan' {
+            # A pre-CAN car found without being asked for (2026-11-13): at
+            # start-up the walk that looks for whoever is there goes on
+            # behind the CAN protocols to SAE J1850 and the K-line, when
+            # nobody else talks on the CAN pins. ECU sim v2 plays an ISO
+            # 9141-2 car, a CAN vehicle that answers nothing standard,
+            # nobody, a J1850 VPW car and the unit's own CAN car in turn;
+            # its ECUs carry the VIN of the unit's own car, so the store
+            # records the protocol and the OBD chip is not written.
+            # Automate must be off at the start; the tables, the settings,
+            # the vehicle store and the simulator are put back. Five planned
+            # restarts, no console, no PCAN. -Detect adds a car never seen
+            # (a J1850 VPW one, stored by itself at start-up), the detection
+            # by hand on an ISO 14230-4 car and the way back: three writes
+            # of the chip's stored protocol, three more restarts.
+            Invoke-Stage 'A pre-CAN car at start-up: found by the unit itself' {
+                $py = $script:BenchPy
+                $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", $BenchHost)
+                try {
+                    Start-Sleep -Seconds 3
+                    if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (port 18081 busy?)" }
+                    $extra = @()
+                    if ($Detect) { $extra += @('--detect') }
+                    $out = & $py -u "$repo\tools\testbench\obd\precan_contact_bench.py" --dut 'localhost:18081' @extra 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    Save-StageLog 'precan_contact' $out
+                    if (-not ($out | Select-String -Quiet '^PRECAN CONTACT PASS')) { throw 'no PRECAN CONTACT PASS (ECU sim v2 reachable with its K-line and J1850 buses? the DUT on the bench AP? Automate off?)' }
                 } finally {
                     if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
                 }
