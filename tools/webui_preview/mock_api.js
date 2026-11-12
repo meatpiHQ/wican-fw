@@ -574,9 +574,11 @@
       health: { log_errors: 0, log_warnings: 7,
         flash: { writes: 0, write_bytes: 0, erases: 0, erase_bytes: 0 },
         caps: { settings: { used: 34, cap: 40 }, cmdline: { used: 34, cap: 48 }, bridge_ep: { used: 14, cap: 24 } },
-        faults: S.__faults ? S.__faults.length : 1 },
+        faults: (S.__faults || (window.__mockPreset || {}).faults || [0]).length },
     }),
-    "/api/faults": () => J({ faults: S.__faults || (S.__faults = [
+    /* __mockPreset.faults (2026-11-12): a probe's own fault list, for the
+       System Monitor card and its info bubbles */
+    "/api/faults": () => J({ faults: S.__faults || (S.__faults = (window.__mockPreset || {}).faults || [
       { code: "registry_headroom", detail: "bridge_tr at 3/4", count: 1,
         first_time: 1784400000, last_time: 1784400000 }]) }),
     "/api/wifi/try": (path, method, body) => {
