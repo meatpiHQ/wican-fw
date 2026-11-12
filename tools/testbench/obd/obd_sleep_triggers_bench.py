@@ -27,8 +27,23 @@ in STSLCS:
               nothing (asleep, and a UART word does not wake it: STSLU wake
               off); the PSU over the wake threshold (14.0 V) for 20 s and
               again 10 s: ATI gets nothing twice: the chip did not wake. A
-              planned restart then wakes it (the bring-up's reset pulse) and
-              repairs PPSW (the second EEPROM write)
+              planned restart then wakes it and repairs PPSW (the second
+              EEPROM write). That wake is the one place a healthy chip meets
+              the reset line since 2026-11-12 (issue 1023): asleep by
+              command, a pin that gives it no edge across a restart, READY
+              high for a full second, no answer at either UART speed. The
+              boot must ask it on the wire BEFORE the pulse, pulse once
+              (reset.pulses 1, refused 0) and latch obd_chip_silent, "came
+              back after the reset pulse"; the bench clears that code at its
+              end when the store was empty as found
+  a factory   a chip v6 never provisioned with thresholds (a unit whose first
+  chip        v6 image dates from 2026-11-07 or later) stores the factory's:
+              VL_SLEEP <5.53 V for 65534 s, VL_WAKE >65.52 V (seen on unit
+              14c19f457fd9). The supply cannot go there, so the two
+              checks that need a reading on the far side of a threshold are
+              printed as SKIP and counted in the verdict line; the hold at
+              12.5 V (170 s) and the waits at 14.0 V run all the same and
+              the chip must neither sleep nor wake
   UART sleep  (--uart-silence MIN, 25 by default when given: longer than the
               stored 1200 s) nothing is sent to the chip for MIN minutes with
               the device awake (uart.tx_bytes must not move); then ATI
@@ -67,8 +82,10 @@ import urllib.request
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "lib"))
 import bench_psu  # noqa: E402  (ECU sim v2's OBD pin 16 since 2026-11-09)
+import chip_faults  # noqa: E402  (the chip's device fault codes)
 
 ARGS = sys.argv[1:]
+FOUND = {}                      # what leg_as_found read, for the end
 
 
 def arg(name, default):
@@ -85,7 +102,11 @@ LOG_DIR = arg("--log-dir", os.path.join(HERE, "..", "..", "..", "test-reports", 
 V_UNDER = 12.5   # under the stored sleep threshold, well over the 11.9 V floor
 V_LOW = 13.0     # under the stored wake threshold, for the command sleep
 V_OVER = 14.0    # over the stored wake threshold (the matrix's awake voltage)
+HOLD_MAX_S = 240       # the longest hold short of the device's own 5 min countdown
+HOLD_NO_REACH_S = 170  # the hold when the stored threshold is out of reach (the
+                       # classic 150 s + 20 s)
 CHECKS = []
+SKIPS = []             # checks this chip's stored values make untestable
 RESTARTS = 0
 PSU = None
 
@@ -99,6 +120,11 @@ def check(name, ok, detail=""):
     print("%s %s: %s%s" % (now(), "PASS" if ok else "FAIL", name,
                            (" (" + str(detail)[:300] + ")") if detail != "" else ""), flush=True)
     return bool(ok)
+
+
+def skip(name, why):
+    SKIPS.append(name)
+    print("%s SKIP: %s (%s)" % (now(), name, why), flush=True)
 
 
 def http(base, path, method="GET", body=None, timeout=8):
@@ -273,10 +299,19 @@ def open_psu():
 
 # ---- legs ---------------------------------------------------------------------------
 
+def faults():
+    """every latched device fault code: {code: fault}"""
+    st, f = http(DUT, "/api/faults")
+    return chip_faults.by_code(f)
+
+
 def leg_as_found():
     oc = wait_ready(20)
     check("the chip ready and unclaimed as found", oc.get("ready") and oc.get("claim") == "none",
           json.dumps({k: oc.get(k) for k in ("ready", "claim", "baud")}))
+    FOUND["faults"] = faults()
+    cf = chip_faults.chip(FOUND["faults"])
+    check("no OBD chip fault code latched as found", not cf, json.dumps(cf))
     rep = report()
     lines = stslcs_lines(rep)
     vals = stslcs_values(lines)
@@ -295,10 +330,18 @@ def leg_as_found():
 
 def leg_vl_sleep(vals, setpoint):
     _, sleep_v, sleep_t = vals.get("vl_sleep", ("OFF", 13.2, 150))
-    hold = sleep_t + 20
+    # a threshold the supply can get under, for a time the device's own
+    # countdown leaves room for; a factory chip (<5.53 V for 65534 s) has neither
+    reach = V_UNDER < sleep_v and sleep_t + 20 <= HOLD_MAX_S
+    hold = sleep_t + 20 if reach else HOLD_NO_REACH_S
     v = psu_to(V_UNDER)
-    print("%s PSU to %.2f V (measured %.2f): under the stored sleep threshold %.2f V, holding %d s (stored time %d s)"
-          % (now(), V_UNDER, v, sleep_v, hold, sleep_t), flush=True)
+    if reach:
+        print("%s PSU to %.2f V (measured %.2f): under the stored sleep threshold %.2f V, holding %d s (stored time %d s)"
+              % (now(), V_UNDER, v, sleep_v, hold, sleep_t), flush=True)
+    else:
+        print("%s PSU to %.2f V (measured %.2f): the stored sleep threshold (<%.2f V for %d s) is out of the supply's "
+              "reach on this chip; holding %d s all the same, the chip must stay awake"
+              % (now(), V_UNDER, v, sleep_v, sleep_t, hold), flush=True)
     t0 = time.time()
     seen = []
     aborted = ""
@@ -312,11 +355,16 @@ def leg_vl_sleep(vals, setpoint):
             aborted = "the device's own countdown came too close: %s" % json.dumps({k: sl.get(k) for k in ("state", "pending", "sleep_in_s")})
             break
         time.sleep(30 if time.time() - t0 + 30 < hold else max(0.0, hold - (time.time() - t0)))
-    check("VL sleep: the chip's own reading stayed under the stored threshold through the hold",
-          seen and all(x is not None and x < sleep_v for x in seen), seen)
+    if reach:
+        check("VL sleep: the chip's own reading stayed under the stored threshold through the hold",
+              seen and all(x is not None and x < sleep_v for x in seen), seen)
+    else:
+        skip("VL sleep: the chip's own reading stayed under the stored threshold through the hold",
+             "stored <%.2f V for %d s, the chip read %s V: no supply voltage the device runs on is under it"
+             % (sleep_v, sleep_t, seen[:3]))
     check("VL sleep: the hold ran its full length without the device's own sleep", not aborted, aborted or "%d s" % hold)
     ln, detail = probe("ATI")
-    check("VL sleep: ATI answers after %d s under the threshold: the chip did not sleep" % hold, answered(ln), detail)
+    check("VL sleep: ATI answers after %d s at %.1f V: the chip did not sleep" % (hold, V_UNDER), answered(ln), detail)
     v = psu_to(setpoint)
     t1 = time.time()
     while time.time() - t1 < 40 and sleep_status().get("state") != "normal":
@@ -342,23 +390,48 @@ def leg_vl_wake(vals, setpoint):
     time.sleep(3)
     ln, detail = probe("ATI")
     check("VL wake: ATI gets nothing: asleep by command, and the UART word did not wake it (STSLU wake off)", silent(ln), detail)
+    over = V_OVER > wake_v
     v = psu_to(V_OVER)
-    print("%s PSU to %.2f V (measured %.2f): over the stored wake threshold %.2f V (stored hold %d s); waiting 20 s" % (now(), V_OVER, v, wake_v, wake_t), flush=True)
+    if over:
+        print("%s PSU to %.2f V (measured %.2f): over the stored wake threshold %.2f V (stored hold %d s); waiting 20 s" % (now(), V_OVER, v, wake_v, wake_t), flush=True)
+    else:
+        print("%s PSU to %.2f V (measured %.2f): the stored wake threshold (>%.2f V) is out of the supply's reach on "
+              "this chip; waiting 20 s all the same, the chip must stay asleep" % (now(), V_OVER, v, wake_v), flush=True)
     time.sleep(20)
     ln, detail = probe("ATI")
-    check("VL wake: ATI gets nothing 20 s over the threshold: the chip did not wake", silent(ln), detail)
+    check("VL wake: ATI gets nothing 20 s at %.1f V: the chip did not wake" % V_OVER, silent(ln), detail)
     time.sleep(10)
     ln, detail = probe("ATI")
-    check("VL wake: ATI gets nothing 30 s over the threshold", silent(ln), detail)
+    check("VL wake: ATI gets nothing 30 s at %.1f V" % V_OVER, silent(ln), detail)
     ok, oc = restart()
-    check("VL wake: the planned restart brought the chip back (the bring-up's reset pulse)", ok, json.dumps({k: oc.get(k) for k in ("ready", "claim")}))
+    check("VL wake: the planned restart brought the chip back", ok, json.dumps({k: oc.get(k) for k in ("ready", "claim")}))
     ring = [l for l in ring_lines() if "obd_chip:" in l]
-    check("VL wake: the boot found the chip asleep ('chip not ready; hardware reset')", any("chip not ready; hardware reset" in l for l in ring), ring[:4])
+    check("VL wake: the boot found the chip asleep ('chip not ready', READY high for a full second)",
+          any("chip not ready (READY stayed high" in l for l in ring), ring[:4])
+    # the reset line is the last resort (issue 1023): the chip is asked on the
+    # wire at both UART speeds first, then pulsed once, and never twice
+    asked = [i for i, l in enumerate(ring) if "asking it on the wire before any reset" in l]
+    pulsed = [i for i, l in enumerate(ring) if "hardware reset, the last resort" in l]
+    check("VL wake: the chip was asked on the wire before the reset line was used",
+          bool(asked) and bool(pulsed) and asked[0] < pulsed[0],
+          [l for l in ring if "asking it" in l or "nothing received" in l or "the last resort" in l][:5])
+    rs = (oc or {}).get("reset") or {}
+    check("VL wake: one reset pulse and no more (reset.pulses 1, refused 0, wake_pulsed true)",
+          rs.get("pulses") == 1 and rs.get("refused") == 0 and rs.get("wake_pulsed") is True, json.dumps(rs))
     check("VL wake: the boot repaired PPSW (2F to 10, read back before the reset)",
           any("PPSW is 2F, setting to 10" in l for l in ring) and any("PPSW reads 10 after the write" in l for l in ring), [l for l in ring if "PPSW" in l])
     check("VL wake: no provisioning of the sleep config at that boot", not any("provisioning sleep config" in l for l in ring), [l for l in ring if "provision" in l])
+    cf = chip_faults.chip(faults())
+    check("VL wake: the wake by the last resort is latched (obd_chip_silent, 'came back after the reset pulse')",
+          "came back after the reset pulse" in str(cf.get("obd_chip_silent")), json.dumps(cf))
     cv, detail = chip_volts()
-    check("VL wake: awake after the reset the chip reads over the wake threshold (%.2f V)" % wake_v, cv is not None and cv > wake_v, cv)
+    if over:
+        check("VL wake: awake after the reset the chip reads over the wake threshold (%.2f V)" % wake_v, cv is not None and cv > wake_v, cv)
+    else:
+        skip("VL wake: awake after the reset the chip reads over the wake threshold (%.2f V)" % wake_v,
+             "the chip reads %s V: no supply voltage is over it" % cv)
+        check("VL wake: awake after the reset the chip reads the supply (%.1f V)" % V_OVER,
+              cv is not None and abs(cv - V_OVER) < 0.5, cv)
     v = psu_to(setpoint)
     check("VL wake: the PSU back at %.2f V" % setpoint, abs(v - setpoint) < 0.1, "%.2f V" % v)
 
@@ -457,6 +530,10 @@ def leg_end(lines0, setpoint):
     sl = sleep_status()
     check("end: the device awake, the PSU at %.2f V" % setpoint,
           sl.get("state") == "normal" and abs(PSU.voltage_setpoint() - setpoint) < 0.01, "%s, %.2f V" % (sl.get("state"), PSU.voltage_setpoint()))
+    ok, what = chip_faults.clear_own(FOUND.get("faults", {}), faults(), ("obd_chip_silent",),
+                                     lambda: http(DUT, "/api/faults/clear", "POST", {}))
+    check("end: the fault store holds nothing the bench did not put there", ok, what)
+    print("%s fault codes: %s" % (now(), what), flush=True)
 
 
 def main():
@@ -490,8 +567,11 @@ def main():
     fails = [n for n, ok in CHECKS if not ok]
     for f in fails:
         print("FAIL:", f)
-    print("OBD SLEEP TRIGGERS %s (%d checks, %d failed, %d planned restarts)" % (
-        "PASS" if not fails else "FAIL", len(CHECKS), len(fails), RESTARTS))
+    for s in SKIPS:
+        print("SKIP:", s)
+    print("OBD SLEEP TRIGGERS %s (%d checks, %d failed, %d planned restarts%s)" % (
+        "PASS" if not fails else "FAIL", len(CHECKS), len(fails), RESTARTS,
+        ", %d not testable on this chip's stored thresholds" % len(SKIPS) if SKIPS else ""))
     sys.exit(1 if fails else 0)
 
 

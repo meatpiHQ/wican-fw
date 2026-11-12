@@ -12,8 +12,12 @@ USB-serial adapter stays quiet), every line gets a wall-clock stamp and is
 flushed at once, and the lines a crash leaves are echoed to stdout as they
 come. Stops after --secs, or when --stop-file appears.
 
+It can also type: a bench that needs one console command while the tail
+holds the port (the release test's `sleep test N`) writes the line into
+--cmd-file; the tail types it, notes that in the log and removes the file.
+
   python console_tail.py PORT OUT.log [--baud 2000000] [--secs 3600]
-                         [--stop-file PATH]
+                         [--stop-file PATH] [--cmd-file PATH]
 
 Exit code: 0, or 3 when the port cannot be opened (in use, unplugged).
 """
@@ -40,6 +44,7 @@ def main():
     ap.add_argument("--baud", type=int, default=2000000)
     ap.add_argument("--secs", type=float, default=3600)
     ap.add_argument("--stop-file", default="")
+    ap.add_argument("--cmd-file", default="")
     a = ap.parse_args()
 
     import serial   # pyserial: late, so --help works without it
@@ -63,6 +68,17 @@ def main():
         while time.time() - t0 < a.secs:
             if a.stop_file and os.path.exists(a.stop_file):
                 break
+            if a.cmd_file and os.path.exists(a.cmd_file):
+                try:
+                    with open(a.cmd_file, encoding="utf-8") as cf:
+                        typed = cf.read().strip()
+                    os.remove(a.cmd_file)
+                    if typed:
+                        s.write((typed + "\r\n").encode())
+                        f.write(f"{time.strftime('%H:%M:%S')} console_tail: typed '{typed}'\n")
+                        f.flush()
+                except (OSError, serial.SerialException) as e:
+                    f.write(f"{time.strftime('%H:%M:%S')} console_tail: could not type: {e}\n")
             try:
                 # what is there, at once (a line's stamp is its arrival to
                 # some milliseconds: a bench lines the DUT's clock up with

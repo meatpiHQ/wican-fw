@@ -28,16 +28,21 @@ Then, once for all of them:
               the cells and the live reads again. A cell that still holds
               what a word put there SURVIVES THE WARM START (the firmware's
               own reset at every software restart)
-  hard reset  a real pulse on the chip's reset pin. The bench cannot pulse
-              the pin itself, so it makes the bring-up do it: the chip's
-              UART is moved to another speed with the volatile `STSBR`
-              through the wire probe, the unit is restarted (planned), the
-              bring-up's warm start gets no answer at 2 Mbaud, logs `soft
-              reset not confirmed; hardware reset` and pulses the pin. The
-              chip comes back at its stored speed. A cell that still holds
-              what a word put there is KEPT BY THE CHIP
+  full reset  the chip's complete reset by command: `ATZ`, raw through the
+              wire probe (over /ws/obd the firmware turns an app's `ATZ`
+              into the warm start), then a planned restart. A cell that
+              still holds what a word put there is KEPT BY THE CHIP.
+              Until 2026-11-12 this leg was a pulse on the chip's reset pin,
+              which the bench got by moving the chip's UART to another speed
+              (the volatile `STSBR`) and restarting the unit: the bring-up
+              then logged `soft reset not confirmed; hardware reset`. The
+              firmware no longer pulses a chip that answers (issue #1023: a
+              reset inside a boot of the chip can destroy its store; the
+              reset line is for a chip that does not answer), so no bench
+              can put a pulse on a healthy chip, and none should. NOT RUN
+              in this form yet: both bench chips were dead on 2026-11-12.
 
-A reset pulse shows that a value is kept, not where: only a power-off shows
+A reset shows that a value is kept, not where: only a power-off shows
 that it is stored. For the preset that was done by hand on 2026-11-11: the
 unit's supply off for two minutes, the console adapter's line held low so
 that it fed nothing, and the chip still read `53 [ST]` after the power-on. A
@@ -51,8 +56,8 @@ start: a temporary AT protocol does not outlive it) and the unit is
 restarted once more, so that the firmware's own read of the store is right.
 
 AutoPID must be off (its requests would land between the words). Two
-planned restarts, one of them with the slow bring-up (about 8.5 s, one W
-line). Two writes of the chip's store (the preset and its removal).
+planned restarts. Two writes of the chip's store (the preset and its
+removal).
 
 Other words alone: `--words "STPTO 300;STPO;STPC"` classifies just those
 (2026-11-12: the words that begin like a preset and are none, which AutoPID
@@ -221,24 +226,29 @@ def restart():
     return [re.sub(r"\x1b\[[0-9;]*m", "", ln).strip() for ln in text.splitlines() if " obd_chip: " in ln]
 
 
-def hard_reset():
-    """the bring-up's reset pulse, provoked: True when the ring says so"""
-    st, r = http("/api/obd_chip/probe", "POST", {"kind": "probe", "baud": 2000000, "seconds": 0, "cmd": "STSBR115200"})
+def full_reset():
+    """the chip's full reset by command (`ATZ`, raw through the wire probe), then a planned
+    restart: (the banner came back, no reset pulse went out at that restart)"""
+    st, r = http("/api/obd_chip/probe", "POST", {"kind": "probe", "baud": 2000000, "seconds": 0, "cmd": "ATZ"})
     if st != 202:
-        say("the wire probe refused STSBR115200: %s %s" % (st, r))
-        return False
+        say("the wire probe refused ATZ: %s %s" % (st, r))
+        return False, False
+    pr = None
     t0 = time.time()
     while time.time() - t0 < 30:
         time.sleep(0.5)
         st, pr = http("/api/obd_chip/probe")
         if st == 200 and isinstance(pr, dict) and pr.get("done") and not pr.get("running"):
             break
+    got = [str(x.get("text") or "") for x in (pr or {}).get("lines", []) if x.get("cmd") == "ATZ"]
+    say("  the probe's ATZ: %s" % (got[:1] or "no answer line"))
     lines = restart()
-    pulsed = [ln for ln in lines if "soft reset not confirmed; hardware reset" in ln]
     for ln in lines:
-        if "hardware reset" in ln or "started: chip" in ln or "bring-up done" in ln:
+        if "reset" in ln or "started: chip" in ln or "bring-up done" in ln:
             say("  ring: %s" % ln[-120:])
-    return bool(pulsed)
+    st, oc = http("/api/obd_chip")
+    rs = oc.get("reset", {}) if isinstance(oc, dict) else {}
+    return any("ELM" in g for g in got), rs.get("pulses") == 0 and rs.get("wake_pulsed") is False
 
 
 def main():
@@ -294,13 +304,15 @@ def main():
     hard = None
     hard_own, hard_orphan = {}, []
     if not NO_RESET:
-        check("the bring-up pulsed the chip's reset pin (`soft reset not confirmed; hardware reset`)", hard_reset())
+        banner, no_pulse = full_reset()
+        check("the chip's full reset by command: `ATZ` over the wire probe answered with its banner", banner)
+        check("the restart behind it sent no reset pulse (the reset line is for a chip that does not answer)", no_pulse)
         chip = chip_nvm.Chip(DUT_HP)
         chip.cmd("ATE0")
         hard = state(chip)
         chip.close()
         left_hard = changed(base, hard)
-        say("after the hardware reset, against the state before the first word: %s" % (brief(left_hard) if left_hard else "nothing differs"))
+        say("after the full reset, against the state before the first word: %s" % (brief(left_hard) if left_hard else "nothing differs"))
         hard_own, hard_orphan = owners(rows, base, hard)
 
     # the chip back on its stored protocol: a temporary AT protocol does not
@@ -330,15 +342,15 @@ def main():
         elif "?" in answer:
             cls = "not taken by the chip here"
         elif i in hard_own:
-            cls = "KEPT across the hardware reset (%s)" % ", ".join("%s = %s" % (k, hard[k]) for k in hard_own[i])
+            cls = "KEPT across the full reset (%s)" % ", ".join("%s = %s" % (k, hard[k]) for k in hard_own[i])
             if bus == PRESET:
-                print("%s FACT the preset %s is kept by the chip across a warm start and a hardware reset "
+                print("%s FACT the preset %s is kept by the chip across a warm start and a full reset "
                       "(memory function off, no request sent)" % (now(), word), flush=True)
             else:
                 kept_words.append(word)
         elif i in warm_own:
             cls = "RAM, survives the warm start (%s)%s" % (
-                ", ".join("%s = %s" % (k, warm[k]) for k in warm_own[i]), "" if NO_RESET else ", gone after the hardware reset")
+                ", ".join("%s = %s" % (k, warm[k]) for k in warm_own[i]), "" if NO_RESET else ", gone after the full reset")
         elif cells:
             cls = "RAM (changed %s; gone after the warm start)" % ", ".join(cells)
         else:
@@ -347,9 +359,9 @@ def main():
     print()
 
     if not NO_RESET:
-        check("no option word is kept across the hardware reset", not kept_words, ", ".join(kept_words))
+        check("no option word is kept across the full reset", not kept_words, ", ".join(kept_words))
         check("no change is left that no word explains", not warm_orphan and not hard_orphan,
-              "after the warm start %s, after the hardware reset %s" % (warm_orphan, hard_orphan))
+              "after the warm start %s, after the full reset %s" % (warm_orphan, hard_orphan))
     check("the chip's stored protocol as found, no protocol save", g1.get("stored_protocol") == g0.get("stored_protocol") and
           g1.get("protocol_saves") == 0, "%s -> %s, protocol_saves %s" % (
               g0.get("stored_protocol"), g1.get("stored_protocol"), g1.get("protocol_saves")))
@@ -359,7 +371,7 @@ def main():
           h1.get("unexpected_resets") == h0.get("unexpected_resets"),
           "boot %s -> %s with %d planned" % ((h0 or {}).get("boot_count"), (h1 or {}).get("boot_count"), PLANNED[0]))
     failed = [n for n, ok in CHECKS if not ok]
-    print("CHIP WORDS %s (%d rows, %d survive the warm start, %d kept across the hardware reset, %d checks, %d failed, "
+    print("CHIP WORDS %s (%d rows, %d survive the warm start, %d kept across the full reset, %d checks, %d failed, "
           "%d planned restarts)" % ("DONE" if not failed else "FAIL", len(rows), len(warm_own), len(hard_own),
                                     len(CHECKS), len(failed), PLANNED[0]))
     return 1 if failed else 0

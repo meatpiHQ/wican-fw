@@ -654,6 +654,8 @@
        System > Maintenance cards from web/diag.js. A probe sets
        window.__mockPreset.diag = {down:true} for a chip that did not come up,
        {chip22:true} for a chip left on V2.3.22 (the update offer),
+       {damaged:true} for a chip whose stored identity is damaged (issue
+       #1023, 2026-11-12: fw.chip reads the device's words, fw.damaged true),
        {updating:true} for an update in progress; the wire tools and the
        self-test answer from state.diagProbe / state.diagSelftest, set by
        their POSTs. fw.chip keeps the chip's own words (MIC3624 V2.3.24):
@@ -670,13 +672,14 @@
       return J({ ready: !down && !restarting, claim: streaming ? "exclusive" : "none", client_idle_ms: 4294967295, baud: down ? 0 : 2000000,
         eeprom_guard: { rewrites: 0, blocked: 0, protocol_saves: 0, memory_off: 1, app_resets: 0, hidden_bytes: 0, pp_restores: 0, memory_refused: 0, requests_held: 0, switch_owed: false, protocol_kept: 0, stored_protocol: "6" },
         uart: { rx_bytes: 18, rx_chunks: 1, rx_max_chunk: 18, rx_overflows: 0, rx_buffered: down ? 34 : 0, tx_bytes: 212 },
-        fw: { builtin: "V2.3.24", current: "V2.3.22, V2.3.24", chip: down ? "" : (chip22 ? "MIC3624 V2.3.22" : "MIC3624 V2.3.24"),
-          outdated: !down && chip22,
+        fw: { builtin: "V2.3.24", current: "V2.3.22, V2.3.24", chip: down ? "" : d.damaged ? "ERR (stored identity damaged)" : (chip22 ? "MIC3624 V2.3.22" : "MIC3624 V2.3.24"),
+          outdated: !down && chip22 && !d.damaged, damaged: !down && !!d.damaged,
           update: streaming ? { running: true, lines: Math.round(3557 * el / ms), total: 3557, source: "builtin V2.3.24", done: false, last: "" }
                 : (job && d.updateFail) ? { running: false, lines: 1248, total: 3557, source: "builtin V2.3.24", done: true, last: d.updateFail }
                 : d.updating ? { running: true, lines: 1500, total: 3557, source: "builtin V2.3.24", done: false, last: "" }
                              : { running: false, lines: 3557, total: 3557, source: "builtin V2.3.24", done: true, last: "ESP_OK" } },
         bringup: { wire: down ? [{ baud: 2000000, bytes: 0, prompt: false, hex: "" }, { baud: 115200, bytes: 2, prompt: false, hex: "FC 00" }] : [] },
+        reset: { pulses: down ? 1 : 0, refused: 0, wake_ms: down ? 1000 : 302, wake_ready: !down, wake_pulsed: down },
         subscribers: [{ idx: 0, name: "bridge", dropped: 0, queued: 0, depth: 64 }] }); },
     "/api/obd_chip/probe": () => J(state.diagProbe || { running: false, done: false, kind: "probe", baud: 0, seconds: 0, err: "", auto: { edges: 0, measured: 0, detected: 0 }, lines: [], raw: { baud: 0, total: 0, prompt: false, text: "", hex: "" } }),
     "/api/obd_chip/report": () => { const d = (window.__mockPreset && window.__mockPreset.diag) || {}; if (d.down) return J({ error: "the chip is not up or an update runs" }, 409);

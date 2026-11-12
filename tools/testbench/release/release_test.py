@@ -21,9 +21,11 @@ Steps (about 9 min): r0 preflight, r1 flash + boot, r2 boot health, r3 UI
 and API, r4 a settings round trip, r5 OBD (autopid values, ELM over
 ws_obd), r6 CAN frames flow, r7 MQTT, r8 the HA webhook sta_ip bench (the
 PSRAM-stack canary), r9 the updater's check, r10 an OTA upload of the same
-image, r11 the writers (backup copy, log ring, a script), r12 BLE, r13 the
-closing audit (stack watermarks, heap floors, resets, faults, E lines, the
-console, the supply current) and the restore.
+image, r11 the writers (backup copy, log ring, a script), r12 BLE, r12w the
+OBD chip's wake (issue 1023, the device killer: a real sleep and wake, and
+the bring-up behind it must not pulse the chip's reset inside the chip's own
+boot), r13 the closing audit (stack watermarks, heap floors, resets, faults,
+E lines, the console, the supply current, the chip's store) and the restore.
 
 Rig: the DUT on the bench AP reached through an ssh tunnel (--dut
 localhost:18081; test.ps1 opens it, --tunnel opens one here), the Pi
@@ -79,6 +81,7 @@ STEPS = [  # id, title, budget_s
     ("r10", "OTA upload of the same image", 150),
     ("r11", "the writers: backup copy, log ring, a script", 45),
     ("r12", "BLE", 30),
+    ("r12w", "the OBD chip's wake: no reset inside the chip's own boot", 150),
     ("r13", "closing audit and restore", 300),
 ]
 # PSRAM-stack tasks and the step that drives them (section 5 of the design)
@@ -210,6 +213,7 @@ class ReleaseTest:
         self.console = None
         self.console_log = os.path.join(a.logdir, "console.log")
         self.console_stop = self.console_log + ".stop"
+        self.console_cmd = self.console_log + ".cmd"     # a line for the tail to type
         self.tunnel = None
         self.t_start = time.time()
         self.st0 = None
@@ -294,7 +298,8 @@ class ReleaseTest:
         tail = os.path.join(HERE, "..", "lib", "console_tail.py")
         self.console = subprocess.Popen(
             [sys.executable, "-u", tail, port, self.console_log, "--secs",
-             str(self.a.cap_s + 300), "--stop-file", self.console_stop],
+             str(self.a.cap_s + 300), "--stop-file", self.console_stop,
+             "--cmd-file", self.console_cmd],
             stdout=open(self.console_log + ".keys", "w"), stderr=subprocess.STDOUT)
         time.sleep(1.5)
 
@@ -642,6 +647,67 @@ class ReleaseTest:
             raise Skip("BLE is disabled in the DUT's settings (the canonical bench set)")
         run.check("ble_advertising", bool(b.get("advertising")), json.dumps(b)[:160])
 
+    def r12w_chip_wake(self):
+        """Issue 1023, the device killer: until 2026-11-12 every wake pulsed
+        the OBD chip's reset 300 ms behind the sleep pin, inside the chip's
+        own wake-up boot, where a reset can destroy the chip's store. A real
+        sleep and a timed wake on the release image; the bring-up behind it
+        must have waited for READY and sent no reset pulse. No store write
+        here: the leg that fills the chip's store first is `test.ps1
+        chipwake`."""
+        run = self.run
+        if self.console is None:
+            raise Skip("no console: `sleep test` is typed there")
+        code, oc = self.dut.api("/api/obd_chip")
+        rs = oc.get("reset") if code == 200 and isinstance(oc, dict) else None
+        run.check("chip_wake_guard_in_the_image", isinstance(rs, dict) and "refused" in rs, json.dumps(rs)[:120])
+        run.check("chip_ready_before_the_wake", bool(isinstance(oc, dict) and oc.get("ready")),
+                  json.dumps({k: (oc or {}).get(k) for k in ("ready", "claim")}) if isinstance(oc, dict) else oc)
+        if not isinstance(rs, dict) or "refused" not in rs or not oc.get("ready"):
+            return                      # an image without the guard is not put to sleep
+        self.found["sleep_manager"] = self.dut.settings("sleep_manager")
+        if not self.found["sleep_manager"].get("enabled"):
+            self.dut.restart({"sleep_manager": {"enabled": True}})   # `sleep test` needs it on
+            time.sleep(3)
+        b0 = self.dut.boot_count()
+        with open(self.console_cmd, "w", encoding="utf-8") as f:
+            f.write("sleep test 12\n")
+        t0 = time.time()
+        took = self.wait_reboot(b0, 120)
+        run.check("chip_wake_slept_and_woke", took is not None, "%s s" % (round(took, 1) if took else "no reboot in 120"))
+        if took is None:
+            return
+        run.metric("chip_wake_cycle_s", round(time.time() - t0, 1))
+        oc = {}
+        t1 = time.time()
+        while time.time() - t1 < 40:
+            code, oc = self.dut.api("/api/obd_chip")
+            if code == 200 and isinstance(oc, dict) and oc.get("ready"):
+                break
+            time.sleep(1)
+        rs = oc.get("reset", {}) if isinstance(oc, dict) else {}
+        run.metric("chip_wake_ready_ms", rs.get("wake_ms"))
+        run.check("chip_wake_chip_ready", bool(isinstance(oc, dict) and oc.get("ready")), json.dumps(rs))
+        run.check("chip_wake_ready_settled", rs.get("wake_ready") is True, json.dumps(rs))
+        run.check("chip_wake_no_reset_pulse", rs.get("wake_pulsed") is False and rs.get("pulses") == 0,
+                  json.dumps(rs))
+        run.check("chip_wake_waited_the_chips_boot", 600 <= (rs.get("wake_ms") or 0) <= 1600,
+                  "%s ms behind the sleep pin (about 300 = the chip was not asleep)" % rs.get("wake_ms"))
+        run.check("chip_wake_no_pulse_asked_for", rs.get("refused") == 0, json.dumps(rs))
+        latched = [f.get("code") for f in self.dut.get("/api/faults").get("faults", [])
+                   if str(f.get("code", "")).startswith("obd_chip_")]
+        run.check("chip_wake_no_chip_fault_latched", not latched, ", ".join(latched))
+        boot = [ln for ln in self.dut.ring_lines() if "obd_chip:" in ln]
+        tail = boot[max(i for i, ln in enumerate(boot) if "chip awake" in ln or "chip not ready" in ln):] \
+            if any("chip awake" in ln or "chip not ready" in ln for ln in boot) else boot
+        run.check("chip_wake_log_has_no_chip_not_ready",
+                  not any("chip not ready" in ln or "soft reset not confirmed" in ln for ln in tail),
+                  [ln[-80:] for ln in tail[:3]])
+        code, hist = self.dut.api("/api/restart/history")
+        rec = (hist or {}).get("records", [{}])[0] if isinstance(hist, dict) else {}
+        run.check("chip_wake_restart_is_the_planned_wake", rec.get("source") == "sleep_mode",
+                  json.dumps({k: rec.get(k) for k in ("planned_reason", "source", "reason")}))
+
     def r13_closing(self):
         a, run = self.a, self.run
         # the Pi's audit submits a setting and restores it: two planned reboots
@@ -656,6 +722,14 @@ class ReleaseTest:
         self.dut.reset_check(run, self.st0)
         faults = self.dut.get("/api/faults")
         run.check("close_no_latched_faults", faults.get("faults") == [], json.dumps(faults)[:120])
+        # issue 1023: the chip's store intact, and the reset line not used. It
+        # is for a chip that does not answer; the release unit's chip answers
+        oc = self.dut.get("/api/obd_chip")
+        run.check("close_chip_store_not_damaged", oc.get("fw", {}).get("damaged") is False,
+                  json.dumps(oc.get("fw", {}))[:160])
+        rs = oc.get("reset", {})
+        run.check("close_reset_line_not_used", rs.get("pulses") == 0 and rs.get("refused") == 0,
+                  json.dumps(rs))
         st = self.dut.get("/api/status")
         run.metric("log_errors_at_close", st.get("health", {}).get("log_errors"))
         self.dut.passing_checks(run)
@@ -680,20 +754,25 @@ class ReleaseTest:
         ap = self.found.get("autopid", {})
         hw = self.found.get("ha_webhooks", {})
         se = self.found.get("script_engine", {})
+        sm = self.found.get("sleep_manager", {})
         if "enabled" in ap:
             changes["autopid"] = {"enabled": ap["enabled"]}
         if "cli" in hw:
             changes["ha_webhooks"] = {"cli": hw["cli"]}
         if "enabled" in se:
             changes["script_engine"] = {"enabled": se["enabled"]}
+        if "enabled" in sm:
+            changes["sleep_manager"] = {"enabled": sm["enabled"]}
         try:
             cur_ap = self.dut.settings("autopid")
             cur_hw = self.dut.settings("ha_webhooks")
             cur_se = self.dut.settings("script_engine")
+            cur_sm = self.dut.settings("sleep_manager")
         except pcbench.Bench:
             return
         if changes and (cur_ap.get("enabled") != ap.get("enabled") or cur_hw.get("cli") != hw.get("cli")
-                        or cur_se.get("enabled") != se.get("enabled")):
+                        or cur_se.get("enabled") != se.get("enabled")
+                        or ("enabled" in sm and cur_sm.get("enabled") != sm.get("enabled"))):
             t0 = time.time()
             self.dut.restart(changes)
             self.run.metric("restore_reboot_s", round(time.time() - t0, 1))
@@ -766,7 +845,7 @@ class ReleaseTest:
                "r3": self.r3_ui_api, "r4": self.r4_settings_round_trip, "r5": self.r5_obd,
                "r6": self.r6_can, "r7": self.r7_mqtt, "r8": self.r8_ha_webhook,
                "r9": self.r9_updater, "r10": self.r10_ota_upload, "r11": self.r11_writers,
-               "r12": self.r12_ble, "r13": self.r13_closing}
+               "r12": self.r12_ble, "r12w": self.r12w_chip_wake, "r13": self.r13_closing}
         try:
             for sid, title, budget in STEPS:
                 if sid == "r1" and (not self.selected("r0") or self.run.failed_in("r0")):

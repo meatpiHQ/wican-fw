@@ -13,9 +13,9 @@ goes to sleep in v6 against v4.52p, internal/OBD_CHIP_SLEEP_V6_VS_V4.md):
                    whole sleep delay awake again). The chip answers OK with
                    a prompt and sleeps on its own a second or two later
                    (READY follows that late), so the OK is the verdict and
-                   the first nap's READY check the ground truth. The nap
-                   re-sleep waits 1.5 s after its reset pulse (the chip
-                   boots that long) before the word.
+                   the first nap's READY check the ground truth. The nap's
+                   re-sleep resets the chip by command since 2026-11-12
+                   (the warm start, not a reset pulse) before the word.
   the PPSW digits  VT PPSW xy is x = the WAKE trigger, y = the SLEEP trigger
                    (0 low level, 1 high level, 2 rising, 3 falling, F none):
                    10 = high wakes, low sleeps; 0F = a LOW level wakes and
@@ -30,8 +30,9 @@ goes to sleep in v6 against v4.52p, internal/OBD_CHIP_SLEEP_V6_VS_V4.md):
                    the device is awake, and only the naps are judged).
   the PPSW repair  VTPPSW10 at the bring-up is acknowledged, given 600 ms
                    (legacy's 100 + 500 ms) and read back as 10 BEFORE the
-                   reset pulse; before 2026-11-07 the pulse came 0 ms after
-                   the OK.
+                   reset; before 2026-11-07 a reset pulse came 0 ms after
+                   the OK, since 2026-11-12 the reset is an ATZ (a chip that
+                   answers gets no pulse, issue 1023).
 
   as found      the chip ready and unclaimed; the report's VTPPSWS reads 10;
                 AutoPID's state noted (never changed); the console held
@@ -52,7 +53,12 @@ goes to sleep in v6 against v4.52p, internal/OBD_CHIP_SLEEP_V6_VS_V4.md):
                 line; the boot's bring-up logs "PPSW is 2F, setting to 10"
                 and "PPSW reads 10 after the write" (the settle and the
                 read-back), the report reads VTPPSWS 10 (the second EEPROM
-                write, the repair). Before 2026-11-07 a chip the pin could
+                write, the repair). The wake itself needs no reset pulse:
+                the sleep pin going high is the rising edge 2F wakes on,
+                the bring-up waits for READY and takes the warm start
+                (pulses 0, refused 0, no OBD chip fault code; until
+                2026-11-12 the fixed 300 ms read "not ready" and pulsed
+                here). Before 2026-11-07 a chip the pin could
                 not sleep read six re-sleeps, the E line and
                 internal_recovery (test-reports/logs/obd_chip_down_2026-11-01/
                 ppsw_e2_e3a.log, E3a, and this stage's first run on the
@@ -80,9 +86,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "lib"))
 sys.path.insert(0, os.path.join(HERE, "..", "wifi"))
 import bench_ports  # noqa: E402
+import chip_faults  # noqa: E402  (the chip's device fault codes)
 from wican_fresh_bench import Console  # noqa: E402  (DTR/RTS off before the open)
 
 ARGS = sys.argv[1:]
+FOUND = {}                      # what leg_as_found read, for the end
 
 
 def arg(name, default):
@@ -288,10 +296,19 @@ def entry_lines(lines):
     return out
 
 
+def faults():
+    """every latched device fault code: {code: fault}"""
+    st, f = http(DUT, "/api/faults")
+    return chip_faults.by_code(f)
+
+
 def leg_as_found():
     oc = wait_ready(20)
     check("the chip ready and unclaimed as found", oc.get("ready") and oc.get("claim") == "none",
           json.dumps({k: oc.get(k) for k in ("ready", "claim", "baud")}))
+    FOUND["faults"] = faults()
+    cf = chip_faults.chip(FOUND["faults"])
+    check("no OBD chip fault code latched as found", not cf, json.dumps(cf))
     p = ppsw()
     check("the report's VTPPSWS reads 10 as found", p == "10", p)
     st, sl = http(DUT, "/api/sleep")
@@ -317,6 +334,8 @@ def leg_healthy():
           json.dumps({k: rec.get(k) for k in ("planned_reason", "source", "reason")}))
     e = e_lines(lines)
     check("healthy: no E line of obd_chip or sleep_manager", not e, e)
+    cf = chip_faults.chip(faults())
+    check("healthy: no OBD chip fault code latched by the sleep and the wake", not cf, json.dumps(cf))
 
 
 def leg_stand_in():
@@ -380,6 +399,24 @@ def leg_stand_in():
           any("PPSW reads 10 after the write" in l for l in boot), [l for l in boot if "PPSW" in l])
     p = ppsw()
     check("the report's VTPPSWS reads 10 after the repair", p == "10", p)
+    # the stand-in slept through every nap and woke on the pin all the same:
+    # the sleep pin going high at the wake is the rising edge 2F wakes on (a
+    # high level under 1F). The bring-up waits for READY and takes the warm
+    # start, so this wake needs no reset pulse and latches no fault code
+    # (measured on a healthy chip, 2026-11-12: READY steady 704 ms behind the
+    # pin; until that day the fixed 300 ms read "not ready" here and pulsed)
+    st, oc = http(DUT, "/api/obd_chip")
+    rs = (oc or {}).get("reset") or {}
+    check("stand-in: the wake needed no reset pulse (READY settled, pulses 0, refused 0)",
+          rs.get("wake_ready") is True and rs.get("wake_pulsed") is False
+          and rs.get("pulses") == 0 and rs.get("refused") == 0, json.dumps(rs))
+    check("stand-in: the boot took the warm start, not the last resort",
+          any("chip awake; warm start" in l for l in boot)
+          and not any("the last resort" in l or "chip not ready" in l for l in boot),
+          [l for l in boot if "chip awake" in l or "chip not ready" in l or "the last resort" in l][:3])
+    cf = chip_faults.chip(faults())
+    check("stand-in: no OBD chip fault code latched (not silent, not woke, not no_sleep, not damaged)",
+          not cf, json.dumps(cf))
 
 
 def main():
@@ -402,6 +439,10 @@ def main():
         oc = wait_ready(20)
         p = ppsw()
         check("the chip ready at the end, VTPPSWS 10", oc.get("ready") and p == "10", p)
+        ok, what = chip_faults.clear_own(FOUND.get("faults", {}), faults(), (),
+                                         lambda: http(DUT, "/api/faults/clear", "POST", {}))
+        check("the end: the fault store holds nothing the bench did not put there", ok, what)
+        print("%s fault codes: %s" % (now(), what), flush=True)
     finally:
         CON.close()
     print("%s planned wakes: %d" % (now(), WAKES), flush=True)

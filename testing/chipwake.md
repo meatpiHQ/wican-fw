@@ -1,0 +1,57 @@
+# OBD chip wake: no reset inside one of the chip's own boots (issue 1023)
+
+Command: `.\test.ps1 chipwake [-SkipTidy]` = `python tools\testbench\obd\chip_wake_bench.py --dut localhost:18081 --port auto [--wake 15] [--skip-tidy] [--log-dir DIR]` (PC, through the stage's ssh tunnel).
+
+Needs: main fw on the DUT + rpi001 + the WiCAN console free (the bench holds it and types on it) + ECU sim v2 answering on the bus. AutoPID, the sleep setting and the simulator are left as found.
+
+The index row and the other stages: [../TESTING.md](../TESTING.md). The finding behind it: `internal/OBD_CHIP_WAKE_RESET_FINDING_2026-11-12.md`.
+
+## Why this stage exists
+
+This is the regression for a fault that destroys the OBD chip for good. Treat a red run as a stop.
+
+- The chip tidies its stored settings in the first boot behind every 264 writes of its store, from about 68 ms into that boot, for about 155 ms. A reset inside that tidying destroys the store: the chip loses its identity and its PowerEn setting, or it never answers again.
+- Waking on the sleep pin includes a boot of the chip: READY shows ready 113 ms behind the pin, the chip restarts itself at 231 to 237 ms and is ready for good at about 500 ms (about 680 ms with the store to tidy).
+- Until 2026-11-12 the bring-up waited a fixed 300 ms behind the sleep pin, read "not ready" and pulsed the chip's reset line: 63 to 69 ms into that boot, where the tidying starts. Two bench chips were destroyed reproducing it; both field signatures of issue 1023 came out.
+- The fix: the bring-up waits until READY has been ready without a break for 300 ms and then takes the warm start.
+- And the reset line is the last resort (Ali, 2026-11-12: "the pin reset should not be allowed unless as a last resort solution, also remove it from API if it's in the API"). `obd_pin_reset_pulse()`, the only code that drives the line, pulses only a chip the bring-up has just asked at both UART speeds without an answer, and only once READY is at rest; READY reading "asleep" alone gets none. It is in no API: `obd_chip_hard_reset()` is gone, no HTTP route or console command ever pulsed the line, and inside the component its declaration is included by the bring-up alone. A chip that answers is reset by command: the warm start's fallback, the PowerEn repair, the nap's re-sleep, the crash park and the end of a chip update no longer pulse it. So a healthy chip gets no pulse from this firmware at all, and `reset.pulses` must read 0 on it.
+
+## What it covers
+
+| Leg | What is done | Must read |
+|---|---|---|
+| as found | `GET /api/obd_chip`; AutoPID off and the sleep on for the run (a planned restart when either differs); `GET /api/obd_chip/report` kept | the image carries the guard and the reset line's rule (`reset.refused` and `fw.damaged` are there), the chip ready, not damaged. An image without the guard ends the bench here: it is NOT put through a wake |
+| wake | `sleep test 15` typed on the console; the console followed through the entry, the naps and the boot behind the wake | `reset.wake_ready` true; `reset.wake_pulsed` false, `reset.pulses` 0 and `reset.refused` 0 in that boot; `reset.wake_ms` 600 to 1600 (about 300 would mean the chip was not asleep); the boot's log has `chip awake; warm start` and neither `chip not ready` nor `soft reset not confirmed`; zero re-sleeps; no E line; `fw.damaged` false; the report as found |
+| tidy wake | only when every check before it passed. The simulator set to answer 11 bit and 29 bit ids; `ATM1` through the wire probe; 276 protocol changes (`ATTP7` / `ATTP6`) each with an answered `0100` over `/ws/obd`; `sleep test 15` | everything of the leg before, and `reset.wake_ms` at least 100 ms later than in the leg before (the chip's tidying boot was the one tested); the chip's stored protocol as found |
+| end | the simulator and the settings put back | the chip ready, not damaged, `reset.pulses` 0 and `reset.refused` 0; no OBD chip fault code latched |
+
+Fault codes (2026-11-12): the firmware latches `obd_chip_woke`, `obd_chip_no_sleep`, `obd_chip_silent` and `obd_chip_damaged` in the device's fault store (`GET /api/faults`). A healthy chip latches none, so the bench wants none as found, behind each wake and at the end (`tools/testbench/obd/chip_faults.py`). One that is latched as found fails the first leg: read it, clear it (`POST /api/faults/clear`) and find out where it came from before running again.
+
+A regression of the guard fails the first leg, which costs the chip nothing, and the second leg then does not run.
+
+The host tests carry the logic: `test_settle_*` (the READY settle against the measured traces; `test_settle_never_ready_where_the_old_bringup_pulsed` is the fault itself), `test_pulse_*` (the rule of the reset line: only for a chip found silent, never on READY alone, and at no sample of any measured boot), `test_reset_line_has_one_driver_and_two_last_resort_calls` (the sources counted: one file names the pin, the bring-up calls the pulse twice, nothing else can) and `test_vtvers_*` (a chip with a damaged store is not a chip to recover) in `obd_chip/host_test/main/test_settle.c`. The release test has the plain wake as its step r12w and two closing checks.
+
+What this stage does not reach: the command paths that took the place of a pulse elsewhere. The nap's re-sleep of a chip in the middle of a monitor is the sleep matrix's leg `elm_monitor`, the PowerEn repair by `ATZ` is `sleepword`, the end of a chip update is `obdfw`, the warm start is `obdbringup`. Run them with this stage on a change of the reset line's rule.
+
+## Records
+
+- 2026-11-12, the reproduction (the test firmware of `internal/issue_1023/`, two units): in a wake with the store to tidy, reset pulses 290, 296 and 298 ms behind the sleep pin did nothing, the pulse at 300 ms killed the chip of unit 14c19f457fe1 in one shot; on unit 44bd8d73ca79 pulses at 324 and 316 ms erased the identity block and then killed the chip. The product's own pulse went out 299.3 to 300.5 ms behind the pin.
+- 2026-11-12 15:13, the host tests on the fix: `obd_chip` 58 PASS (10 new), report `test-reports/2026-11-12_1513_host_obd_chip.md`.
+- 2026-11-12 15:57, the host tests with the rule of the reset line: `obd_chip` 61 PASS (3 more: `test_pulse_*`), report `test-reports/2026-11-12_1557_host_obd_chip.md`.
+- 2026-11-12 16:02, the two "does not answer" cases on the dead chip of unit 14c19f457fe1 (the image of that hour, by hand). After the flash's power-on READY read ready and the chip was silent: `chip awake; warm start`, `soft reset not confirmed at 2000000 baud; looking for the chip (no reset pulse: it reads ready)`, nothing at either speed, `chip silent at 2000000 and 115200 baud; hardware reset, the last resort`, one more look, `chip not responding`; `reset` read `{pulses 1, refused 0, wake_ms 301, wake_ready true, wake_pulsed true}`, the bring-up 18.6 s. After a planned restart READY stayed high: `chip not ready; hardware reset (READY stayed high, 1000 ms behind the sleep pin)`, no second pulse, `{pulses 1, refused 0, wake_ms 1000, wake_ready false, wake_pulsed true}`. One pulse per bring-up in both, never two.
+- 2026-11-12 16:19, the host tests with the last resort: `obd_chip` 62 PASS, report `test-reports/2026-11-12_1619_host_obd_chip.md`. The run before it (16:17) failed on the new source count, rightly for what it scanned: the Pi's copy of the tree still carried `obd_chip_sweep.c` of an old branch, which names the pulse. The count now reads the sources the component builds.
+- 2026-11-12 16:22, the last resort on the dead chip of unit 14c19f457fe1 (the image of 16:21, by hand; READY high after the flash's power-on and after a planned restart alike): `chip not ready (READY stayed high, 1000 ms behind the sleep pin); asking it on the wire before any reset`, nothing at 2 Mbaud, nothing at 115200, `chip not ready; hardware reset, the last resort (READY stayed high, no answer at 2000000 or 115200 baud)`, the full walk, `chip not responding`; `reset` read `{pulses 1, refused 0, wake_ms 1000, wake_ready false, wake_pulsed true}`, the bring-up 16.8 s. No pulse before the chip had been asked.
+- 2026-11-12 16:47, the fault code on the dead chip of unit 14c19f457fe1 (by hand): `GET /api/faults` read `obd_chip_silent`, `silent; still silent after the reset pulse`, count 1 after the flash and count 2 after a planned restart; before this build the same unit's fault list was empty. The bench's own wants (no chip code on a healthy chip) are not run yet.
+- 2026-11-12 18:40, a third unit on the bench (14c19f457fd9, erased, this build flashed, its chip a factory `MIC3624 V2.3.22` never touched by v6). Its first bring-up, the chip still at its factory 115200 baud: `soft reset not confirmed at 2000000 baud; looking for the chip (no reset pulse: it reads ready)`, found, `started: chip 'ELM327 v2.3' at 2000000 baud`, 11.5 s, `reset` `{pulses 0, refused 0}`, no fault code.
+- 2026-11-12 18:47, THE FIRST RUN ON A HEALTHY CHIP, the wake alone (`-SkipTidy`): `CHIP WAKE PASS (22 checks, 0 failed, 1 planned wakes)`, `chip woke: READY steady 800 ms behind the sleep pin`, `chip awake; warm start (ATWS) instead of hardware reset`, `reset` `{pulses 0, refused 0, wake_ms 800, wake_ready true, wake_pulsed false}`, the bring-up 2.1 s, no fault code. Report `test-reports/2026-11-12_1847_chipwake.md`.
+- 2026-11-12 18:49 to 18:56, the whole stage on the same unit (the chip's stored protocol 6 by then, the product's own protocol save at the car's detection): `CHIP WAKE PASS (41 checks, 0 failed, 2 planned wakes)`. The wake: READY steady at 798 ms. The tidy wake, behind 276 answered protocol changes: READY steady at 951 ms (153 ms later: the chip's tidying boot was the one under the bring-up), the warm start, `reset` `{pulses 0, refused 0, wake_ms 951, wake_ready true, wake_pulsed false}`, no fault code, the identity not damaged, the report and the stored protocol as found. This is the wake that destroyed the two chips of the reproduction. Report `test-reports/2026-11-12_1849_chipwake.md`.
+- 2026-11-12 19:40 to 19:46, the whole stage again with the chip on `MIC3624 V2.3.24` (lifted by `obdfw` in between): `CHIP WAKE PASS (41 checks, 0 failed, 2 planned wakes)`. The wake: READY steady at 798 ms. The tidy wake: 967 ms (169 ms later), the warm start, `reset` `{pulses 0, refused 0, wake_ms 967, wake_ready true, wake_pulsed false}`, no fault code. So V2.3.24 tidies its store in the same boot as V2.3.22: the chip's newer firmware does not take the hazard away, the bring-up's wait does. Report `test-reports/2026-11-12_1940_chipwake.md`.
+
+## Traps
+
+- The bench owns the console for the whole run (it types on it): a console tail beside it cannot open the port.
+- The tidy leg needs the simulator to answer both id lengths; the bench sets that (one reboot of the simulator) and puts it back.
+- The tidy leg needs AutoPID off: its own prelude sends `ATM0` and the protocol changes would then store nothing. The bench switches it off and back.
+- The chip's stored protocol must be 6 or 7 as found (the leg ends its writes on it); the bench says so when it is not, and does not run the leg.
+- `reset.wake_ms` of a restart without a sleep is about 300 ms: the chip was awake all along. Only a wake from a real sleep shows 800 ms and more.
+- 276 store writes per run: one block of the chip's log, tidied by the chip in the wake that follows. Run it on purpose, not in a loop.

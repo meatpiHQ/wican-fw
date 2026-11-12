@@ -9,7 +9,9 @@
    bring-up's wire verdicts, the report refused), a refused self-test, and a
    chip left on V2.3.22 (the banner naming both versions without the chip
    name, the Update button at its right edge, the confirm dialog, the POST
-   without force: Ali 2026-10-28 and 2026-11-01). Prints `DIAG PROBE PASS`. */
+   without force: Ali 2026-10-28 and 2026-11-01), and a chip whose stored
+   identity is damaged (issue #1023, 2026-11-12: the red state chip, the
+   banner that says so, no update offered). Prints `DIAG PROBE PASS`. */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -132,6 +134,20 @@ function boot(hash, preset) {
     p.click(ok); await sleep(400);
     const st = p.w.__mockState || null;
     check("confirming posts the update without force", !!(st && st.diagUpdates === 1 && !st.diagForced), st && [st.diagUpdates, st.diagForced]);
+    check("no jsdom errors", p.errs.length === 0, p.errs.slice(0, 2));
+    p.close();
+  }
+
+  /* ---- boot 5: a chip whose stored identity is damaged (issue #1023) ---- */
+  {
+    const p = boot("#/system/maintenance", { diag: { damaged: true } });
+    await sleep(2600);
+    const chip = p.cardByTitle("OBD chip");
+    const row = chip && chip.querySelector(".rowflex");
+    check("a damaged chip is up and says so in the state row, in red, with no version beside it", !!row && /ready at 2 000 000 baud/.test(row.textContent) && !!p.$$(".chip.crit", row).find((c) => /stored identity damaged/.test(c.textContent)) && !/firmware /.test(row.textContent), row && row.textContent);
+    const ban = chip && chip.querySelector(".banner");
+    check("the banner says the chip still works, is not rewritten and names support", !!ban && ban.classList.contains("crit") && /stored identity is damaged/.test(ban.textContent) && /still works/.test(ban.textContent) && /does not rewrite its firmware/.test(ban.textContent) && /support/.test(ban.textContent), ban && ban.textContent.slice(0, 160));
+    check("no update is offered for a damaged chip", !p.btn(chip, "Update to V2.3.24") && !p.btn(chip, "Update the chip firmware") && !/A newer chip firmware/.test(chip.textContent));
     check("no jsdom errors", p.errs.length === 0, p.errs.slice(0, 2));
     p.close();
   }
