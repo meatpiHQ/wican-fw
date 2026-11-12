@@ -4,9 +4,9 @@ Command: `cd tools/webui_preview && MEATPI_COMPONENTS_PATH=<live components tree
 
 Needs: nothing but Node and the preview (no device). The index row and the other stages: [../TESTING.md](../TESTING.md).
 
-**What it covers** (prints `FAULTS PROBE PASS`, 23 checks). System Monitor's card "Fault codes" over the mock's `/api/faults` with a probe's own list (`__mockPreset.faults`: two OBD chip codes and one code the UI has no words for):
+**What it covers** (prints `FAULTS PROBE PASS`, 24 checks). System Monitor's card "Fault codes" over the mock's `/api/faults` with a probe's own list (`__mockPreset.faults`: two OBD chip codes and one code the UI has no words for):
 
-- The table is the one it was: the five columns Code, Detail, Count, First seen, Last seen and no sixth; one row per code; the code and the detail as the device sent them; the header's chip counts them. Ali, 2026-11-12, on a mock-up that put a title, a paragraph and a severity on every row: "has too much information, I prefer simple and clean design, if we want to add additional info add a bubble".
+- The table is the one it was: the five columns Code, Detail, Count, First seen, Last seen and no sixth; one row per code; the code and the detail as the device sent them; the header's chip counts them; a count at the device's cap (`capped` true, 2026-11-12) reads `10+`, a count below it and a row without the flag (a build before the cap) read as they are. Ali, 2026-11-12, on a mock-up that put a title, a paragraph and a severity on every row: "has too much information, I prefer simple and clean design, if we want to add additional info add a bubble".
 - The bubble's button: beside a code that has an entry in the UI's `FAULT_INFO`, in the Code cell, labelled for a screen reader; none beside the code the UI does not know; no bubble before a click.
 - One bubble: a click opens it with a title and a paragraph and the button says it is open; the next row's button swaps it (still one).
 - The page's refresh leaves it alone: two refreshes (the page polls every 2 s) later the bubble is still there and the card was not painted again (the same button element). Before the change the card was repainted at every refresh.
@@ -19,6 +19,7 @@ Needs: nothing but Node and the preview (no device). The index row and the other
 - 2026-11-12, the first run with the change: `FAULTS PROBE PASS` (23 checks); `DIAG PROBE PASS` beside it. One red in between was the probe's own: the confirm dialog's button reads `Continue` (the second argument of `confirmModal` is the title).
 - 2026-11-12, by eye: two screenshots of the preview with a bubble open (1320 px and 390 px wide, `test-reports/logs/fault_bubble_20261112/`, taken with `shoot_faults.mjs` there).
 - 2026-11-12 17:20, on a device (the bench unit whose OBD chip is dead, the image of that minute, a real browser through the tunnel, `shoot_device.mjs` in the same folder): the five columns, the unit's own row `obd_chip_silent` / `silent; still silent after the reset pulse`, the bubble "The OBD chip did not answer" open and still there after a refresh, the header chip `1 fault`, no page error.
+- 2026-11-12 21:40, with the cap of a fault's count: `FAULTS PROBE PASS` (24 checks, the new one `a count at its cap reads 10+ ...` with `["10+","2","1"]`); `DIAG PROBE PASS` beside it.
 
 ## Traps
 

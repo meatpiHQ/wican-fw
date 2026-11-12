@@ -20,8 +20,11 @@ const check = (n, ok, extra) => { console.log((ok ? "PASS " : "FAIL ") + n + (ex
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const FAULTS = [
-  { code: "obd_chip_silent", detail: "silent; still silent after the reset pulse", count: 3, first_time: 1794462461, last_time: 1794462637 },
-  { code: "obd_chip_woke", detail: "awake at nap 412 after it had slept", count: 2, first_time: 1794200000, last_time: 1794300000 },
+  /* the first one at the count's cap (2026-11-12: the device stops counting,
+     and writing its flash, at 10 and says so with `capped`); the third as a
+     build before the cap sent it (no `capped` at all) */
+  { code: "obd_chip_silent", detail: "silent; still silent after the reset pulse", count: 10, capped: true, first_time: 1794462461, last_time: 1794462637 },
+  { code: "obd_chip_woke", detail: "awake at nap 412 after it had slept", count: 2, capped: false, first_time: 1794200000, last_time: 1794300000 },
   { code: "some_future_code", detail: "a code this UI has no words for", count: 1, first_time: 1794462461, last_time: 1794462461 },
 ];
 
@@ -61,6 +64,8 @@ function boot(hash, preset) {
   check("three rows, one per fault code", rows.length === 3, rows.length);
   check("a row reads the code and the detail as the device sent them", rows.length === 3 && /obd_chip_silent/.test(rows[0].textContent) && /silent; still silent after the reset pulse/.test(rows[0].textContent), rows[0] && rows[0].textContent.slice(0, 90));
   check("the header's chip counts them", /3 faults/.test((p.$("#cp-faults") || {}).textContent || ""), (p.$("#cp-faults") || {}).textContent);
+  const counts = rows.map((r) => (r.querySelectorAll("td")[2] || {}).textContent.trim());
+  check("a count at its cap reads `10+`, a count below it and one without the flag as they are", JSON.stringify(counts) === JSON.stringify(["10+", "2", "1"]), counts);
 
   /* ---- the bubble's button: beside a code the UI has words for ---- */
   const btns = rows.map((r) => r.querySelector("button.ibtn"));

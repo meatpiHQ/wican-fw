@@ -9838,7 +9838,9 @@ PAGES.sysmon=async(view)=>{
         dataTable([
           {label:"Code",get:r=>faultCode(r.code),mono:true},
           {label:"Detail",key:"detail"},
-          {label:"Count",key:"count",align:"right",mono:true},
+          /* the count stops at its cap (10) and the flash writes with it:
+             "10+" = ten times or more */
+          {label:"Count",get:r=>r.capped?r.count+"+":String(r.count),align:"right",mono:true},
           {label:"First seen",get:r=>ftime(r.first_time),mono:true},
           {label:"Last seen",get:r=>ftime(r.last_time),mono:true},
         ],faults),
