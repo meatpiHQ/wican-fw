@@ -45,6 +45,9 @@ alone cannot prove: a genuinely live task still present after the stop deadline.
   the first pass): the same lines at the same 30.5 and 60.5 s, errors=0,
   warnings=4. `2026-11-13_1937_target_microlink.md`. The main firmware went
   back on the unit behind it.
+- **2026-11-13 20:20: PASS**, 99.2 s, the tree with the client's bounded
+  dial (`ml_dial.c` in the app's build) and the test file's `@file` comment:
+  the same lines, errors=0, warnings=4. `2026-11-13_2020_target_microlink.md`.
 
 ## Traps
 

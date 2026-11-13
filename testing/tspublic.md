@@ -225,6 +225,24 @@ failure fails the stage even if the traffic checks passed.
   soak's samples; internal RAM flat over the soak at 85,019 B; boot marker
   `5 0` unchanged; zero E lines, zero faults; both settings documents
   restored. `2026-11-13_1921_tspublic.md`.
+- **2026-11-13 19:51: TS DERP STOP PASS**, 766.7 s, with the dial that a stop
+  cuts short (the components repo, `microlink/PROVENANCE.md` 25; ELF
+  `0a7885455e4ba47c`, image 4,110,848 B). The reproduction it answers: in
+  the four runs before it, six of nine uplink losses caught a relay dial in
+  flight and brought the VPN back after 66 to 70 s with two deadlines
+  missed. Now: both uplink losses back after 17 and 14 s, `relay dial cut
+  short: the client is stopping` 12 and 29 ms after `Stopping...`,
+  `Destroyed` 0.5 and 0.3 s after it; both control losses `control dial cut
+  short` 29 and 87 ms after it, `Destroyed` 0.2 s after it (8.6 s before);
+  **stop deadlines missed: 0**. A control server that drops the SYN is
+  given up after 10 s (`TCP connect failed: 116`, W) instead of 18. PSRAM
+  free behind the four stops 2,814,180, 2,813,872, 2,814,084, 2,814,164 B,
+  internal 92,391, 92,371, 92,247, 92,139 B; ownership kept over 5
+  destroyed clients; zero E lines. `2026-11-13_1951_tspublic_stop-dial.md`.
+- **2026-11-13 20:05: TS PUBLIC PASS**, 873.7 s, the normal stage on that
+  image (every dial through `ml_dial()`): 56 checks, internal RAM flat over
+  the soak at 85,023 B, boot marker `4 0` unchanged, zero E lines, zero
+  faults, both settings documents restored. `2026-11-13_2005_tspublic.md`.
 - **2026-11-09 17:06: TS PUBLIC PASS**, 834.1 s, the fix for a peer's own
   address and a lapsed session (ELF `8da296f7c66bb2eb`, image 4,075,264 B,
   448 B more than beta.8). `ip4_routes: 100.64.0.0/10 via wg0` 7.2 s after
