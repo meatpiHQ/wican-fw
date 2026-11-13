@@ -32,9 +32,10 @@ The driver repo's `.\build.ps1` builds it without changing the installed driver.
   document are restored in nested finally blocks, even on a failed leg.
   Only the two planned settings restarts may occur.
 
-Host half: `.\test.ps1 host j2534_server`, 31 Unity tests. The voltage cases
+Host half: `.\test.ps1 host j2534_server`, 32 Unity tests. The voltage cases
 run the production helper with a stubbed battery owner: rounding, valid zero,
-closed session, unavailable reading and invalid float values.
+closed session, unavailable reading and invalid float values, and the
+byte-exact request and replies of the wire protocol's section 3.
 
 ## Records
 

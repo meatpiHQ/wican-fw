@@ -21,7 +21,11 @@ the PC, Docker Desktop running, `MSYS_NO_PATHCONV=1` set: `docker run --rm -v
 "<components repo>:/w" -w /w espressif/idf:v6.0.2 bash -c '(apt-get update -q
 && apt-get install -y -q libbsd-dev) > /tmp/apt.log 2>&1; bash
 tools/run_host_tests.sh j2534_server'` (one suite, about 3 min; no argument
-runs every suite, as the CI does).
+runs every suite, as the CI does). At 20:33 the suite grew to 32: the
+byte-exact READ_VBATT request and replies of the wire protocol's section 3
+are a vector now (the component standard, section 6c). 32 PASS through
+`.\test.ps1 host j2534_server` on the Pi
+(`test-reports/2026-11-13_2033_host_j2534_server.md`) and in the CI's image.
 
 **2026-11-10:** `.\test.ps1 host obd_chip` compiles the production request
 engine, claim model and fan-out against a fake chip since this date
