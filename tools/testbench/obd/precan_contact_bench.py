@@ -11,6 +11,11 @@ ECU sim v2 plays one car at a time. Its ECUs all carry the VIN of the bench
 unit's own car, so first contact meets "the same car on another protocol":
 the store records the protocol and nothing is written to the OBD chip.
 
+  test      Automate off. The simulator as a CAN car on 250 kbit/s that says
+            nothing until asked, a restart, ten requests of the Test route
+            on protocol 8 in fifteen seconds: all answered, with the unit's
+            own CAN node on too (it cannot read that talk and goes
+            listen-only: the unit's own conversation does not stop it)
   startup   Automate on, the protocol on Automatic, three rows in the tables.
             The simulator as an ISO 9141-2 car alone, a restart: the stored
             CAN protocol stays silent, the walk goes on behind the CAN
@@ -23,9 +28,13 @@ the store records the protocol and nothing is written to the OBD chip.
             the walk goes round with a growing gap (the driver counts the
             K-line starts that failed) and nothing else happens. The
             simulator becomes a J1850 VPW car in that boot: the next round
-            finds it on protocol 2. A restart on the unit's own CAN car:
-            found there again, the record as it was. No protocol save on
-            the way
+            finds it on protocol 2. A restart on a car asleep (nobody
+            there): the chip's own requests, which the unit's own CAN node
+            acknowledges when it is on, do not name the bus; the simulator
+            becomes a CAN car on 250 kbit/s that says nothing until asked:
+            found on protocol 8 by a later round. A restart on the unit's
+            own CAN car: found there again, the record as it was. No
+            protocol save on the way
   detect    (--detect, off by default: three writes of the OBD chip's stored
             protocol, each the one save a detection makes by design)
             A car WiCAN has never seen: the unit's own car is forgotten, the
@@ -40,10 +49,10 @@ the store records the protocol and nothing is written to the OBD chip.
             the unit's own CAN car, a restart, the detection again
 
 The simulator, the unit's tables, its Automate settings and the vehicle
-store are put back as found. Automate must be off at the start. Five planned
-restarts (eight with --detect); no write of the OBD chip without --detect.
+store are put back as found. Automate must be off at the start. Seven planned
+restarts (ten with --detect); no write of the OBD chip without --detect.
 
-usage: precan_contact_bench.py [--dut localhost:18081] [--only startup] [--detect] [--can off|on]
+usage: precan_contact_bench.py [--dut localhost:18081] [--only test,startup] [--detect] [--can off|on]
   the DUT through an ssh tunnel (`ssh -N -L 18081:<dut>:80 rpi001`), ECU sim
   v2 at its own address (firmware v1.00-16 or later for the detect leg).
   --can: the unit's own CAN node off or on for the run, put back after (as
@@ -67,7 +76,7 @@ import bench_bus            # noqa: E402
 import chip_nvm             # noqa: E402
 import kline_accept_bench as kb     # noqa: E402  (its helpers; it reads --dut and --detect the same way)
 
-ONLY = [x for x in kb.arg("--only", "startup").split(",") if x]
+ONLY = [x for x in kb.arg("--only", "test,startup").split(",") if x]
 DETECT = "--detect" in kb.ARGS
 CAN = kb.arg("--can", "")           # "off" / "on": the unit's own CAN node for the run (as found without it)
 ROWS = kb.ROWS
@@ -210,11 +219,56 @@ def leg_startup(car0, g0, node_on):
           c1.get("up") is False, (failed, c1, kb.own_car().get("protocol")))
     bench_bus.sim_only("vpw")
     found("a SAE J1850 VPW car that turns up in that boot", "2", False, 120, g0)
-    # the fourth boot: the unit's own car on its CAN bus again
+    # the fourth boot: a car asleep (nobody there), then a CAN car on 250 kbit/s that wakes up in that boot and says
+    # nothing until it is asked. The unit's own CAN node, when it is on, acknowledges the chip's requests on 500
+    # kbit/s and reads them as frames: they must not name the bus (2026-11-13: "vehicle bus live at 500 kbit/s" for the
+    # boot, protocols 8 and 9 never asked, the car not found in 155 s)
+    bench_bus.sim_only("hs11_500")
+    bench_bus.sim_patch({"ecu_sim": {"hs_enabled": False, "broadcast_enabled": False}})
+    if not check("startup: a restart on a car asleep (nobody there)", restart() and not bench_bus.sim_bus_live(bench_bus.sim_status()),
+                 " ".join(bench_bus.sim_bus_live(bench_bus.sim_status()))):
+        return
+    time.sleep(25)                      # the stored protocol given up, a round of the walk
+    st, can = http("/api/can")
+    can = can if isinstance(can, dict) else {}
+    g = kb.stats().get("bus_guard") or {}
+    say("FACT a car asleep, 25 s: the bus guard says %r; the unit's own CAN node %s, frames read %s, receive errors %s, listen-only %s" % (
+        g.get("reason"), "on" if can.get("running") else "off", can.get("rx"), can.get("bus_errors"), can.get("listen_only")))
+    check("startup: a car asleep: the chip's own requests do not name the bus (the unit's own CAN node %s)" % ("on" if node_on else "off"),
+          g.get("bus") == "silent", {k: g.get(k) for k in ("bus", "bus_kbps", "reason")})
+    bench_bus.sim_only("hs11_250")
+    found("a CAN car on 250 kbit/s that wakes up in that boot and says nothing until asked", "8", False, 150, g0)
+    # the fifth boot: the unit's own car on its CAN bus again
     bench_bus.sim_only("hs11_500")
     if not check("startup: a restart on the unit's own CAN car", restart()):
         return
     found("the unit's own CAN car", car0.get("protocol"), False, 90, g0)
+
+
+def leg_test():
+    """The Test route on a CAN car on 250 kbit/s that says nothing until asked, Automate off. With the unit's own CAN
+    node on (fixed at 500 kbit/s) that node cannot read the talk, goes listen-only and says "unreadable" for good:
+    the unit's own conversation, which must not stop it (2026-11-13: four of twelve requests refused with "the vehicle
+    bus carries traffic at a bitrate that could not be read")"""
+    bench_bus.sim_only("hs11_250")
+    if not check("test: a restart on a CAN car on 250 kbit/s that says nothing until asked", restart()):
+        return
+    time.sleep(3)
+    good, refused, t0 = 0, [], time.time()
+    for _ in range(10):
+        c = kb.test_call("8")
+        good += kb.answered(c)
+        if not kb.answered(c):
+            refused.append(str(c["error"])[:110])
+        time.sleep(1.5)
+    st, can = http("/api/can")
+    can = can if isinstance(can, dict) else {}
+    say("FACT the Test route on protocol 8, ten requests in %d s: %d answered; the unit's own CAN node %s, listen-only %s, receive "
+        "errors %s, its probe %s; the bus guard %r" % (time.time() - t0, good, "on" if can.get("running") else "off",
+                                                     can.get("listen_only"), can.get("bus_errors"), (can.get("probe") or {}).get("result"),
+                                                     (kb.stats().get("bus_guard") or {}).get("reason")))
+    check("test: every request on that car is answered: the unit's own talk on 250 kbit/s does not stop it", good == 10,
+          (good, refused[:2]))
 
 
 def leg_detect(car0, g0):
@@ -295,6 +349,8 @@ def main():
         if CAN in ("on", "off") and not check("the unit's own CAN node %s for this run (with the first restart)" % CAN,
                                               can_node(CAN == "on")):
             raise SystemExit(1)
+        if "test" in ONLY:
+            leg_test()
         if DETECT:
             leg_detect(car0, g0)
         if "startup" in ONLY:

@@ -70,7 +70,17 @@ Legs (bus / DUT setting):
                                 requests stay off the bus, the guard counts
                                 the refusal and the job says why. Until
                                 2026-11-10 the job's profile probe did not
-                                ask the guard
+                                ask the guard. The simulator's K-line and
+                                J1850 ECUs are off for the leg (a detection
+                                walks those buses behind CAN)
+  OBD chip (autopid's bus guard), can_manager ON (2026-11-13)
+   c6  250k silent at boot / the unit's own CAN node at 500 normal, protocol
+                                6, then thin traffic (20 frames a second):
+                                the node cannot read it and its counters may
+                                be deaf by then (the chip's own unanswered
+                                requests are an error storm to it); the guard
+                                hears the RX line itself with the chip quiet
+                                and parks, and stays parked
   restore: the simulator, the vehicle store's protocol and every setting as
   found.
 
@@ -78,7 +88,7 @@ Run on the PC (IDF venv python: python-can + the PCAN on the DUT's bus, the
 simulator's REST over its USB network link, the DUT's HTTP through the tunnel):
   python can_autobaud_bench.py [dut host[:port]] [--sim http://10.8.8.1]
         [--pcan PCAN_USBBUS1] [--fps 200] [--window 8] [--only n1,c3,...]
-Takes about 8 minutes (20 DUT restarts, 3 simulator restarts).
+Takes about 9 minutes (21 DUT restarts, 5 simulator restarts).
 
 The simulator cannot leave the bus (its CAN controller survives a software
 restart and keeps acknowledging at its last bitrate, "enabled": false or
@@ -105,7 +115,7 @@ from pcbench import unplanned_boots  # noqa: E402
 
 DUT = "localhost:8081"
 SIM = bench_bus.SIM_URL
-PCAN = "PCAN_USBBUS1"
+PCAN = bench_bus.PCAN_DUT_BUS   # PCAN_USBBUS1, or the WICAN_PCAN_DUT variable
 FPS = 200
 WINDOW = 8.0
 ONLY = None
@@ -127,11 +137,11 @@ while i < len(args):
 BASE = "http://" + DUT
 
 ALL_LEGS = ["c0", "n1", "n2", "n3", "n4", "n5", "n6", "n7", "n8", "n9", "n10",
-            "n11", "n12", "n13", "c1", "c2", "c3", "c4", "c5"]
+            "n11", "n12", "n13", "c1", "c2", "c3", "c4", "c5", "c6"]
 LEG_BUS = {"c0": 500, "n1": 500, "n2": 500, "n3": 500, "n4": 500, "n5": 500,
            "n6": 250, "n7": 250, "n8": 250, "n9": 250, "n10": 250,
            "n11": 250, "n12": 250, "n13": 250, "c1": 250, "c2": 250, "c3": 250,
-           "c4": 250, "c5": 250}
+           "c4": 250, "c5": 250, "c6": 250}
 # c5: a car profile as the Quick Setup names it with a detection, pinned on
 # a 500 kbit/s protocol (its init, and a request's own init)
 PROFILE_500 = {"profile": "Bench: a car at 500 kbit/s", "name": "Bench 500",
@@ -149,7 +159,24 @@ WALK_RATES = [125, 1000, 100, 83, 95, 33, 500, 250]
 DEMOTE_BOUND = 16     # measured 5 and 6 (2026-10-03)
 # The chip's request that is on the wire at the moment a silent bus wakes up
 # cannot be called back; every later one is preceded by a look at the bus.
-CHIP_BOUND = 40       # one request's attempts; measured 0
+# Such a request, acknowledged by nobody, repeats at line rate for about
+# 60 ms: 280 to 1100 bus errors as the adapter counts them, one request every
+# 670 ms (measured 2026-11-13; until then the limit was taken for "one
+# request's attempts" and passed whenever the traffic began between two
+# requests, nine runs in ten). c3 starts its traffic right behind a request,
+# so whatever the wire shows after that is a request the guard let out.
+CHIP_BOUND = 40       # far below one request; measured 0
+# c5: the simulator's ECUs on the other pins (their settings groups and the
+# key that takes each one off the bus)
+PRECAN_OFF = {"kline": {"enabled": False}, "j1850": {"mode": "off"}}
+# c6: the unit's own CAN node as its owner would switch it on, and traffic
+# ten times thinner than the other legs'. Where that node still talks when
+# the traffic starts it destroys the first frame until its watch window ends
+# (measured 127 bus errors in 20 ms, the node's own part: n10 measures a
+# node alone); nothing of that is the chip's.
+NODE_500 = {"enabled": True, "baud": "500", "silent": False}
+THIN_FPS = 20
+NODE_BOUND = 200
 # tags whose E lines are this feature's (a bench fails on its own tags only)
 OWN_TAGS = ("can_manager", "can_core", "autopid", "obd_chip", "twai",
             "esp_twai")
@@ -443,6 +470,20 @@ class Wire:
                 elif m.arbitration_id == self.ID and m.is_extended_id:
                     self.echo.append(now)
 
+    def behind_a_burst(self, secs=3.0, quiet=0.03):
+        """Wait until bus errors were seen and then none for `quiet` seconds:
+        the moment right behind a burst (a request of the OBD chip that nobody
+        acknowledges repeats at line rate, and a listening adapter at another
+        bitrate counts it as one). False when none came within `secs`."""
+        t0 = time.time()
+        while time.time() - t0 < secs:
+            with self.lock:
+                last = self.err[-1] if self.err else 0
+            if last >= t0 and time.time() - last >= quiet:
+                return True
+            time.sleep(0.002)
+        return False
+
     def errors(self, t0, t1=None):
         t1 = time.time() if t1 is None else t1
         with self.lock:
@@ -484,8 +525,20 @@ def bus_healthy(wire, tag):
     time.sleep(3)
     e = wire.errors(t0)
     ok, text = wire.flows(t0)
-    return check(f"{tag}_bus_healthy", e == 0 and ok,
+    good = check(f"{tag}_bus_healthy", e == 0 and ok,
                  f"{wire.kbit}k: {text}, {e} error frames")
+    if not good and wire.on_bus(t0) < 0.1 * wire.given(t0):
+        # 2026-11-13: a whole run was red from here, and its detections
+        # moved the chip's stored protocol, because channel 1 sat on the
+        # simulator's other connector
+        print(f"NOTE: next to nothing of the adapter's traffic was "
+              f"acknowledged on {wire.channel}: it is not on the DUT's bus. "
+              f"Its two plugs may be swapped (channel 1 belongs on the "
+              f"simulator's DB9 J2, channel 2 on J3): swap them back, or "
+              f"run on the other channel (--pcan PCAN_USBBUS2 here, the "
+              f"variable WICAN_PCAN_DUT for the stage). No line below this "
+              f"one says anything about the DUT.", flush=True)
+    return good
 
 
 def steady(wire, tag, t_submit, extra=""):
@@ -923,8 +976,13 @@ def leg_c3(wire):
     check("c3_silent_bus_is_polled",
           ok and not ap.get("bus_guard", {}).get("parked"),
           f"{guard(ap)} after {took:.0f} s")
+    # the traffic starts right behind a request of the chip (see CHIP_BOUND):
+    # the next one is the guard's to stop
+    behind = wire.behind_a_burst()
     t_live = time.time()
     wire.traffic(FPS)
+    check("c3_traffic_starts_behind_a_request", behind,
+          "" if behind else "the adapter saw no request of the chip in 3 s")
     ap, ok, took = autopid_wait(
         lambda a: a.get("bus_guard", {}).get("parked"), 10, step=0.1)
     time.sleep(0.5)
@@ -998,9 +1056,14 @@ def leg_c5(wire):
     print("--- c5: bus 250k live, nothing standard answers; a detection that "
           "names a car profile pinned on protocol 6", flush=True)
     # the simulator acknowledges and answers nothing; the bus has no ACK
-    # source while it restarts, so the adapter is quiet meanwhile
+    # source while it restarts, so the adapter is quiet meanwhile. Nothing
+    # answers on the other pins either: a detection walks SAE J1850 and the
+    # K-line behind CAN (since 2026-11-12), and the simulator plays those
+    # buses too (run of 2026-11-13: the job found its J1850 ECU, never came
+    # to the profile, and the chip kept protocol 2)
     wire.traffic(0)
     time.sleep(0.3)
+    bench_bus.sim_patch(PRECAN_OFF, SIM)
     bench_bus.sim_set(bitrate=250, enabled=False, base=SIM)
     wire.traffic(FPS)
     apply({"can_manager": CAN_OFF,
@@ -1061,7 +1124,75 @@ def leg_c5(wire):
           f"{[x.get('key') for x in v1.get('vehicles', [])]}")
 
 
+def leg_c6(wire):
+    print("--- c6: bus 250k silent at boot, the unit's own CAN node on (500 "
+          "normal), autopid on, protocol 6 pinned; then thin traffic",
+          flush=True)
+    wire.traffic(0)
+    time.sleep(0.5)
+    apply({"can_manager": NODE_500,
+           "autopid": {"enabled": True, "std_protocol": "6",
+                       "dtc_enabled": False}}, fresh=True)
+    # the node is part of the bus: it acknowledges the chip's requests and
+    # reads them as frames, or (a third node at 250k objects to them) takes
+    # them for traffic it cannot read. Neither parks the chip: nobody else
+    # is heard while it is quiet
+    ap, ok, took = autopid_wait(lambda a: polls(a)[1] >= 3, 40)
+    st = can_state()
+    check("c6_silent_bus_is_polled",
+          ok and not ap.get("bus_guard", {}).get("parked"),
+          f"{guard(ap)} after {took:.0f} s; node {link(st)}, rx_storms "
+          f"{st.get('rx_storms')}")
+    behind = wire.behind_a_burst()
+    t_live = time.time()
+    wire.traffic(THIN_FPS)
+    check("c6_traffic_starts_behind_a_request", behind,
+          "" if behind else "the adapter saw no request of the chip in 3 s")
+    ap, ok, took = autopid_wait(
+        lambda a: a.get("bus_guard", {}).get("parked"), 10, step=0.1)
+    time.sleep(0.5)
+    cost = wire.errors(t_live)
+    g = ap.get("bus_guard", {})
+    check("c6_parked", ok and g.get("bus") == "unreadable",
+          f"{guard(ap)} after {took:.2f} s")
+    # the sentence names who could not read the bus and the setting that
+    # helps (until 2026-11-13 it said "not 250 or 500 kbit/s", on a 250k bus)
+    why = g.get("reason", "")
+    check("c6_reason", "CAN controller, set to 500 kbit/s" in why
+          and "set the CAN bit rate to Automatic" in why
+          and "not 250" not in why, why)
+    metric("c6_park_ms", int(took * 1000))
+    metric("c6_cost", cost, "error frames")
+    check("c6_cost_bounded", cost <= NODE_BOUND,
+          f"{cost} error frames {wire.error_span(t_live)}, limit "
+          f"{NODE_BOUND}")
+    a = autopid()
+    tx0 = chip_tx()
+    t0 = time.time()
+    time.sleep(WINDOW)
+    t1 = time.time()
+    b = autopid()
+    tx1 = chip_tx()
+    e = wire.errors(t0, t1)
+    k, n = wire.on_bus(t0, t1), wire.given(t0, t1)
+    check("c6_wire_steady",
+          e == 0 and n >= 0.5 * THIN_FPS * (t1 - t0) and k >= n - 2,
+          f"{e} error frames {wire.error_span(t0, t1)}, {k} of {n} frames "
+          f"on the bus in {t1 - t0:.0f} s")
+    check("c6_chip_untouched", tx1 == tx0 and polls(b) == polls(a)
+          and b.get("bus_guard", {}).get("parked"),
+          f"chip tx_bytes +{tx1 - tx0}, polls {polls(a)} -> {polls(b)}, "
+          f"{guard(b)}")
+
+
 # ---- the run -----------------------------------------------------------------------------
+
+def sim_precan():
+    """The simulator's K-line and J1850 ECUs as they are set (the keys of
+    PRECAN_OFF): c5 takes them off, the restore puts them back."""
+    return {name: {k: bench_bus.sim_get(name, SIM).get(k) for k in keys}
+            for name, keys in PRECAN_OFF.items()}
+
 
 def to_bus(wire, kbit, live):
     """Bring the whole bench bus to `kbit`: simulator (the ACK source),
@@ -1088,6 +1219,7 @@ def main():
     found = {"can_manager": settings("can_manager"),
              "autopid": settings("autopid")}
     found_sim = bench_bus.sim_get("ecu_sim", SIM)
+    found_precan = sim_precan()
     found_proto = store_protocol()
     print(f"DUT {DUT}: boot_count {st0.get('boot_count')}, unexpected_resets "
           f"{st0.get('unexpected_resets')}, version {st0.get('version')}")
@@ -1107,7 +1239,8 @@ def main():
             if leg == "n5":
                 to_bus(wire, 500, True)
             else:
-                live = leg not in ("n9", "n10", "n11", "n12", "n13", "c3", "c4")
+                live = leg not in ("n9", "n10", "n11", "n12", "n13", "c3", "c4",
+                                   "c6")
                 moved = wire.bus is None or wire.kbit != LEG_BUS[leg]
                 if moved:
                     # nothing of the DUT may sit on the bus at the old
@@ -1161,6 +1294,8 @@ def main():
                 leg_c4(wire)
             elif leg == "c5":
                 leg_c5(wire)
+            elif leg == "c6":
+                leg_c6(wire)
             seen_e |= set(own_e_lines())
             done += 1
             print(f"PROGRESS {done}/{len(legs)}", flush=True)
@@ -1180,6 +1315,8 @@ def main():
                 bench_bus.sim_set(bitrate=found_sim["bitrate"],
                                   id_format=found_sim["id_format"],
                                   enabled=found_sim["enabled"], base=SIM)
+            if sim_precan() != found_precan:
+                bench_bus.sim_patch(found_precan, SIM)      # c5's
             if found_proto is not None and store_protocol() != found_proto:
                 # the store learns from the car: let it meet the bus as
                 # found (live, so the chip's search is quick)
@@ -1200,8 +1337,11 @@ def main():
             check("restored_vehicle_store", store_protocol() == found_proto,
                   f"protocol {store_protocol()}, found {found_proto}")
             sim_now = bench_bus.sim_get("ecu_sim", SIM)
-            check("restored_simulator", sim_now == found_sim,
-                  "" if sim_now == found_sim else json.dumps(sim_now))
+            pre_now = sim_precan()
+            check("restored_simulator",
+                  sim_now == found_sim and pre_now == found_precan,
+                  "" if sim_now == found_sim and pre_now == found_precan
+                  else json.dumps(pre_now) + " " + json.dumps(sim_now))
             st1 = get("/api/status")
             check("no_unexpected_reset",
                   st1.get("unexpected_resets") == st0.get("unexpected_resets")
