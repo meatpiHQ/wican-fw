@@ -72,6 +72,9 @@ closed session, unavailable reading and invalid float values.
   14.600 V, wire and DLL 14,604 mV. Refused before OPEN and after CLOSE,
   zero error logs, no new fault, the supply back at 13.802 V, the settings
   document as found, two planned restarts. `2026-11-13_1940_j2534vbat.md`.
+- 2026-11-13 20:36: PASS again with the server's RX pump in its own file
+  (ELF `1d15a0a81feae3a7`): 13.558 V and 14.554 V of supply, the DLL within
+  100 mV of the battery API both times. `2026-11-13_2036_j2534vbat.md`.
 
 ## Traps
 
