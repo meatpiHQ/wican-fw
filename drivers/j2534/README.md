@@ -1,14 +1,15 @@
 # WiCAN J2534 PassThru driver (Windows)
 
-`wican_j2534_setup_1.6.0.exe` installs the WiCAN SAE J2534-1 (04.04) PassThru
+`wican_j2534_setup_1.7.0.exe` installs the WiCAN SAE J2534-1 (04.04) PassThru
 driver: a 32-bit `wican_j2534.dll` that lets Windows diagnostic and reflash
 tools drive a vehicle's bus through a WiCAN PRO, over USB or WiFi.
 
 | | |
 |---|---|
-| Version | 1.6.0 (the DLL reports itself as `WiCAN J2534 1.6`; 2026-11-06: `PassThruWriteMsgs` sends every message of a call in one request and, with `Timeout` 0, returns as soon as it is on the link instead of waiting for the WiCAN's answer, see below; 1.5, 2026-10-27: `PassThruGetLastError` explains every device refusal in words; 1.4, the same day: `PassThruReadMsgs` waits on an event instead of a `Sleep(1)` poll, and the driver log is on by default at `C:\Users\Public\Documents\WiCAN\wican_j2534.log` with every message in full both ways; 1.3: accepts the J1850 VPW protocol; 1.2: event-driven ACK wait, GET_CONFIG answers, requests serialized across threads) |
-| SHA-256 | `cbf0a017182f8362053c66f8118d23e8c88cf3ab491e7212a6da830c888f7a67` |
-| Requires | WiCAN PRO on firmware v6 (a build of 2026-10-20 or later for ISO15765 and J1850 VPW: see below), Windows 10 or 11 |
+| Version | 1.7.0 (the DLL reports itself as `WiCAN J2534 1.7`; 2026-11-14: `READ_VBATT` returns the battery voltage the WiCAN measures instead of a fixed 12.0 V, the driver is under the GNU GPL version 3 and the installer opens with a disclaimer to accept, see below; 1.6, 2026-11-06: `PassThruWriteMsgs` sends every message of a call in one request and, with `Timeout` 0, returns as soon as it is on the link instead of waiting for the WiCAN's answer, see below; 1.5, 2026-10-27: `PassThruGetLastError` explains every device refusal in words; 1.4, the same day: `PassThruReadMsgs` waits on an event instead of a `Sleep(1)` poll, and the driver log is on by default at `C:\Users\Public\Documents\WiCAN\wican_j2534.log` with every message in full both ways; 1.3: accepts the J1850 VPW protocol; 1.2: event-driven ACK wait, GET_CONFIG answers, requests serialized across threads) |
+| SHA-256 | `799def771395cc510f2032174d436ee509da6d532072a30f118e7c4871e054b1` |
+| Requires | WiCAN PRO on firmware v6 (a build of 2026-10-20 or later for ISO15765 and J1850 VPW, 6.0.0-beta.10 or later for the measured battery voltage: see below), Windows 10 or 11 |
+| Licence | GNU General Public License, version 3. Used at your own risk: the installer shows the disclaimer and installs only when you accept it. |
 | Protocols | CAN, ISO15765 (ISO-TP) on the CAN controller, and J1850 VPW (GM Class 2) on the device's OBD chip. J1850 PWM, ISO9141 and ISO14230 return `ERR_NOT_SUPPORTED`. |
 
 ISO15765 messages are passed to and from the device exactly as SAE J2534-1
@@ -64,12 +65,29 @@ environment variable `WICAN_J2534_WRITE_WAIT=1` makes every write wait as
 wakes on the bus frame and coalesces bursts); either side works with the
 other.
 
+Driver 1.7 (2026-11-14) changes two things. `PassThruIoctl(READ_VBATT)`
+asks the WiCAN for the battery voltage it measures and returns it in
+millivolts; until 1.6 the driver answered a nominal 12,000 mV by itself
+and never asked. It needs firmware 6.0.0-beta.10 or later: against older
+firmware the call returns `ERR_NOT_SUPPORTED` ("WiCAN returned no result;
+update the device firmware") instead of an invented value, and a reading
+the WiCAN cannot give is `ERR_FAILED`. The id is the device id of
+`PassThruOpen`; a channel id is answered as well, for the tools that pass
+one. And the driver is now under the GNU General Public License,
+version 3: the installer opens with a disclaimer ("use at your own risk":
+the driver forwards whatever the tool sends, ECU reprogramming included,
+with no warranty and no liability) and goes on only when you accept it,
+then installs `DISCLAIMER.txt` and `LICENSE.txt` next to the DLL. A
+silent install (`/SILENT`, `/VERYSILENT`) shows no wizard pages, the
+disclaimer page included. Everything else behaves as in 1.6.
+
 The installer is not code-signed, so Windows SmartScreen may ask you to
 confirm before it runs. The same file is attached to each firmware release.
 
 ## Install on the PC
 
-1. Run the setup and accept the UAC prompt.
+1. Run the setup, accept the UAC prompt, then read the disclaimer and
+   accept it (the setup goes no further without that).
 2. Pick how the PC reaches the WiCAN: USB cable in network mode
    (recommended, the WiCAN is `192.168.82.1`), USB cable in COM-port mode,
    the WiCAN's own WiFi hotspot (`192.168.80.1`), or a custom IP for a WiCAN
@@ -80,7 +98,8 @@ confirm before it runs. The same file is attached to each firmware release.
 
 Re-run the installer to change the IP later. Uninstall from Windows
 "Apps > Installed apps"; that removes the DLL and the registry keys. The full
-user manual (PDF) is installed next to the DLL.
+user manual (PDF) is installed next to the DLL, with the disclaimer and the
+licence.
 
 ## On the WiCAN
 
@@ -108,18 +127,23 @@ J1850 VPW also needs the WiCAN's OBD chip ready; CONNECT returns
 ## The wire protocol and the other transports
 
 The DLL, the bench scripts and phone apps all speak the same versioned
-wire protocol, specified in one place:
-`components/j2534_server/J2534_WIRE_PROTOCOL.md` (framing, every
-message, status codes, byte-exact examples, transport bindings). Besides
-TCP the WiCAN serves it over the USB COM port (CDC-ACM) and, since
-2026-09-21, over **BLE** for mobile apps (stream channel FFF5/FFF6, see
-`components/ble_manager/BLE_API.md`); one tool at a time across all of
-them.
+wire protocol, specified in one place, in the components repository:
+[J2534_WIRE_PROTOCOL.md](https://github.com/meatpiHQ/meatpi-components/blob/main/components/j2534_server/J2534_WIRE_PROTOCOL.md)
+(framing, every message, status codes, byte-exact examples, transport
+bindings). Besides TCP the WiCAN serves it over the USB COM port (CDC-ACM)
+and, since 2026-09-21, over **BLE** for mobile apps (stream channel
+FFF5/FFF6, see
+[BLE_API.md](https://github.com/meatpiHQ/meatpi-components/blob/main/components/ble_manager/BLE_API.md));
+one tool at a time across all of them.
 
-## Source
+## Source and licence
 
-The driver source and the installer script live in the `wican-j2534-driver`
-repository (MeatPi internal). Build a new installer there with
+The driver is free software under the GNU General Public License, version 3.
+Its source and the installer script are in the
+[wican-j2534-driver](https://github.com/meatpiHQ/wican-j2534-driver)
+repository; the installer in this folder is built from it, unchanged.
+
+For maintainers: build a new installer there with
 `installer\build_installer.ps1 -Version x.y.z`, then replace the exe in this
 folder and update the version and SHA-256 above. The repo's `.gitignore`
 excludes `*.exe` everywhere except under `drivers/`.

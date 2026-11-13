@@ -76,12 +76,22 @@ byte-exact request and replies of the wire protocol's section 3.
 - 2026-11-13 20:36: PASS again with the server's RX pump in its own file
   (ELF `1d15a0a81feae3a7`): 13.558 V and 14.554 V of supply, the DLL within
   100 mV of the battery API both times. `2026-11-13_2036_j2534vbat.md`.
+- 2026-11-14 02:07, driver 1.7 (the DLL of installer 1.7.0, built from the
+  driver repo with the version string `WiCAN J2534 1.7`, pointed at with
+  `WICAN_J2534_DLL`): the fake-device cases PASS (millivolts, old firmware
+  without a result, the reading unavailable; device id and channel id, a
+  null output and id 99 refused). `2026-11-14_0207_j2534vbat_driver.md`.
+  Driver-only: the bench legs at 13.5 and 14.5 V were not rerun, the DLL's
+  code is that of the 2026-11-13 runs apart from the version string. The
+  installer itself was not run (its disclaimer page was not seen on screen).
 
 ## Traps
 
-The bundled 1.6 installer still contains the nominal-voltage implementation;
-firmware alone cannot change a value fabricated in that DLL. Both sides must
-be updated. Never waive the missing-result check for compatibility.
+Installer 1.6.0 and earlier contain the nominal-voltage implementation;
+firmware alone cannot change a value fabricated in that DLL. Installer
+1.7.0 (in `drivers/j2534` since 2026-11-14) carries the measured reading.
+Both sides must be updated. Never waive the missing-result check for
+compatibility.
 The battery owner caches its calibrated, averaged samples; wait for the
 sample to catch up with a supply change instead of comparing immediately.
 Run this and all other DUT-changing stages serially, especially `stackaudit`:
