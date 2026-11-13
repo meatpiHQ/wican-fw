@@ -15,7 +15,7 @@
 # land in test-reports\logs\<run>\ (gitignored).
 #
 param(
-    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'bleram', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'profilee2e', 'slcan', 'j2534auto', 'j2534std', 'j2534vbat', 'j2534vpw', 'multibus', 'kline', 'precan', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'wgcycle', 'tspublic', 'tlschain', 'habackfill', 'garage', 'espnleasy', 'espnlapn', 'usbgps', 'usbdetach', 'abrp', 'backup', 'fwupdate', 'espnlota', 'logclock', 'sdformat', 'obdfw', 'chipprompt', 'carname', 'destnets', 'canselftest', 'attpstore', 'obdbringup', 'sleepword', 'sleeptrig', 'chipwake', 'connections', 'stackaudit', 'dwc2', 'logsinks', 'release', 'all', 'list')]
+    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'bleram', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'profilee2e', 'slcan', 'j2534auto', 'j2534std', 'j2534vbat', 'j2534vpw', 'multibus', 'kline', 'precan', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'wgcycle', 'tspublic', 'tlschain', 'habackfill', 'garage', 'espnleasy', 'espnlapn', 'usbgps', 'usbdetach', 'abrp', 'backup', 'fwupdate', 'espnlota', 'logclock', 'sdformat', 'obdfw', 'chipprompt', 'carname', 'canfilters', 'destnets', 'canselftest', 'attpstore', 'obdbringup', 'sleepword', 'sleeptrig', 'chipwake', 'connections', 'stackaudit', 'dwc2', 'logsinks', 'release', 'all', 'list')]
     [string]$What,
     [Parameter(Position = 1)][string]$Component,
     [ValidateSet('6.0.2', '6.1')][string]$Idf = '6.1',  # the ESP-IDF the build stages use (6.1 since 6.0.0-beta.5, 2026-10-27; 6.0.2 stays installed; build.ps1 -Idf has the same table)
@@ -1130,6 +1130,7 @@ function Show-Inventory {
     Write-Host '  obdfw      - the OBD chip firmware update (issue #1023, 2026-10-28; no forced rewrite since 2026-11-01): the packaged image and the current list on /api/obd_chip, the console command, force refused (400, the console), a POST on a chip at the packaged version = nothing to do, the same image and an older image from a file = nothing to do, the .22 image uploaded as V2.3.99.txt written (the version is the file name: the chip on .22, fw.outdated), a restart whose start-up update leaves the .22 chip alone, the packaged update lifting it (3557 records, the fresh bring-up, the version), a file stream cut by a restart recovered by the next boot (the chip answers at 115200 in download mode), and a sleep test typed mid-stream that waits for the update (3 planned restarts + 1 sleep/wake, ~8 min; -SkipSleep drops the sleep leg)'
     Write-Host '  chipprompt - the OBD chip firmware prompt of Quick Setup''s vehicle step (2026-11-08): the chip put on V2.3.22 (the image under a higher file name), the step in Chrome through the bench''s own tunnel: the popup with both versions and one button, Detect disabled, Update and continue, the progress popup with the records written while the API sees the stream, Done, the chip on the packaged version; then the closed-popup banner leg with Update now (two chip writes, ~4 min; node + Playwright + Chrome on this PC)'
     Write-Host '  carname    - the car''s name in the header (2026-11-10): the page in Chrome through the bench''s own tunnel shows the current car''s stored name in the pill and on the tab; a rename from the popover sends nothing until Submit, then one rename and one planned restart; the name goes back the same way (two planned restarts, ~1.5 min); CAR NAME PASS'
+    Write-Host '  canfilters - the CAN filters of Automate (2026-11-14): frames from the PCAN on the unit''s bus; a table of filters alone across a restart (a frame whose first byte looks like a length arrives whole), Test for a filter (the frame, a multiplexed message, an ID nobody sends, the refusals), a standard PID beside the windows, the unit''s own page in Chrome (the list, Add CAN filter, Test, Apply, a filter added on Vehicle Specific), the two switches (each rests its own tab''s filters); the tables and the settings go back; four planned restarts; prints CAN FILTERS PASS'
     Write-Host '  destnets   - the networks a sender is active on (2026-11-08): one HTTP destination and the Home Assistant webhook restricted to another network wait (on_network false, the laps counted as network skips, nothing at the Pi''s receiver, the ring''s line), restricted to the station''s own network they deliver; five planned restarts, the settings back as found (~5 min; the receiver on rpi001 over ssh)'
     Write-Host '  canselftest - the CAN self-test and the chip diagnostics (issue #1023, 2026-10-28): the OBD chip asks 010C and the ESP32 answers as ECU 7EF over the shared bus, PASS with the simulator broadcast as found and flipped, the chip configuration report, the wire tools on a healthy chip, the cached version on /api/obd_chip, and with obd_chip_manager/obd_fw/V2.3.22.txt in the components tree the chip written to V2.3.22 (the image uploaded as V2.3.99.txt) and lifted back by the packaged update, force refused (fw.outdated, the warning a chip left on .22 gets), then with AutoPID polling the simulator car a self-test and the proof that polling, the CAN node and the chip carry on as before, the chip without echo (0 to 2 planned DUT restarts: AutoPID switched on for that leg when it is off and put back; 1 to 2 simulator restarts, ~6 min)'
     Write-Host '  attpstore  - the OBD chip''s protocol store (issue #1023, 2026-11-01): the chip memorises every protocol switch a request answers on into its EEPROM-backed store, RAM-only ATTP or not, and the Audi MEB profile flipped it seven times per poll cycle; the driver now sends ATM0 at the bring-up and ahead of every switch on the request path. The store read back through an ATZ: as found after a test-a-PID switch with an answer (the engine), after a planned restart and an app-path switch (the bring-up''s ATM0), the app''s ATZ answered as a warm start with the ATM0 hidden behind it (one prompt, nothing shifted, a second sooner) and the app path''s own switch after its ATZ no longer writing (the canary) (1 planned restart; the simulator flipped between 11-bit and 29-bit ids, 2 to 6 simulator restarts, ~3 min; on an image without the fix the two legs read the other protocol: the reproduction)'
@@ -2114,6 +2115,30 @@ try {
                 $out = & node "$repo\tools\testbench\system\car_name_bench.mjs" $outDir --dut $DutIp 2>&1 | ForEach-Object { Write-Host $_; $_ }
                 Save-StageLog 'car_name' $out
                 if (-not ($out | Select-String -Quiet 'CAR NAME PASS')) { throw 'no CAR NAME PASS (the DUT on the bench AP? a current car in the vehicle store? Chrome and the Playwright devDependency of tools/webui_preview?)' }
+            }
+        }
+        'canfilters' {
+            # The CAN filters of Automate (2026-11-14): the list the web UI
+            # got on Vehicle Specific and Custom PIDs, and the firmware's
+            # half of it (a filter follows its tab's switch, Test for a
+            # filter). The PC's PCAN puts the frames on the unit's bus (the
+            # bench finds the channel by listening: the adapter's plugs may
+            # be swapped), ECU sim v2 is the car. The unit's own page runs
+            # in Chrome through the same tunnel. The tables and the autopid
+            # settings are put back; four planned restarts.
+            Invoke-Stage 'CAN filters: the windows, Test, the page, the switches' {
+                $py = $script:BenchPy
+                $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", $BenchHost)
+                try {
+                    Start-Sleep -Seconds 3
+                    if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (port 18081 busy?)" }
+                    $outDir = Join-Path $script:logDir 'can_filters'
+                    $out = & $py -u "$repo\tools\testbench\obd\can_filters_bench.py" --dut 'localhost:18081' --out $outDir 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    Save-StageLog 'can_filters' $out
+                    if (-not ($out | Select-String -Quiet '^CAN FILTERS PASS')) { throw 'no CAN FILTERS PASS (the PCAN on the unit''s bus? ECU sim v2 answering on its USB link? the DUT on the bench AP? Chrome and the Playwright devDependency of tools/webui_preview for the page leg?)' }
+                } finally {
+                    if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
+                }
             }
         }
         'destnets' {

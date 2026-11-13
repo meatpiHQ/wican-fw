@@ -19,7 +19,8 @@
 
    On the Vehicle Specific pane:
      A  pick the Leaf: the toast counts 2 PIDs and 3 CAN filters, the banner
-        says 3 passive CAN filters replace the last profile's filters
+        says 3 CAN filters replace the CAN filters of this tab (the wording
+        since 2026-11-14, when the tab got its own CAN filters list)
      B  Apply: the PUT carries the hand-made filter untouched plus the three
         profile filters (frame ids as numbers 644/474/1477, monitor_ms 500 as
         published, period_ms 0, group default, profile true, the expressions
@@ -30,7 +31,7 @@
         its parameter renamed Speed_2 (the rename toast says so), still beside
         the hand-made filter
      E  pick Plain and Apply: no profile filter left, the hand-made one stays,
-        the toast and banner mention no filter
+        the toast mentions no filter, the banner says the tab's go
      F  no page error in the whole run
    In the Quick Setup's vehicle step (a fresh device, the car named first):
      G  the Leaf chosen, the detection, Test profile names the three broadcast
@@ -161,8 +162,10 @@ async function pickInPicker(p, query) {
   p.clearToasts();
   check("A: the Leaf is picked from the probe's list", await pickInPicker(p, "Leaf ZE1 (2018"));
   check("A: the toast counts the PIDs and the filters", p.toasts().some((t) => /Nissan: Leaf ZE1 \(2018-\) staged: 2 PIDs and 3 CAN filters\. Apply Configuration sends them/.test(t)), p.toasts());
-  check("A: the banner says 3 passive CAN filters replace the last profile's filters and hand-made ones are kept",
-    !!bannerEl() && /2 PIDs replace the vehicle-specific table, 3 passive CAN filters \(frames the car broadcasts\) replace the last profile's filters/.test(bannerEl().textContent) && /hand-made filters are kept/.test(bannerEl().textContent),
+  /* the wording since 2026-11-14: the tab's CAN filters are the vehicle's set (a filter
+     added there by hand too), the custom tab's are kept */
+  check("A: the banner says 3 CAN filters replace the CAN filters of this tab and the custom ones are kept",
+    !!bannerEl() && /2 PIDs replace the vehicle-specific table, 3 CAN filters \(frames the car broadcasts\) replace the CAN filters of this tab/.test(bannerEl().textContent) && /custom CAN filters are kept/.test(bannerEl().textContent),
     bannerEl() && bannerEl().textContent.slice(0, 300));
   check("A: the vehicle field carries the profile name", (vehInput() || {}).value === LEAF.car_model);
 
@@ -213,7 +216,8 @@ async function pickInPicker(p, query) {
   p.clearToasts();
   check("E: Plain picked", await pickInPicker(p, "Plain"));
   check("E: the toast counts 1 PID and no filter", p.toasts().some((t) => /Bench: Plain staged: 1 PID\. Apply Configuration sends them/.test(t)), p.toasts());
-  check("E: the banner mentions no filter", !!bannerEl() && /1 PID replaces the vehicle-specific table, and the profile name/.test(bannerEl().textContent) && !/CAN filter/.test(bannerEl().textContent), bannerEl() && bannerEl().textContent.slice(0, 200));
+  check("E: the banner says the tab's CAN filters go (Twin's applied one), this profile having none",
+    !!bannerEl() && /1 PID replaces the vehicle-specific table, the CAN filters of this tab are removed \(this profile has none\), and the profile name/.test(bannerEl().textContent), bannerEl() && bannerEl().textContent.slice(0, 240));
   check("E: Apply PUTs the hand-made filter alone", await apply() && lastPut().filters.length === 1 && JSON.stringify(lastPut().filters[0]) === JSON.stringify(HAND), lastPut().filters);
 
   /* ---- F ---- */

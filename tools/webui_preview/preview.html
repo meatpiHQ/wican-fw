@@ -3360,6 +3360,24 @@
       if (!d) return J({ error: "unknown destination" }, 404);
       return J({ ok: d.name !== "cloud", status: d.type === "mqtt" ? 0 : (d.name === "cloud" ? 503 : 200), elapsed_ms: 87, error: d.name === "cloud" ? "http=503" : "" });
     }
+    if (method === "POST" && path === "/api/autopid/test" && body && body.filter) {
+      /* a CAN filter (2026-11-14): one monitor window for its frame, as the firmware
+         answers it. __mockPreset.filterTest = "silent" plays a car that does not send
+         the frame (probe_can_filters.mjs) */
+      state.lastTest = body;
+      const f = body.filter, id = Number(f.frame_id) || 0, prm = Array.isArray(f.parameters) ? f.parameters : [];
+      if (id < 1 || id > 0x1FFFFFFF) return J({ error: "filter: frame_id 1 to 0x1FFFFFFF required" }, 400);
+      const hex = id.toString(16).toUpperCase().padStart(id > 0x7FF ? 8 : 3, "0");
+      /* a 29-bit ID on the mock's 11-bit car: the chip to the 29-bit protocol for the window and back */
+      const wide = id > 0x7FF;
+      const head = "> ATH1\n< OK\n" + (wide ? "> ATTP7\n< OK\n" : "") + "> ATCRA" + hex + "\n< OK\n> ATCAF0\n< OK\n> ATMA\n",
+        tail = "> ATCAF1\n< OK\n> ATCRA\n< OK\n" + (wide ? "> ATTP6\n< OK\n" : "");
+      if ((window.__mockPreset || {}).filterTest === "silent")
+        return J({ ok: false, elapsed_ms: 0, error: "no frame with this CAN ID in the listen time", values: prm.map(() => null),
+          transcript: head + tail + "! no frame with CAN ID " + id.toString(16).toUpperCase() + " in " + (f.monitor_ms || 1000) + " ms\n" });
+      const data = "02 1E 02 1F 0B 7C 4E 20";   /* [B4:B5]/98 reads 30 */
+      return J({ ok: true, elapsed_ms: 38.4, transcript: head + "< " + hex + " " + data + "\n" + tail, payload: data, values: prm.map((p, i) => (i === 0 ? 30 : i)) });
+    }
     if (method === "POST" && path === "/api/autopid/test") {
       // 2026-09-16 shape: one shot decodes every expression; "transcript"
       // lists each exchange as the firmware ran it (type init, PID init,
@@ -7068,18 +7086,40 @@ PAGES.automate=async(view,sub)=>{
         const lines=tr.length?tr.map(l=>h("div",{class:l[0]===">"?"in":""},l))
           :[h("div",{class:"in"},"> "+(pd.cmd||"")),h("div",{},"< "+(r.raw||"(no data)"))];
         const ms=r.elapsed_ms!=null?Number(r.elapsed_ms).toFixed(1)+" ms":"";
-        modal({title:"Test: "+(pd.name||pd.cmd),body:h("div",{},
-          h("div",{class:"help",style:"margin-bottom:4px"},"Sent (>) and received (<)"+(ms?" · the request answered in "+ms:"")),
-          h("div",{class:"console",style:"height:auto;min-height:56px;max-height:240px;overflow:auto;padding:8px 10px;font-family:var(--mono);font-size:12px;line-height:1.55;white-space:pre-wrap;word-break:break-all"},...lines),
-          r.error?h("div",{class:"help",style:"color:var(--danger);margin-top:6px"},r.error):null,
-          r.payload?h("div",{class:"help",style:"margin-top:6px"},"Reply bytes as the expressions count them (B0 is the first byte after the CAN id): ",h("span",{class:"mono"},r.payload)):null,
-          rows.length?h("div",{style:"margin-top:10px"},
-            h("div",{class:"help",style:"margin-bottom:2px"},"Decoded"),
-            ...rows.map(r0=>h("div",{class:"rowflex",style:"gap:8px;padding:4px 0;border-bottom:1px solid var(--border)"},
-              h("span",{style:"flex:1;font-weight:600"},r0.name),
-              h("b",{class:"mono"},r0.value==null?"-":String(r0.value)),
-              h("span",{class:"help"},r0.unit)))):null),
-          actions:[{label:"Close",kind:"pri"}]});
+        testModal("Test: "+(pd.name||pd.cmd),"Sent (>) and received (<)"+(ms?" · the request answered in "+ms:""),lines,r,
+          "Reply bytes as the expressions count them (B0 is the first byte after the CAN id): ",rows);
+      }catch(e){toast("Test failed: "+e.message,"err");}
+      btn.disabled=false;btn.textContent=was;
+    }
+    /* the Test dialog of a PID and of a CAN filter: the exchange, the bytes the
+       expressions count, the decoded values */
+    function testModal(title,head,lines,r,bytesLabel,rows){
+      modal({title,body:h("div",{},
+        h("div",{class:"help",style:"margin-bottom:4px"},head),
+        h("div",{class:"console",style:"height:auto;min-height:56px;max-height:240px;overflow:auto;padding:8px 10px;font-family:var(--mono);font-size:12px;line-height:1.55;white-space:pre-wrap;word-break:break-all"},...lines),
+        r.error?h("div",{class:"help",style:"color:var(--danger);margin-top:6px"},r.error):null,
+        r.payload?h("div",{class:"help",style:"margin-top:6px"},bytesLabel,h("span",{class:"mono"},r.payload)):null,
+        rows.length?h("div",{style:"margin-top:10px"},
+          h("div",{class:"help",style:"margin-bottom:2px"},"Decoded"),
+          ...rows.map(r0=>h("div",{class:"rowflex",style:"gap:8px;padding:4px 0;border-bottom:1px solid var(--border)"},
+            h("span",{style:"flex:1;font-weight:600"},r0.name),
+            h("b",{class:"mono"},r0.value==null?"-":String(r0.value)),
+            h("span",{class:"help"},r0.unit)))):null),
+        actions:[{label:"Close",kind:"pri"}]});
+    }
+    /* a CAN filter's Test (2026-11-14): the device listens once for the frame, as a
+       poll of the filter does, and answers with the frame and the values */
+    async function testFilter(f,btn){
+      const params=(f.parameters||[]).filter(pr=>pr&&pr.expression);
+      btn.disabled=true;const was=btn.textContent;btn.textContent="Listening…";
+      try{
+        const r=await api("/api/autopid/test",{method:"POST",body:{filter:{frame_id:Number(f.frame_id)||0,monitor_ms:Number(f.monitor_ms)||1000,
+          parameters:params.map(pr=>({expression:pr.expression,...(pr.mux_expr?{mux_expr:pr.mux_expr,mux_val:Number(pr.mux_val)||0}:{})}))}}});
+        const vals=Array.isArray(r.values)?r.values:[];
+        const lines=String(r.transcript||"").split("\n").filter(Boolean).map(l=>h("div",{class:l[0]===">"?"in":""},l));
+        testModal("Test: "+fltName(f),"Sent (>) and received (<)"+(r.ok&&r.elapsed_ms!=null?" · the frame came after "+Number(r.elapsed_ms).toFixed(0)+" ms":""),lines,r,
+          "Frame data as the expressions count it (B0 is the first data byte): ",
+          params.map((pr,i)=>({name:pr.name||"-",value:vals[i],unit:pr.unit||""})));
       }catch(e){toast("Test failed: "+e.message,"err");}
       btn.disabled=false;btn.textContent=was;
     }
@@ -7141,10 +7181,13 @@ PAGES.automate=async(view,sub)=>{
       dirtyWatch.add(v=>{dirtyChip.style.display=v?"":"none";});
       const errLine=h("div",{class:"help pidl-err",style:"display:none"});
       applyWatch.add(t=>{errLine.textContent=t?"Rejected: "+t:"";errLine.style.display=t?"":"none";});
-      const flt=h("input",{class:"flt",placeholder:"Filter by name, request or parameter",oninput:e=>{filter=e.target.value.trim();rebuild(true);}});
+      /* "Search", not "Filter" (2026-11-14): a filter on this page is a CAN filter. The
+         box and the two buttons also drive the tab's CAN filters list (tbl.onSearch,
+         tbl.onOpenAll, set by the pane) */
+      const flt=h("input",{class:"flt",placeholder:"Search by name, request or parameter",oninput:e=>{filter=e.target.value.trim();rebuild(true);if(tbl.onSearch)tbl.onSearch(filter);}});
       const tools=h("div",{class:"pidl-tools"},flt,
-        h("button",{class:"btn sm gh",type:"button",onclick:()=>{mine().forEach(pd=>open.add(pd));rebuild(true);}},"Expand all"),
-        h("button",{class:"btn sm gh",type:"button",onclick:()=>{open.clear();rebuild(true);}},"Collapse all"),
+        h("button",{class:"btn sm gh",type:"button",onclick:()=>{mine().forEach(pd=>open.add(pd));rebuild(true);if(tbl.onOpenAll)tbl.onOpenAll(true);}},"Expand all"),
+        h("button",{class:"btn sm gh",type:"button",onclick:()=>{open.clear();rebuild(true);if(tbl.onOpenAll)tbl.onOpenAll(false);}},"Collapse all"),
         h("span",{class:"grow"}),countChip,dirtyChip);
       const list=h("div",{class:"pidl-rows"});
       /* the round as the poller walks it (every table, not this tab alone): shown
@@ -7268,12 +7311,127 @@ PAGES.automate=async(view,sub)=>{
         list.replaceChildren(
           shown.length?h("div",{class:"pidl-head"},h("span",{}),h("span",{},"PID"),h("span",{},"Request"),...(hasRx?[h("span",{},"RX ID")]:[]),h("span",{},"Parameters"),h("span",{})):null,
           ...shown.map(pidRow),
-          all.length?(shown.length?null:h("div",{class:"empty"},"No PID matches the filter")):h("div",{class:"empty"},emptyMsg));
+          all.length?(shown.length?null:h("div",{class:"empty"},"No PID matches the search")):h("div",{class:"empty"},emptyMsg));
         paintBusStrip();
         refreshLive();
       };
       tbl.append(tools,list,heldNote,busStrip,errLine);
       rebuild();tbl.rebuild=()=>rebuild(true);
+      startLive();
+      return tbl;
+    }
+    /* ---- CAN filters (2026-11-14, Ali: "allow users to add filters in vehicle
+       specific and in Custom pids", a separate list under the PIDs of both tabs) ----
+       A filter reads a frame the car sends by itself (autopid README "Filters"): a
+       CAN ID, a listen time, parameters over the frame's data bytes. The vehicle's
+       set is tagged profile:true (what a profile brought and what is added on Vehicle
+       Specific: the next profile replaces it, as it replaces the vehicle-specific
+       PIDs); every other filter is a custom one. The firmware gates each kind by its
+       tab's switch. `name` is this page's label for the row, the firmware has none.
+       What a row carries beyond the fields here (a DBC signal's mux_expr / mux_val,
+       class, min, max) stays as stored. */
+    const fltKind=f=>f&&f.profile===true?"specific":"custom";
+    const fltHex=id=>{const n=Number(id)||0;return n?"0x"+n.toString(16).toUpperCase().padStart(n>0x7FF?8:3,"0"):"";};
+    /* the ID as the 4.x firmware's page read it: 0x284 is hex, a plain number is
+       decimal (644), letters without 0x are hex (1DA); the field then shows it in hex */
+    const fltParse=s=>{const t=String(s||"").trim();
+      const n=/^0x[0-9a-f]+$/i.test(t)?parseInt(t,16):/^[0-9]+$/.test(t)?parseInt(t,10):/^[0-9a-f]+$/i.test(t)?parseInt(t,16):NaN;
+      return n>=1&&n<=0x1FFFFFFF?n:0;};
+    const fltName=f=>f.name||((f.parameters||[]).length===1&&f.parameters[0].name)||fltHex(f.frame_id)||"";
+    const FLT_INFO={
+      custom:"Reads a frame the car sends by itself: nothing is asked. Enter the frame's CAN ID as 0x284 (hex) or 644 (decimal); an ID above 0x7FF is a 29-bit one. Once per cycle WiCAN listens for the frame, until it comes or the Listen time is over, and the PIDs wait meanwhile. In an expression B0 is the first data byte of the frame. These filters follow the Poll custom PIDs switch.",
+      specific:"Reads a frame the car sends by itself: nothing is asked. Enter the frame's CAN ID as 0x284 (hex) or 644 (decimal); an ID above 0x7FF is a 29-bit one. Once per cycle WiCAN listens for the frame, until it comes or the Listen time is over, and the PIDs wait meanwhile. In an expression B0 is the first data byte of the frame. These filters belong to the vehicle: they follow the Poll vehicle-specific PIDs switch, and choosing another profile replaces them."};
+    function filterTable(type){
+      const tbl=h("div",{class:"pidl fltl",style:"--pidcols:40px minmax(110px,1.3fr) minmax(84px,1fr) 90px minmax(140px,1.2fr) 88px;margin-top:18px;border-top:1px solid var(--border);padding-top:14px"});
+      const open=new Set();let search="";
+      const cells=new Map();
+      const mine=()=>(cfg.filters||[]).filter(f=>fltKind(f)===type);
+      const matches=f=>{if(!search)return true;const s=search.toLowerCase();
+        return[fltName(f),fltHex(f.frame_id),...(f.parameters||[]).map(p=>p.name)].some(x=>String(x||"").toLowerCase().includes(s));};
+      const groupRate=f=>{const g=(cfg.groups||[]).find(x=>x.name===(f.group||"default"));const p=g?(Number(g.period_ms)||0):1000;return p?p+" ms":"max rate";};
+      const countChip=h("span",{class:"help"});
+      const list=h("div",{class:"pidl-rows"});
+      let attached=false; /* unsubscribe only once the list has been on the page and left it */
+      const refreshLive=()=>{if(tbl.isConnected)attached=true;else if(attached){liveSubs.delete(refreshLive);return;}for(const f of cells.values())f();};
+      liveSubs.add(refreshLive);
+      const liveCell=(el,fn)=>{cells.set(el,()=>fn(el));fn(el);return el;};
+      const fltRow=f=>{
+        const prms=Array.isArray(f.parameters)?f.parameters:[]; /* a row is never rewritten by being shown */
+        const isOpen=open.has(f),on=f.enabled!==false,n=prms.length;
+        const row=h("div",{class:"pidrow"+(on?"":" off")+(isOpen?" open":"")});
+        const sw=switchCtl(on,v=>{f.enabled=v;row.classList.toggle("off",!v);markDirty();},{sm:true,noText:true,title:"Read this frame"});
+        const caret=h("button",{class:"btn sm gh caret",type:"button",title:(isOpen?"Hide":"Show")+" the "+n+" parameter"+(n===1?"":"s")+" decoded from this frame",
+          onclick:()=>{isOpen?open.delete(f):open.add(f);rebuild();}},(isOpen?"▾ ":"▸ ")+n+(n===1?" parameter":" parameters"));
+        const summary=liveCell(h("span",{class:"val"}),el=>{
+          if(n===1){const v=fmtLive(prms[0].name,prms[0].unit);el.textContent=v||"no data";el.classList.toggle("none",!v);}
+          else{const k=prms.filter(p=>fmtLive(p.name)!=null).length;el.textContent=k?k+" of "+n+" live":"no data";el.classList.toggle("none",!k);}});
+        const idInp=h("input",{class:"mono fid"+(Number(f.frame_id)?"":" bad"),value:fltHex(f.frame_id),placeholder:"0x284 or 644",
+          title:"The CAN ID of the frame: hex with 0x in front (0x284), or a plain number in decimal (644). An ID above 0x7FF is a 29-bit one.",
+          onchange:e=>{const id=fltParse(e.target.value);f.frame_id=id;if(id)e.target.value=fltHex(id);e.target.classList.toggle("bad",!id);markDirty();}});
+        const monInp=h("input",{class:"mono fmon",type:"number",min:"50",max:"60000",step:"50",value:f.monitor_ms||1000,
+          title:"Listen (ms): how long one window waits for the frame, 50 to 60000. The PIDs wait while it is open.",
+          onchange:e=>{f.monitor_ms=Math.min(60000,Math.max(50,Math.round(Number(e.target.value)||0)||1000));e.target.value=f.monitor_ms;markDirty();}});
+        const testBtn=h("button",{class:"btn sm gh",type:"button",title:"Listen once for this frame and show it with the decoded values: vehicle must be on"},"Test");
+        testBtn.onclick=()=>{if(!Number(f.frame_id))return toast("Enter the CAN ID first","err");testFilter(f,testBtn);};
+        row.append(h("div",{class:"main"},sw,
+          h("input",{class:"fname",value:fltName(f),placeholder:"Filter name",title:"A name for this row on this page",onchange:e=>{if(e.target.value)f.name=e.target.value;else delete f.name;markDirty();}}),
+          idInp,monInp,
+          h("div",{class:"vals"},caret,summary),
+          h("div",{class:"acts"},testBtn,
+            h("button",{class:"btn sm gh danger",type:"button",title:"Remove this filter and all its parameters",onclick:()=>{cfg.filters.splice(cfg.filters.indexOf(f),1);markDirty();rebuild();}},ic("trash")))));
+        if(isOpen){
+          const fld=(label,ctl)=>h("div",{},h("label",{},label),ctl);
+          const fields=h("div",{class:"fields"},
+            fld("Group",h("input",{value:f.group||"default",onchange:e=>{f.group=e.target.value||"default";markDirty();}})),
+            fld("Cycle (ms)",h("input",{class:"mono",type:"number",min:"0",value:f.period_ms||"",placeholder:"group: "+groupRate(f),title:"How often the frame is read. Empty = the group's rate, "+groupRate(f)+".",onchange:e=>{f.period_ms=Number(e.target.value)||0;markDirty();}})),
+            h("div",{}));
+          const prmHead=h("div",{class:"prm prm-head"},h("span",{}),h("span",{},"Parameter"),h("span",{},"Expression"),h("span",{},"Unit"),h("span",{class:"r"},"Live"),h("span",{}));
+          const prmRows=prms.map(pr=>{
+            const pon=pr.enabled!==false;
+            const prow=h("div",{class:"prm"+(pon?"":" off")});
+            const psw=switchCtl(pon,v=>{pr.enabled=v;prow.classList.toggle("off",!v);markDirty();},{sm:true,noText:true,title:"Include this parameter"});
+            const expr=h("input",{class:"mono"+((pr.expression||"").trim()?"":" bad"),value:pr.expression||"",placeholder:"[B4:B5]/98",
+              title:"Decode expression over the frame's data bytes: B0 is the first data byte, [B4:B5] joins two bytes, B0:3 selects a bit."+
+                (pr.mux_expr?" Read only from the frames whose "+pr.mux_expr+" is "+(Number(pr.mux_val)||0)+" (a multiplexed signal).":""),
+              oninput:e=>{e.target.classList.toggle("bad",!e.target.value.trim());},onchange:e=>{pr.expression=e.target.value;markDirty();}});
+            prow.append(psw,
+              h("input",{value:pr.name||"",placeholder:"ParameterName",onchange:e=>{pr.name=e.target.value;markDirty();refreshLive();}}),
+              expr,
+              h("input",{class:"mono",value:pr.unit||"",placeholder:"km/h",title:"Unit shown on the dashboard / sent to Home Assistant",onchange:e=>{pr.unit=e.target.value;markDirty();refreshLive();}}),
+              liveCell(h("span",{class:"lv"}),el=>{const v=fmtLive(pr.name,pr.unit);el.textContent=v||"no data";el.classList.toggle("none",!v);}),
+              n>1?h("button",{class:"btn sm gh danger",type:"button",title:"Remove this parameter",onclick:()=>{prms.splice(prms.indexOf(pr),1);markDirty();rebuild();}},ic("trash")):h("span",{}));
+            return prow;});
+          row.append(h("div",{class:"det"},fields,
+            h("div",{class:"dlabel"},"Parameters decoded from the frame"),
+            prmHead,...prmRows,
+            h("div",{style:"margin-top:8px"},h("button",{class:"btn sm",type:"button",onclick:()=>{if(!Array.isArray(f.parameters))f.parameters=[];f.parameters.push({name:"",expression:"",unit:""});markDirty();rebuild();}},ic("plus"),"Add parameter"))));
+        }
+        return row;};
+      const rebuild=()=>{
+        cells.clear();
+        const all=mine(),shown=all.filter(matches);
+        const nv=all.reduce((a,f)=>a+(Array.isArray(f.parameters)?f.parameters.length:0),0);
+        countChip.textContent=all.length?all.length+" CAN filter"+(all.length===1?"":"s")+" · "+nv+" parameter"+(nv===1?"":"s")+(search?" · "+shown.length+" shown":""):"";
+        list.replaceChildren(
+          shown.length?h("div",{class:"pidl-head"},h("span",{}),h("span",{},"Name"),h("span",{},"CAN ID"),h("span",{},"Listen (ms)"),h("span",{},"Parameters"),h("span",{})):null,
+          ...shown.map(fltRow),
+          all.length?(shown.length?null:h("div",{class:"help"},"No CAN filter matches the search")):h("div",{class:"help"},"No CAN filters"));
+        refreshLive();};
+      tbl.append(h("div",{class:"pidl-tools"},h("b",{style:"font-size:13.5px"},"CAN filters"),infoBtn("About CAN filters","CAN filter",FLT_INFO[type]),h("span",{class:"grow"}),countChip),list);
+      rebuild();
+      tbl.rebuild=rebuild;
+      tbl.search=s=>{search=s;rebuild();};
+      tbl.openAll=v=>{open.clear();if(v)mine().forEach(f=>open.add(f));rebuild();};
+      /* a new filter, opened: its parameter under a name no row has yet (the tables
+         key the values by parameter name). The 4.x firmware's figures: it listened
+         for up to 1.1 s (a frame sent once a second is caught; the window ends at
+         the first frame anyway) and read a parameter every 5 s */
+      tbl.add=()=>{
+        const taken=new Set([...cfg.pids,...(cfg.filters||[])].flatMap(x=>(x.parameters||[]).map(p=>p.name)));
+        let name="NewFilter",k=2;while(taken.has(name))name="NewFilter_"+(k++);
+        const f={name,frame_id:0,monitor_ms:1000,period_ms:5000,group:"default",parameters:[{name,expression:"B0",unit:""}]};
+        if(type==="specific")f.profile=true;
+        cfg.filters=cfg.filters||[];cfg.filters.push(f);open.add(f);markDirty();rebuild();};
       startLive();
       return tbl;
     }
@@ -7324,12 +7482,19 @@ PAGES.automate=async(view,sub)=>{
     function custPane(){
       const tbl=pidTable("custom","No custom PIDs. Add PID to poll any request with your own decode expression");
       const applyBtn=h("button",{class:"btn pri sm",onclick:saveCfg},"Apply Configuration");
+      /* the tab's CAN filters under its PIDs (2026-11-14): the search box and Expand /
+         Collapse all above drive both lists, Apply Configuration closes the tab */
+      const ftbl=filterTable("custom");
+      tbl.onSearch=ftbl.search;tbl.onOpenAll=ftbl.openAll;
       return h("div",{},groupHead("custom"),tbl,
         h("div",{class:"rowflex",style:"gap:8px;margin-top:12px;flex-wrap:wrap"},
           h("button",{class:"btn sm",onclick:()=>{cfg.pids.push({name:"NewPID",cmd:"010C1",group:"default",period_ms:1000,type:"custom",parameters:[{name:"NewPID",expression:"B3",unit:""}]});paneEl.replaceChildren(custPane());}},ic("plus"),"Add PID"),
-          h("button",{class:"btn sm",title:"A J1939 parameter group read from the listener (trucks): PGN:<hex>[@<source>][?]",onclick:()=>{cfg.pids.push({name:"EngineSpeed",cmd:"PGN:F004",group:"default",period_ms:1000,type:"custom",parameters:[{name:"EngineSpeed",expression:"(B3+B4*256)*0.125",unit:"rpm"}]});paneEl.replaceChildren(custPane());}},ic("plus"),"Add PGN"),
+          h("button",{class:"btn sm",title:"A J1939 parameter group read from the listener (trucks): PGN:<hex>[@<source>][?]",onclick:()=>{cfg.pids.push({name:"EngineSpeed",cmd:"PGN:F004",group:"default",period_ms:1000,type:"custom",parameters:[{name:"EngineSpeed",expression:"(B3+B4*256)*0.125",unit:"rpm"}]});paneEl.replaceChildren(custPane());}},ic("plus"),"Add PGN")),
+        ftbl,
+        h("div",{class:"rowflex",style:"gap:8px;margin-top:12px;flex-wrap:wrap"},
+          h("button",{class:"btn sm flt-add",type:"button",title:"Read a frame the car sends by itself",onclick:()=>ftbl.add()},ic("plus"),"Add CAN filter"),
           h("span",{class:"grow"}),applyBtn),
-        note("","Command is the raw OBD/UDS request (e.g. 010C1 or 22F1901); expand a PID (▸) to edit the parameters decoding its reply bytes (B0…Bn). The bytes are counted as the ELM327 prints a reply with headers on, B0 being the first byte after the CAN id (the ISO-TP length byte): the RPM reply 04 41 0C 1A F8 reads [B3:B4]/4, the same numbering as the vehicle profiles and the legacy firmware; a long reply counts its 21, 22, ... framing bytes too. ATH0, ATS0 and ATE1 in an init chain are ignored. A J1939 group is PGN:<hex>, with @<source> to pin one controller and ? for a group sent on request only: in J1939 active mode (Settings > CAN) WiCAN asks for it at the row's period, once a second at most; in listen mode the row shows what another node asked for. Groups are read from the J1939 listener, B0 is the first data byte and words are little-endian (B3+B4*256). Passive CAN filters: Raw Config."));
+        note("","Command is the raw OBD/UDS request (e.g. 010C1 or 22F1901); expand a PID (▸) to edit the parameters decoding its reply bytes (B0…Bn). The bytes are counted as the ELM327 prints a reply with headers on, B0 being the first byte after the CAN id (the ISO-TP length byte): the RPM reply 04 41 0C 1A F8 reads [B3:B4]/4, the same numbering as the vehicle profiles and the legacy firmware; a long reply counts its 21, 22, ... framing bytes too. ATH0, ATS0 and ATE1 in an init chain are ignored. A J1939 group is PGN:<hex>, with @<source> to pin one controller and ? for a group sent on request only: in J1939 active mode (Settings > CAN) WiCAN asks for it at the row's period, once a second at most; in listen mode the row shows what another node asked for. Groups are read from the J1939 listener, B0 is the first data byte and words are little-endian (B3+B4*256)."));
     }
     /* shared helpers since 2026-10-01: profileToPids / vehicleProfilePicker
        (top level) serve this page and Quick Setup */
@@ -7355,6 +7520,11 @@ PAGES.automate=async(view,sub)=>{
        dropdown PUT the config the moment it changed). */
     function vehPane(){
       const tbl=pidTable("specific","No vehicle profile loaded: choose a profile above, or add PIDs by hand");
+      /* the vehicle's CAN filters under its PIDs (2026-11-14): what the profile brought
+         and what is added here; both lists are redrawn when a profile is staged */
+      const ftbl=filterTable("specific");
+      tbl.onSearch=ftbl.search;tbl.onOpenAll=ftbl.openAll;
+      const rebuildAll=()=>{tbl.rebuild();ftbl.rebuild();};
       const picker=vehicleProfilePicker({current:()=>(av&&av.vehicle)||"",onPick:car=>stageProfile(car)});
       const state=picker.state;
       const openPicker=()=>picker.open();
@@ -7369,7 +7539,7 @@ PAGES.automate=async(view,sub)=>{
         banner.className="banner "+(unsaved?"warn":"info");
         banner.replaceChildren(ic(unsaved?"alert":"info"),
           unsaved?h("span",{},h("b",{},staged.car.car_model),": PIDs applied, but the profile name and init commands above are not saved yet. Press Apply Configuration again and save, or Submit Changes.")
-                 :h("span",{},h("b",{},staged.car.car_model)," is staged, not applied: "+n+" PID"+(n===1?" replaces":"s replace")+" the vehicle-specific table"+(nf?", "+nf+" passive CAN filter"+(nf===1?" (frames the car broadcasts) replaces":"s (frames the car broadcasts) replace")+" the last profile's filters":"")+", and the profile name and init commands above are filled in. Standard and custom PIDs and hand-made filters are kept. Apply Configuration sends it all; the name and init commands take effect after the restart it offers."),
+                 :h("span",{},h("b",{},staged.car.car_model)," is staged, not applied: "+n+" PID"+(n===1?" replaces":"s replace")+" the vehicle-specific table"+(nf?", "+nf+" CAN filter"+(nf===1?" (a frame the car broadcasts) replaces":"s (frames the car broadcasts) replace")+" the CAN filters of this tab":((staged.snap&&staged.snap.filters)||[]).length?", the CAN filters of this tab are removed (this profile has none)":"")+", and the profile name and init commands above are filled in. Standard PIDs, custom PIDs and custom CAN filters are kept. Apply Configuration sends it all; the name and init commands take effect after the restart it offers."),
           h("span",{class:"grow"}),
           unsaved?null:h("button",{class:"btn sm gh",type:"button",title:"Put back what the device has now",onclick:()=>discard()},"Discard"));
         banner.style.display="";};
@@ -7386,7 +7556,7 @@ PAGES.automate=async(view,sub)=>{
         const snap=staged?staged.snap:snapshot(); /* a second pick still discards back to the first snapshot */
         const r=importProfile(car),np=r.pids.length,nf=r.filters.length;
         stageCar(car);
-        markDirty();tbl.rebuild();
+        markDirty();rebuildAll();
         staged={car,snap,nf};paintBanner(false);
         toast(car.car_model+" staged: "+np+" PID"+(np===1?"":"s")+(nf?" and "+nf+" CAN filter"+(nf===1?"":"s"):"")+". Apply Configuration sends them","ok");
         if(String(car.car_model||"").length>maxName)toast("Profile name shortened to "+maxName+" characters (device limit)","");
@@ -7398,7 +7568,7 @@ PAGES.automate=async(view,sub)=>{
         if(av){av.vehicle=s.vehicle;av.specific_init=s.init;av.specific_enabled=s.en;
           if(s.pending)stageAv();else store.unstage("autopid");
           if(rows)rows.load();paintInitNotes();}
-        staged=null;paintBanner(false);markDirty(s.dirty);tbl.rebuild();
+        staged=null;paintBanner(false);markDirty(s.dirty);rebuildAll();
         toast("Profile discarded","");};
       /* the Choose profile button rides on the settings row's control (the
          rows are built once and moved between pane rebuilds: wrap once,
@@ -7419,7 +7589,7 @@ PAGES.automate=async(view,sub)=>{
           if(j&&j.cars){state.cars=j.cars;state.source=null;toast("Profile list loaded from the file: "+j.cars.length+" profiles","ok");openPicker();}
           else if(j&&j.car_model){stageProfile(j);}
           else{cfg=j;cfg.pids=cfg.pids||[];cfg.groups=cfg.groups&&cfg.groups.length?cfg.groups:[{name:"default",enabled_default:true,period_ms:1000}];
-            markDirty();tbl.rebuild();toast("Configuration loaded: press Apply Configuration to send it","ok");}
+            markDirty();rebuildAll();toast("Configuration loaded: press Apply Configuration to send it","ok");}
         }catch(err){toast("File rejected: "+err.message,"err");}};
       const fileInput=h("input",{type:"file",accept:".json",style:"display:none",
         onchange:e=>{applyFile(e.target.files[0]);e.target.value="";}});
@@ -7435,7 +7605,10 @@ PAGES.automate=async(view,sub)=>{
           h("a",{class:"btn sm gh",href:"https://github.com/meatpiHQ/wican-fw",target:"_blank"},"Profile repository")));
       return h("div",{},groupHead("specific"),tbl,banner,
         h("div",{class:"rowflex",style:"gap:8px;margin-top:12px;flex-wrap:wrap"},
-          h("button",{class:"btn sm",onclick:()=>{cfg.pids.push({name:"NewPID",cmd:"22F1901",group:"default",period_ms:0,type:"specific",init:"",parameters:[{name:"NewPID",expression:"B4",unit:""}]});markDirty();tbl.rebuild();}},ic("plus"),"Add PID"),
+          h("button",{class:"btn sm",onclick:()=>{cfg.pids.push({name:"NewPID",cmd:"22F1901",group:"default",period_ms:0,type:"specific",init:"",parameters:[{name:"NewPID",expression:"B4",unit:""}]});markDirty();tbl.rebuild();}},ic("plus"),"Add PID")),
+        ftbl,
+        h("div",{class:"rowflex",style:"gap:8px;margin-top:12px;flex-wrap:wrap"},
+          h("button",{class:"btn sm flt-add",type:"button",title:"Read a frame the car sends by itself",onclick:()=>ftbl.add()},ic("plus"),"Add CAN filter"),
           h("span",{class:"grow"}),
           h("button",{class:"btn pri sm",onclick:saveCfg},"Apply Configuration")),
         dropZone,

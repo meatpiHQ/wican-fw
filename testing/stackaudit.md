@@ -33,3 +33,5 @@ see); `stack_audit.py` reads `build/config/sdkconfig.h` since the same night and
 macro bodies through each other, so it prints `6144 PSRAM nimble_host`, and a row of a 2-D
 stack array (`s_worker_stack[i]`) finds its declaration: `em_worker` reads `4096 PSRAM`
 instead of `?`. Report `2026-11-01_0201_stackaudit.md`.
+
+**2026-11-14 04:11 (the CAN filters list and the filter window's two legacy rules, [canfilters.md](canfilters.md)): PASS** (the known IDLE/ipc warnings), `httpd stack in PSRAM (7224)`, `fs_writer stack in PSRAM (4420)`, 49 tasks, internal min_free 48,428 B, largest block 31,744, PSRAM min_free 3.38 MB, the dtc job headroom 14,192 B, faults clean. The static half: the poller `autopid` 12,288 B PSRAM, its deepest new frame `flt_window` 816 B. Read by hand in the same boot, with a table of filters polled and two filter tests run (an 11-bit ID and a 29-bit one, which takes the protocol switch): `autopid` 9,288 B of headroom before and 9,208 B after, `httpd` 7,224 B before and after. Report `2026-11-14_0411_stackaudit.md`.

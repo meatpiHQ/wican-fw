@@ -187,7 +187,7 @@ const stdBefore = std(await getJ("/api/autopid/config")).length;
 if (await pick(PROFILE, "s1")) {
   const bt = await bannerText();
   const nPid = (car.pids || []).length, nF = WANT.length;
-  check("s1: the banner counts the profile's PIDs and passive CAN filters", new RegExp(nPid + " PIDs? replaces? the vehicle-specific table, " + nF + " passive CAN filters? \\(frames the car broadcasts\\) replaces? the last profile's filters").test(bt) && /hand-made filters are kept/.test(bt), bt.slice(0, 300));
+  check("s1: the banner counts the profile's PIDs and passive CAN filters", new RegExp(nPid + " PIDs? replaces? the vehicle-specific table, " + nF + " CAN filters? \\((a frame|frames) the car broadcasts\\) replaces? the CAN filters of this tab").test(bt) && /custom CAN filters are kept/.test(bt), bt.slice(0, 300));
   check("s1: the vehicle field carries the profile name", (await vehValue()) === PROFILE, await vehValue());
   await shot("s1_staged");
 }
@@ -222,7 +222,8 @@ if (await pick(PROFILE, "s3") && await apply("s3")) {
 /* ---- s4: a profile without filters replaces them with none ---- */
 if (await pick(OTHER, "s4")) {
   const bt = await bannerText();
-  check("s4: the banner mentions no filter for a profile without them", bt.length > 0 && !/CAN filter/.test(bt), bt.slice(0, 200));
+  /* since 2026-11-14 the banner says what happens to the tab's CAN filters (the Leaf's three, applied in s2) */
+  check("s4: the banner says the tab's CAN filters go, this profile having none", /the CAN filters of this tab are removed \(this profile has none\)/.test(bt), bt.slice(0, 240));
   if (await apply("s4")) {
     const cfg3 = await getJ("/api/autopid/config");
     writeFileSync(`${out}/config_after_other.json`, JSON.stringify(cfg3, null, 1));
@@ -234,7 +235,7 @@ if (await pick(OTHER, "s4")) {
 
 /* ---- s5: picked, then Discard: nothing changes ---- */
 if (await pick(PROFILE, "s5")) {
-  check("s5: the Leaf staged over the other profile", (await vehValue()) === PROFILE && /passive CAN filter/.test(await bannerText()));
+  check("s5: the Leaf staged over the other profile", (await vehValue()) === PROFILE && /CAN filters? \((a frame|frames) the car broadcasts\)/.test(await bannerText()));
   const discard = page.locator(".banner button", { hasText: /^Discard$/ }).first();
   if (check("s5: Discard offered on the banner", (await discard.count()) > 0)) {
     await discard.click(); await sleep(600);

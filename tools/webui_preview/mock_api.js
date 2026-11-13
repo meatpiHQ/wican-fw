@@ -1241,6 +1241,24 @@
       if (!d) return J({ error: "unknown destination" }, 404);
       return J({ ok: d.name !== "cloud", status: d.type === "mqtt" ? 0 : (d.name === "cloud" ? 503 : 200), elapsed_ms: 87, error: d.name === "cloud" ? "http=503" : "" });
     }
+    if (method === "POST" && path === "/api/autopid/test" && body && body.filter) {
+      /* a CAN filter (2026-11-14): one monitor window for its frame, as the firmware
+         answers it. __mockPreset.filterTest = "silent" plays a car that does not send
+         the frame (probe_can_filters.mjs) */
+      state.lastTest = body;
+      const f = body.filter, id = Number(f.frame_id) || 0, prm = Array.isArray(f.parameters) ? f.parameters : [];
+      if (id < 1 || id > 0x1FFFFFFF) return J({ error: "filter: frame_id 1 to 0x1FFFFFFF required" }, 400);
+      const hex = id.toString(16).toUpperCase().padStart(id > 0x7FF ? 8 : 3, "0");
+      /* a 29-bit ID on the mock's 11-bit car: the chip to the 29-bit protocol for the window and back */
+      const wide = id > 0x7FF;
+      const head = "> ATH1\n< OK\n" + (wide ? "> ATTP7\n< OK\n" : "") + "> ATCRA" + hex + "\n< OK\n> ATCAF0\n< OK\n> ATMA\n",
+        tail = "> ATCAF1\n< OK\n> ATCRA\n< OK\n" + (wide ? "> ATTP6\n< OK\n" : "");
+      if ((window.__mockPreset || {}).filterTest === "silent")
+        return J({ ok: false, elapsed_ms: 0, error: "no frame with this CAN ID in the listen time", values: prm.map(() => null),
+          transcript: head + tail + "! no frame with CAN ID " + id.toString(16).toUpperCase() + " in " + (f.monitor_ms || 1000) + " ms\n" });
+      const data = "02 1E 02 1F 0B 7C 4E 20";   /* [B4:B5]/98 reads 30 */
+      return J({ ok: true, elapsed_ms: 38.4, transcript: head + "< " + hex + " " + data + "\n" + tail, payload: data, values: prm.map((p, i) => (i === 0 ? 30 : i)) });
+    }
     if (method === "POST" && path === "/api/autopid/test") {
       // 2026-09-16 shape: one shot decodes every expression; "transcript"
       // lists each exchange as the firmware ran it (type init, PID init,
