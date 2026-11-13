@@ -10,6 +10,19 @@ Host **unit** suites (`components/*/host_test`, 526 tests across 44 components a
 
 **Pi offline:** `bash tools/testbench/host_gcc_wsl.sh <vpn_manager|config_backup>` from WSL compiles that PURE suite with the system gcc + Unity under ASan/UBSan (no IDF build; 2026-10-16, issues #985 to #989: `vpn_manager` 11, `config_backup` 24; add a case per IDF-free suite)
 
+**2026-11-13:** `j2534_server` 31 PASS, including production READ_VBATT
+conversion/rounding, a closed device, unavailable and invalid ADC readings.
+Report `test-reports/2026-11-13_1554_host_j2534_server.md`; the device/DLL half
+and its red reproductions are in [j2534vbat.md](j2534vbat.md). The suite uses
+`isfinite`, `NAN` and `INFINITY`, and the IDF linux target links no libm: the
+Pi (aarch64) inlines what the components repo's CI (x86-64) may have to link.
+Gated the same evening in the CI's image, 31 PASS there too. From Git Bash on
+the PC, Docker Desktop running, `MSYS_NO_PATHCONV=1` set: `docker run --rm -v
+"<components repo>:/w" -w /w espressif/idf:v6.0.2 bash -c '(apt-get update -q
+&& apt-get install -y -q libbsd-dev) > /tmp/apt.log 2>&1; bash
+tools/run_host_tests.sh j2534_server'` (one suite, about 3 min; no argument
+runs every suite, as the CI does).
+
 **2026-11-10:** `.\test.ps1 host obd_chip` compiles the production request
 engine, claim model and fan-out against a fake chip since this date
 (`test_request.c`: the words on the wire). The reproduction on the driver
