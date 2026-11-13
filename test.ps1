@@ -57,6 +57,7 @@ param(
                               # car, and the way back (three writes)
     [switch]$NoConsole,       # PC bench stages: do not open the DUT's console
                               # port beside the run (Start-ConsoleTail)
+    [ValidateRange(1, 120)][int]$SoakMinutes = 3, # tspublic: final continuous soak
     [string]$PcanChannel = $(if ($env:WICAN_PCAN_DUT) { $env:WICAN_PCAN_DUT } else { 'PCAN_USBBUS1' }), # j2534std: the PCAN channel on the DUT's bus (the variable is the one the CAN benches read: the adapter's plugs may be swapped)
     [switch]$Factory,         # backup stage: run b9 too, a REAL factory reset of
                               # the DUT (the full wipe since 2026-10-26) and the
@@ -1118,7 +1119,7 @@ function Show-Inventory {
     Write-Host '  vpnpause   - the VPN pauses on networks marked Pause VPN (issue #976): the bench AP marked / unmarked, away on the dongle AP, home again; wg-bench on the Pi, the console for the away leg (~12 min)'
     Write-Host '  vpnroutes  - the split tunnel (issue #975): a request to a routed network leaves through wg-bench on the Pi, one to any other address through the station, judged at the receiver by the source address (~6 min)'
     Write-Host '  wgcycle    - WireGuard torn down while MQTT runs through it, N times (the beta.5 vpn_state crashes, 2026-11-02): wg-bench on the Pi, the broker at its tunnel address, a station trial to a network that does not exist drops the uplink each cycle; connects grows, MQTT returns, no reboot (~30 s per cycle, 10 cycles)'
-    Write-Host '  tspublic   - Tailscale on Betty: six DUT-initiated subnet requests over pure relay through rekey (direct UDP blocked), no false direct endpoint, a second peer that opens its session itself and takes five requests to its OWN address, both peers away 200 s until every session key expired and the request to the peer''s own address again (2026-11-09), direct DISCO/ICMP/HTTP recovery, PSRAM stacks, flat RAM, zero errors/faults, exact settings restoration and scoped teardown (~15 min; needs betty and the DUT on the Pi''s internet path)'
+    Write-Host '  tspublic   - Tailscale on Betty: six DUT-initiated subnet requests over pure relay through rekey (direct UDP blocked), no false direct endpoint, a second peer that opens its session itself and takes five requests to its OWN address, both peers away 200 s until every session key expired and the request to the peer''s own address again (2026-11-09), direct DISCO/ICMP/HTTP recovery, PSRAM stacks, flat RAM, zero errors/faults, exact settings restoration and scoped teardown (~15 min; needs betty and the DUT on the Pi''s internet path). Optional component stop-dial (2026-11-13): the same fixture, then Tailscale stopped while its relay misbehaves: the DUT''s TCP/443 reset and its new dials dropped on the Pi, a Wi-Fi trial takes the uplink away during the relay''s retry (nothing crashes in the 40 s behind it), then the uplink taken away twice with the relay up, then the control connection reset twice with the relay up (a stop that finds the relay connected: the relay task closes its own connection and says how much stack it never used, PSRAM and internal RAM flat over those stops). Judged from the console capture: the client is never destroyed, and no task of a new client started, while a task of the old one still runs; a stop that misses its 30 s deadline is counted and must keep the client; prints TS DERP STOP PASS (~15 min)'
     Write-Host '  tlschain   - An HTTPS chain ending in a cross-signed root (Cloudflare under GTS Root R4 as signed by GlobalSign Root CA, 2026-11-03) accepted by the built-in certificate bundle: the HA webhook pointed at such a host must get an HTTP answer, never a transport error; restored afterwards (~40 s; needs internet for the DUT)'
     Write-Host '  habackfill - Store and forward (2026-11-06): a drive recorded on the SD card as JSON lines reaches the bench Home Assistant''s long-term statistics once the pushes return, through the export route and its cursor; the Catch up history button, nothing imported twice, the sleep countdown pushed out while the log is read (the supply at 12.5 V), everything restored (~12 min, 2 planned restarts; needs the bench HA on rpi001, the simulator answering 010C, internal/bench_ha_credentials.json)'
     Write-Host '  espnleasy  - the ESPNetLink easy-setup surfaces on the DUT (2026-10-13): the usb summary on /api/status against /api/espnetlink, the sim_pin key (a no-op PUT, no restart), the UI doors in the served page, the GPS hint counting away from home (ap off on the P4 for 100 s, home again) (~6 min; needs the P4 daemon)'
@@ -1906,13 +1907,39 @@ try {
                     $gitBash = @("$env:ProgramFiles\Git\bin\bash.exe", "$env:LOCALAPPDATA\Programs\Git\bin\bash.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
                     if (-not $gitBash) { throw 'Git Bash not found (Git for Windows; the IDF portable git on PATH has no bash)' }
                     $sh = "$repo\tools\testbench\vpn\ts_public_soak.sh" -replace '\\', '/'
-                    $out = & $gitBash $sh 'run' '3' 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    if ($Component -eq 'stop-dial') {
+                        $env:TS_STOP_DIAL = '1'
+                        try {
+                            $out = & $gitBash $sh 'up' 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                            $rc = $LASTEXITCODE
+                            Save-StageLog 'ts_public_up' $out
+                            if ($rc -ne 0) { throw 'Tailscale fixture setup failed' }
+                            # the bench reads the client's stop lines from the console
+                            # capture: the device's 16 KB log ring is rewritten within
+                            # seconds of a Tailscale reconnect (the relay map alone)
+                            $benchArgs = @('--dut', $DutIp)
+                            if ($con) { $benchArgs += @('--console', $con.Log) }
+                            $out = & $script:BenchPy -u "$repo\tools\testbench\vpn\ts_derp_stop_bench.py" @benchArgs 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                            $rc = $LASTEXITCODE
+                            Save-StageLog 'ts_derp_stop' $out
+                            if ($rc -ne 0 -or -not ($out | Select-String -Quiet '^TS DERP STOP PASS$')) { throw 'no TS DERP STOP PASS (Tailscale stopped while its relay misbehaves); see ts_derp_stop.log' }
+                            $script:note = 'TS DERP STOP PASS'
+                        } finally {
+                            $out = & $gitBash $sh 'down' 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                            $rc = $LASTEXITCODE
+                            Save-StageLog 'ts_public_down' $out
+                            if ($rc -ne 0) { throw 'Tailscale fixture restoration failed' }
+                        }
+                        return
+                    }
+                    $out = & $gitBash $sh 'run' "$SoakMinutes" 2>&1 | ForEach-Object { Write-Host $_; $_ }
                     $rc = $LASTEXITCODE
                     Save-StageLog 'ts_public' $out
                     if ($rc -ne 0 -or -not ($out | Select-String -Quiet '^TS PUBLIC PASS$')) {
                         throw 'Tailscale public bench or its teardown failed; see ts_public.log'
                     }
                 } finally {
+                    Remove-Item Env:TS_STOP_DIAL -ErrorAction SilentlyContinue
                     Remove-Item Env:DUT_IP -ErrorAction SilentlyContinue
                     Stop-ConsoleTail $con
                 }

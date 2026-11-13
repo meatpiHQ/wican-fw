@@ -56,6 +56,10 @@ SRVSSH="ssh -o BatchMode=yes -o ConnectTimeout=12 $SRV"
 HS_VER=0.23.0                    # same version the rpi001 rig verified
 TS_VER=1.78.1
 SNAPSHOT="$(dirname "$0")/../../../state/ts-public-${DUT_IP}"
+SNAP_COMPS="vpn_manager data_destinations"
+if [ "${TS_STOP_DIAL:-0}" = "1" ] || [ -f "$SNAPSHOT/mqtt_manager.json" ]; then
+    SNAP_COMPS="$SNAP_COMPS mqtt_manager"
+fi
 
 stop_bench_process() {
     local name="$1"
@@ -84,6 +88,32 @@ check() { # name ok [detail]
     else echo "FAIL: $1${d:+ ($d)}"; FAILS+=("$1"); fi
 }
 dut() { $PI "curl -sS -m 10 $*"; }
+derp_stack_check() {
+    local stack attempt
+    for attempt in 1 2 3; do
+        stack=$(dut "-f http://${DUT_IP}/api/status/tasks" | python3 -c "
+import json,sys
+t=next((x for x in json.load(sys.stdin)['tasks'] if x['name']=='ml_derp_tx'), None)
+if t is None:
+    print('missing')
+else:
+    n=t['stack_hw']
+    print(f\"ok={int(t['stack_ext'] is True and n >= 1024)} headroom={n} B\")")
+        [ "$stack" != "missing" ] && break
+        # The task iterator suspends only one core; the other can move a task
+        # past its walk. Never turn that omission into a zero watermark.
+        echo "WARN: ml_derp_tx absent from task snapshot (attempt $attempt of 3)"
+        sleep 1
+    done
+    check "ml_derp_tx PSRAM stack has at least 1024 B headroom" \
+        "$(echo "$stack" | grep -q '^ok=1 ' && echo 1 || echo 0)" "$stack"
+}
+boot_mark() {
+    dut "-f http://${DUT_IP}/api/status" | python3 -c "
+import json,sys
+s=json.load(sys.stdin)
+print(s['boot_count'],s['unexpected_resets'])"
+}
 tsq() { $SRVSSH "$BASE/ts/tailscale --socket=/run/tsb.sock $*"; }
 # the subnet router leg (2026-11-01): a network betty advertises (an alias on
 # its loopback) that the DUT must learn from the map and reach through the
@@ -187,10 +217,10 @@ up|run)
         exit 1
     fi
     mkdir -p "$SNAPSHOT" || exit 1
-    for comp in vpn_manager data_destinations; do
+    for comp in $SNAP_COMPS; do
         if ! dut "-f http://${DUT_IP}/api/settings/${comp}" > "$SNAPSHOT/$comp.json"; then
             echo "Cannot save $comp settings; DUT left unchanged"
-            rm -f "$SNAPSHOT/vpn_manager.json" "$SNAPSHOT/data_destinations.json"
+            for saved in $SNAP_COMPS; do rm -f "$SNAPSHOT/$saved.json"; done
             rmdir "$SNAPSHOT"
             exit 1
         fi
@@ -310,6 +340,19 @@ EOF
     # precedes the receiver, peer or route, and every request is accounted for.
     CODE=$(dut_dd_config "$DD_ROW_ADD")
     check "DUT destination row PUT" "$([ "$CODE" = "200" ] && echo 1 || echo 0)" "http $CODE"
+    if [ "${TS_STOP_DIAL:-0}" = "1" ]; then
+        CODE=$(python3 -c "
+import json,sys
+d=json.load(open(sys.argv[1]))
+for k in ('degraded','pending_reboot'): d.pop(k,None)
+d['enabled']=False
+print(json.dumps(d))" "$SNAPSHOT/mqtt_manager.json" |
+            $PI "curl -s -o /dev/null -w '%{http_code}' -m 10 -X PUT \
+                http://${DUT_IP}/api/settings/mqtt_manager \
+                -H 'Content-Type: application/json' -d @-")
+        check "MQTT parked for the DERP-only fault injection" \
+            "$([ "$CODE" = "200" ] && echo 1 || echo 0)" "http $CODE"
+    fi
     dut "-X POST http://${DUT_IP}/api/settings/submit" >/dev/null
     echo "DUT submitted (rebooting)"
 
@@ -323,6 +366,8 @@ EOF
     TSIP=$(echo "$V" | sed -n 's/.*"ts_ip":"\([0-9.]*\)".*/\1/p')
     check "tailscale CONNECTED" "$(echo "$V" | grep -q '"state":"connected"' && echo 1 || echo 0)" "$V"
     check "tailnet IP assigned" "$([ -n "$TSIP" ] && echo 1 || echo 0)" "$TSIP"
+    BOOT_START=$(boot_mark)
+    derp_stack_check
     NODES=$($SRVSSH "$BASE/headscale nodes list 2>/dev/null | grep -c wican-pub")
     check "node registered in headscale" "$([ "${NODES:-0}" -ge 1 ] && echo 1 || echo 0)"
 
@@ -584,6 +629,7 @@ import json,sys
 t={x['name']:x for x in json.load(sys.stdin)['tasks']}
 print(' '.join(f\"{n}={t[n].get('stack_ext')}/{t[n].get('stack_hw')}\" if n in t else f'{n}=missing' for n in ('vpn_state','ml_wg_mgr')))" 2>/dev/null)
     check "vpn_state and ml_wg_mgr stacks in PSRAM" "$(echo "$S" | grep -q 'vpn_state=True' && echo "$S" | grep -q 'ml_wg_mgr=True' && echo 1 || echo 0)" "$S"
+    derp_stack_check
 
     # --- internal RAM flat (the leak gate of the same day): a refused relay
     # cost 21 KB PSRAM + 230 B internal per attempt, several a minute
@@ -605,11 +651,16 @@ print(' '.join(f\"{n}={t[n].get('stack_ext')}/{t[n].get('stack_hw')}\" if n in t
                 sed -n 's/.*"state":"\([a-z]*\)".*"ts_peers":\([0-9]*\),"derp":\([a-z]*\).*/state=\1 peers=\2 derp=\3/p')
             L=$(tsq status 2>/dev/null | grep -i wican | sed 's/  */ /g' | cut -c1-90)
             echo "$(date +%H:%M:%S)  DUT ${S:-unreachable!}  int free $(dut_int_free) B  |  ${L:-peer line missing}"
+            derp_stack_check
         done
         M1=$(dut_int_free)
         check "internal RAM flat over the soak" "$([ -n "$M0" ] && [ -n "$M1" ] && [ $((M0 - M1)) -lt 4096 ] && echo 1 || echo 0)" "${M0} -> ${M1} B"
     fi
     HEALTH=$(dut "-f http://${DUT_IP}/api/status")
+    BOOT_END=$(boot_mark)
+    check "no restart during the traffic legs or soak" \
+        "$([ -n "$BOOT_START" ] && [ "$BOOT_END" = "$BOOT_START" ] && echo 1 || echo 0)" \
+        "$BOOT_START -> $BOOT_END"
     check "zero error logs and zero faults" \
         "$(echo "$HEALTH" | grep -q '\"log_errors\":0' &&
            echo "$HEALTH" | grep -q '\"faults\":0' && echo 1 || echo 0)"
@@ -624,7 +675,7 @@ status)
 down)
     echo "=== tearing down ==="
     RESTORED=1
-    for comp in vpn_manager data_destinations; do
+    for comp in $SNAP_COMPS; do
         if [ -f "$SNAPSHOT/$comp.json" ]; then
             CODE=$($PI "curl -s -m 10 -o /dev/null -w '%{http_code}' -X PUT \
                 http://${DUT_IP}/api/settings/${comp} -H 'Content-Type: application/json' \
@@ -639,7 +690,7 @@ down)
         dut "-f -X POST http://${DUT_IP}/api/settings/submit" >/dev/null || RESTORED=0
         echo "DUT settings restore submitted (planned restart)"
         sleep 8
-        for comp in vpn_manager data_destinations; do
+        for comp in $SNAP_COMPS; do
             end=$((SECONDS+90))
             MATCH=0
             while [ $SECONDS -lt $end ]; do
@@ -675,7 +726,7 @@ down)
         left=\$(ls /var/lib/headscale /etc/headscale $BASE/tsb_state $BASE/tsb2_state $KEYFILE 2>/dev/null | wc -l)
         echo \"betty: control+peer down, state+keys wiped (residue files: \$left)\"" || exit 1
     if [ "$RESTORED" = "1" ] && [ -d "$SNAPSHOT" ]; then
-        rm "$SNAPSHOT/vpn_manager.json" "$SNAPSHOT/data_destinations.json"
+        for comp in $SNAP_COMPS; do rm "$SNAPSHOT/$comp.json"; done
         rmdir "$SNAPSHOT"
     fi
     [ "$RESTORED" = "1" ] || exit 1

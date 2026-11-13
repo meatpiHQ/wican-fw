@@ -2,6 +2,72 @@
 
 Command: `.\test.ps1 tspublic` (= `bash tools/testbench/vpn/ts_public_soak.sh run 3` with `DUT_IP` set to the DUT's bench-AP address, Git Bash by path; by hand: `DUT_IP=10.42.1.194 bash tools/testbench/vpn/ts_public_soak.sh up | status | down | run [minutes]`)
 
+`-SoakMinutes N` changes only the final soak (default 3). Since 2026-11-13,
+the DERP task must be present on a PSRAM stack with at least 1024 B headroom
+after connection, after the traffic legs and at every soak sample. The boot
+count and unexpected-reset count must stay unchanged through the traffic and
+soak. A restart that hides the task's minimum is a failure, not a fresh baseline.
+The task iterator suspends only one core and can omit a task moved by the other:
+missing entries get at most three snapshots, with an explicit warning. A real
+low watermark is never retried away or treated as a missing entry.
+Run all other DUT-changing stages separately: `stackaudit` can restart the DUT
+for its ephemeral DTC-task check.
+
+`.\test.ps1 tspublic stop-dial` (prints `TS DERP STOP PASS`, ~15 min) runs
+the disposable fixture's `up`, then `tools/testbench/vpn/ts_derp_stop_bench.py`,
+then `down` in finally. MQTT is parked for this DERP-only fault injection and
+its full settings document is restored alongside the VPN and destinations.
+It is a fault-injection reproduction, not a normal soak.
+
+**What is judged is ownership**, read from the stage's console capture
+(`--console`, passed by `test.ps1`; the bench refuses to run without it).
+Each of the client's four tasks logs its start and its end, the client logs
+`Destroyed`. The rule: the client is never destroyed, and no task of a new
+client is started, while a task of the old client has not said it ended.
+A stop may miss its 30-second deadline: one relay dial into a dead uplink
+blocks in `connect()` for about a minute (seen on the fix at 18:09). That is
+counted and reported; the client must then be kept until the task has ended
+(`destroy deferred: a task still owns the instance`). How long a stop takes
+is reported, never judged. `python tools/testbench/vpn/ts_derp_stop_bench.py
+--dut x --judge <console capture>` applies the rule to a capture of an
+earlier run, without a device.
+
+Three legs (`--legs abc` by hand picks some):
+
+- **A, the stalled dial.** It resets established TCP/443 connections from
+  this DUT on the Pi and drops new dials, then triggers the non-persistent
+  Wi-Fi trial to `wican-bench-nowhere` while the relay task retries. A
+  private nftables table matches only this DUT's TCP/443 traffic and is
+  removed in finally. The VPN must return, recover its relay, and survive a
+  40-second watch for delayed callbacks.
+- **B, the uplink lost with the relay up** (since 2026-11-13 18:00). The
+  same Wi-Fi trial, twice. The relay's own read error usually closes the
+  connection a moment before the stop arrives.
+- **C, the control connection lost with the relay up.** The DUT's connection
+  to the control server (the address and port of `/api/vpn`'s `endpoint`) is
+  reset on the Pi and its new dials dropped, twice. The relay stays
+  connected, the client reports itself not connected, and after 30 s of that
+  the VPN manager stops it: a stop that finds the relay connected, every
+  time. The block comes off when the relay task has ended.
+
+After every stop of legs B and C: the VPN and the relay back, a new `DERP I/O
+task exiting (stack: N B never used)` line with N of at least 1024 (the relay
+task closes its own TLS connection as it ends, on its own stack), and the
+free memory, read 8 s behind "relay back" with the new client up (the
+largest of three samples). Between the first and the last of those readings
+PSRAM free may fall by 16 KiB at most and internal RAM by 4 KiB: like with
+like, a client of the same age each time. A reading from before the first
+stop is not comparable and is not used. `vpn_state` keeps at least 1024 B of
+its stack. At the end: the boot count and the unexpected resets unchanged,
+zero error logs, no new fault code.
+
+The device's log ring cannot stand in for the capture: it holds 16 KB and a
+Tailscale reconnect rewrites it within seconds (the relay map alone is
+longer). The first cut of this bench looked for the missed deadline there
+and could not have seen it; it also failed a run whose VPN took longer than
+30 s to return, which is what a stop behind a blocked dial legitimately does
+on the fix.
+
 Needs: betty (the root ssh alias; headscale 0.23.0 and tailscale 1.78.1 under `/opt/tsbench`, `provision` once) + rpi001 (the script talks to the DUT through the Pi, no tunnel) + the DUT on the bench AP with an internet path (the Pi's NAT or the dongle's LTE)
 
 Index row and the other stages: [../TESTING.md](../TESTING.md). The row
@@ -66,6 +132,99 @@ failure fails the stage even if the traffic checks passed.
 
 **Records.**
 
+- 2026-11-13 15:37: the first crash-report investigation run reported PASS,
+  but is **not an uninterrupted crash reproduction**: the concurrent
+  `stackaudit` stage caused two settings restarts during it. This exposed the
+  missing restart check, now enforced above. The installed image was
+  `017f3e07d4fb6ddc` (a development beta.9), not the reporter's
+  `c69c8478ea78bd97`. The reporter's exact binary and ELF are archived under
+  `internal/release_6.0.0-beta.9` and `internal/elf`; version text alone is not
+  sufficient to select the reproduction image. No crash fix was inferred
+  from this run.
+- 2026-11-13 15:56: isolated development-image baseline
+  `017f3e07d4fb6ddc`, 1033.2 s, PASS. DERP headroom 9972 B throughout,
+  PSRAM placement confirmed, boot marker `21 0` unchanged, internal free
+  85,015 B flat, zero errors/faults, settings restored and fixture removed.
+  This still is not the reporter's image; the exact-image run follows.
+- 2026-11-13 16:21: exact reported image `c69c8478ea78bd97`, 1059.5 s,
+  no restart (`2 0` unchanged), no errors/faults, DERP headroom 9912 B on
+  present snapshots. The stage was FAIL: an omitted task was incorrectly
+  reported as 0 B by the new check, and the final internal-free sample was
+  4472 B below its first sample. This was not a reproduced stack overflow.
+- 2026-11-13 16:50: stalled-dial reproduction on that exact image. DERP
+  retried after `Stopping...`, failed to exit in 30 seconds, and was
+  immediately followed by `Stopped`, another `Stopping...`, `Destroyed`
+  and a replacement client. A delayed `lwip_setsockopt_callback` then
+  crashed while signaling a corrupted FreeRTOS wait list. The initial
+  restore was interrupted; the retained snapshots were restored with `down`
+  afterward. Report `2026-11-13_1650_tspublic_stop-dial.md`.
+- 2026-11-13 17:14: independent reproduction with MQTT parked. VPN
+  returned in 36.5 s after the missed join deadline; the delayed-callback
+  watch caught another LoadProhibited, this time from `err_tcp` under
+  `tcp_slowtmr`. All three settings documents and the firewall were restored.
+  Report `2026-11-13_1714_tspublic_stop-dial.md`. These reproduce the
+  live-task ownership bug, not the original report's exact stack-overflow
+  signature. Judged afterwards from their console captures (`--judge`),
+  both show the rule broken twice: `the client was destroyed while its derp
+  task still ran` and `a second derp task was started over a live one`.
+- 2026-11-13 17:51, the fix (ownership, the relay closed by its task; ELF
+  `bd2b44b0e6be2385`): leg A, VPN back after 13.7 s; `Stopping...`, the
+  relay task ended 1.1 s later with 9972 B of its stack never used,
+  `Destroyed` 1.2 s after the stop was asked for; nothing in the 40 s
+  behind it. The stage FAILED on the bench: its new leg looked for the
+  relay task's line in the device's log ring, which a reconnect had
+  rewritten. `2026-11-13_1751_tspublic_stop-dial.md`. The bench reads the
+  console capture since.
+- 2026-11-13 18:00, the same image: leg A 16.4 s, the first uplink loss
+  clean. The second caught a relay dial 0.7 s old: the dial stood in
+  `connect()` for 60.3 s (`TCP connect failed: 113`), two stop deadlines
+  were missed, `destroy deferred: a task still owns the instance` and
+  `tailscale shutdown pending: ESP_ERR_TIMEOUT; retaining the client`
+  twice, `Destroyed` 61.7 s after the stop was asked for and under 100 ms
+  after the relay task had ended, the next client connected. No crash, no
+  E line, the rule kept (`--judge`: 2 clients destroyed, 2 deadlines
+  missed, 0 violations). The stage FAILED on the bench, which still took a
+  missed deadline for the bug: that is when the judgement moved to
+  ownership. `2026-11-13_1800_tspublic_stop-dial.md`.
+- 2026-11-13 18:13, a diagnostic image, the fix WITHOUT the relay's close
+  (ELF `398666f11f3f8787`), to see what the close is worth: ownership kept
+  (5 clients destroyed, 2 deadlines missed), the client stopped 31 and 35 s
+  after its control connection went, and behind the four stops of legs B
+  and C 279,564 B of PSRAM and 4,380 B of internal RAM gone. Expected FAIL.
+  It also showed `E ml_coord: TCP connect failed: 113`, once per attempt at
+  the blocked control server: W since. `2026-11-13_1813_tspublic_stop-dial.md`.
+- 2026-11-13 18:30, with the close and the W line (ELF `a5a4e94db5cd0e1e`):
+  ownership kept, zero E lines, internal RAM 92,339 -> 92,227 B, and PSRAM
+  still 70,124 B down over the four stops. FAIL, and a second leak: read
+  behind every stop by hand (18:51, `--legs bc`), PSRAM free went 2,796,708,
+  2,779,324, 2,761,716, 2,744,024 B, about 17.5 KB per stop whatever its
+  reason. The client's WireGuard device was never freed (the components
+  repo, `microlink/PROVENANCE.md` 24). `2026-11-13_1830_tspublic_stop-dial.md`.
+- 2026-11-13 19:01, by hand on the image with the device freed (ELF
+  `6da5ee5883b2fde8`), the same four stops: 2,814,552, 2,814,508,
+  2,814,144, 2,814,148 B of PSRAM free, internal 93,011, 93,023, 92,791,
+  92,715 B; both uplink losses caught a dial in flight this time (69 s
+  each, four deadlines missed, the client kept each time); `vpn_state`
+  3736 B of stack never used; `TS DERP STOP PASS`.
+- **2026-11-13 19:07: TS DERP STOP PASS**, 814.9 s, the stage whole on that
+  image (ELF `6da5ee5883b2fde8`, image 4,110,128 B).
+  Leg A: VPN back after 13.7 s, the relay task ended 2.0 s after
+  `Stopping...` with 9916 B never used, nothing in the 40 s behind it.
+  Leg B: 17 s, then 69 s with a dial in flight (two deadlines missed, the
+  client kept). Leg C: the client stopped 32 and 33 s after its control
+  connection went. PSRAM free behind the four stops 2,814,176, 2,813,928,
+  2,813,768, 2,813,772 B, internal 92,339, 92,355, 92,279, 92,203 B; the
+  relay task 9,888 to 10,020 B never used, `vpn_state` 3868 B. Ownership
+  kept over 5 destroyed clients, zero E lines, no restart, no fault, the
+  three settings documents restored. `2026-11-13_1907_tspublic_stop-dial.md`.
+- **2026-11-13 19:21: TS PUBLIC PASS**, 888.7 s, the normal stage on the
+  same image (ELF `6da5ee5883b2fde8`): 56 checks. First relay subnet
+  request 200 in 810 ms, six arrived exactly once, the five requests to the
+  second peer's own address exactly once, the legs after both peers were
+  away, the direct path; `ml_derp_tx` 10,084 B of stack never used at the
+  soak's samples; internal RAM flat over the soak at 85,019 B; boot marker
+  `5 0` unchanged; zero E lines, zero faults; both settings documents
+  restored. `2026-11-13_1921_tspublic.md`.
 - **2026-11-09 17:06: TS PUBLIC PASS**, 834.1 s, the fix for a peer's own
   address and a lapsed session (ELF `8da296f7c66bb2eb`, image 4,075,264 B,
   448 B more than beta.8). `ip4_routes: 100.64.0.0/10 via wg0` 7.2 s after
