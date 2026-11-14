@@ -15,7 +15,7 @@
 # land in test-reports\logs\<run>\ (gitignored).
 #
 param(
-    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'bleram', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'profilee2e', 'slcan', 'j2534auto', 'j2534std', 'j2534vbat', 'j2534vpw', 'multibus', 'kline', 'precan', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'wgcycle', 'tspublic', 'tlschain', 'habackfill', 'garage', 'espnleasy', 'espnlapn', 'usbgps', 'usbdetach', 'abrp', 'backup', 'fwupdate', 'espnlota', 'logclock', 'sdformat', 'obdfw', 'chipprompt', 'carname', 'canfilters', 'destnets', 'canselftest', 'attpstore', 'obdbringup', 'sleepword', 'sleeptrig', 'chipwake', 'connections', 'stackaudit', 'dwc2', 'logsinks', 'release', 'all', 'list')]
+    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'bleram', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'profilee2e', 'slcan', 'j2534auto', 'j2534std', 'j2534vbat', 'j2534vpw', 'multibus', 'kline', 'precan', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'wgcycle', 'tspublic', 'tlschain', 'tlsbyip', 'habackfill', 'garage', 'espnleasy', 'espnlapn', 'usbgps', 'usbdetach', 'abrp', 'backup', 'fwupdate', 'espnlota', 'logclock', 'sdformat', 'obdfw', 'chipprompt', 'carname', 'canfilters', 'destnets', 'canselftest', 'attpstore', 'obdbringup', 'sleepword', 'sleeptrig', 'chipwake', 'connections', 'stackaudit', 'dwc2', 'logsinks', 'release', 'all', 'list')]
     [string]$What,
     [Parameter(Position = 1)][string]$Component,
     [ValidateSet('6.0.2', '6.1')][string]$Idf = '6.1',  # the ESP-IDF the build stages use (6.1 since 6.0.0-beta.5, 2026-10-27; 6.0.2 stays installed; build.ps1 -Idf has the same table)
@@ -1121,6 +1121,7 @@ function Show-Inventory {
     Write-Host '  wgcycle    - WireGuard torn down while MQTT runs through it, N times (the beta.5 vpn_state crashes, 2026-11-02): wg-bench on the Pi, the broker at its tunnel address, a station trial to a network that does not exist drops the uplink each cycle; connects grows, MQTT returns, no reboot (~30 s per cycle, 10 cycles)'
     Write-Host '  tspublic   - Tailscale on Betty: six DUT-initiated subnet requests over pure relay through rekey (direct UDP blocked), no false direct endpoint, a second peer that opens its session itself and takes five requests to its OWN address, both peers away 200 s until every session key expired and the request to the peer''s own address again (2026-11-09), direct DISCO/ICMP/HTTP recovery, PSRAM stacks, flat RAM, zero errors/faults, exact settings restoration and scoped teardown (~15 min; needs betty and the DUT on the Pi''s internet path). Optional component stop-dial (2026-11-13): the same fixture, then Tailscale stopped while its relay misbehaves: the DUT''s TCP/443 reset and its new dials dropped on the Pi, a Wi-Fi trial takes the uplink away during the relay''s retry (nothing crashes in the 40 s behind it), then the uplink taken away twice with the relay up, then the control connection reset twice with the relay up (a stop that finds the relay connected: the relay task closes its own connection and says how much stack it never used, PSRAM and internal RAM flat over those stops). Judged from the console capture: the client is never destroyed, and no task of a new client started, while a task of the old one still runs; a stop that misses its 30 s deadline is counted and must keep the client; prints TS DERP STOP PASS (~15 min)'
     Write-Host '  tlschain   - An HTTPS chain ending in a cross-signed root (Cloudflare under GTS Root R4 as signed by GlobalSign Root CA, 2026-11-03) accepted by the built-in certificate bundle: the HA webhook pointed at such a host must get an HTTP answer, never a transport error; restored afterwards (~40 s; needs internet for the DUT)'
+    Write-Host '  tlsbyip    - HTTPS to an address by IP (2026-11-14, a Home Assistant on SSL): the webhook at https://<the Pi''s address>:8444 with a certificate that names a host only delivers (the chain verified through a certificate set, the name not compared) and no esp-tls warning comes with the pushes; the quieting holds across a wildcard log level and the tag can still be raised by name; restored afterwards (~3 min, 2 planned restarts; the receiver on rpi001 over ssh)'
     Write-Host '  habackfill - Store and forward (2026-11-06): a drive recorded on the SD card as JSON lines reaches the bench Home Assistant''s long-term statistics once the pushes return, through the export route and its cursor; the Catch up history button, nothing imported twice, the sleep countdown pushed out while the log is read (the supply at 12.5 V), everything restored (~12 min, 2 planned restarts; needs the bench HA on rpi001, the simulator answering 010C, internal/bench_ha_credentials.json)'
     Write-Host '  espnleasy  - the ESPNetLink easy-setup surfaces on the DUT (2026-10-13): the usb summary on /api/status against /api/espnetlink, the sim_pin key (a no-op PUT, no restart), the UI doors in the served page, the GPS hint counting away from home (ap off on the P4 for 100 s, home again) (~6 min; needs the P4 daemon)'
     Write-Host '  espnlapn   - the carrier settings relay in the USB modes (2026-10-28): a bench APN set on the WiCAN reaches the dongle through the share pass (one planned dongle restart), a plain WiCAN restart writes nothing, the APN restored as found and the LTE back (~8 min, 3 to 4 planned WiCAN restarts, 2 dongle restarts; the dongle on the connector in a USB mode with its console on; its LTE is down while the bench APN is on it)'
@@ -1859,6 +1860,30 @@ try {
                     $out = & $py -u "$repo\tools\testbench\ha\tls_chain_bench.py" '--dut' 'localhost:18083' 2>&1 | ForEach-Object { Write-Host $_; $_ }
                     Save-StageLog 'tls_chain' $out
                     if (-not ($out | Select-String -Quiet 'TLS CHAIN PASS')) { throw 'no TLS CHAIN PASS (the DUT on the bench AP with internet? does the host still serve the cross-signed chain? testing/tlschain.md)' }
+                } finally {
+                    if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
+                    Stop-ConsoleTail $con
+                }
+            }
+        }
+        'tlsbyip' {
+            # HTTPS to an address by IP (2026-11-14, a Home Assistant on SSL,
+            # whose integration registers its address by IP): the pushes
+            # deliver through a certificate set with the name not compared,
+            # and esp-tls's warning on every such connection stays out of the
+            # log, across a wildcard level too; the tag can be raised by name.
+            # The Pi's HTTPS receiver over ssh, two planned restarts, the
+            # settings back as found. PC-side through the tunnel.
+            Invoke-Stage 'HTTPS to an address by IP: delivered, the log quiet' {
+                $py = $script:BenchPy
+                $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18084:${DutIp}:80", $BenchHost)
+                $con = Start-ConsoleTail 'tls_by_ip'
+                try {
+                    Start-Sleep -Seconds 3
+                    if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (port 18084 busy?)" }
+                    $out = & $py -u "$repo\tools\testbench\ha\tls_by_ip_bench.py" '--dut' 'localhost:18084' '--pi' $BenchHost '--pi-ip' '10.42.1.1' 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    Save-StageLog 'tls_by_ip' $out
+                    if (-not ($out | Select-String -Quiet 'TLS BY IP PASS')) { throw 'no TLS BY IP PASS (the DUT on the bench AP? the Pi reachable over ssh, port 8444 on it free? testing/tlsbyip.md)' }
                 } finally {
                     if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
                     Stop-ConsoleTail $con

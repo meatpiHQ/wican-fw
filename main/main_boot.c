@@ -225,6 +225,8 @@ void main_boot_health_report(void)
     cap_check("cmdline", used, cap);
     log_manager_sinks_capacity(&used, &cap);
     cap_check("log_sinks", used, cap);
+    log_manager_levels_capacity(&used, &cap);
+    cap_check("log_levels", used, cap);
     bridge_manager_capacity(&eu, &ec, &tu, &tc);
     cap_check("bridge_ep", (size_t)eu, (size_t)ec);
     cap_check("bridge_tr", (size_t)tu, (size_t)tc);

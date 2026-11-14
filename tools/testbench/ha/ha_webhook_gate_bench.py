@@ -14,6 +14,11 @@ Steps / checks:
   3. within OBSERVE s: >= 2 posts at the receiver; the first carries
      status.device_id == /api/info device_id and NO autopid_data;
      GET /api/webhook shows status "ok" + success_count >= 1
+  3b. what the integration asks next, its history catch-up: GET
+     /api/logger/export and /api/logger/gpx on a device whose params stream
+     is not jsonl or csv (every device without Store and forward) answer 400
+     and leave no W line of the HTTP server in the log ring (2026-11-14;
+     skipped when the DUT logs jsonl or csv)
   4. restore autopid to what it was (one more planned reboot when it was on),
      DELETE /api/webhook -> 204
 
@@ -34,6 +39,7 @@ Verdict line: HA WEBHOOK GATE PASS / FAIL.
 import argparse
 import http.server
 import json
+import re
 import socket
 import subprocess
 import sys
@@ -97,6 +103,21 @@ def wait_up(deadline_s=150):
             pass
         time.sleep(2)
     return None
+
+
+def httpd_w_lines():
+    """The W lines of the HTTP server in the log ring (what a refused request
+    used to leave: `httpd_txrx: httpd_resp_send_err: ...` and `httpd_uri: uri
+    handler execution failed`)."""
+    code, ring = api("/api/logs/ring", timeout=15)
+    if code != 200 or not isinstance(ring, str):
+        return set()
+    out = set()
+    for ln in ring.splitlines():
+        ln = re.sub(r"\x1b\[[0-9;]*m", "", ln)
+        if ln.startswith("W (") and (") httpd_txrx:" in ln or ") httpd_uri:" in ln):
+            out.add(ln)
+    return out
 
 
 def set_autopid_enabled(want):
@@ -325,6 +346,29 @@ def main():
         check("GET /api/webhook status=ok + success_count>=1",
               wh.get("status") == "ok" and wh.get("success_count", 0) >= 1,
               f"status={wh.get('status')} n={wh.get('success_count')}")
+
+        # 3b) what the integration asks next (its history catch-up, at every
+        # start and every reconnect): the log export. A device without Store
+        # and forward logs sqlite, so the answer is 400: an expected answer,
+        # which must cost no log line (two W lines of httpd per request
+        # until 2026-11-14).
+        code, dl = api("/api/settings/data_logger")
+        fmt = dl.get("format") if code == 200 and isinstance(dl, dict) else None
+        if fmt in ("jsonl", "csv"):
+            print(f"SKIP: the export's 400 (the params stream is {fmt} on this DUT)")
+        else:
+            before = httpd_w_lines()
+            c1, b1 = api("/api/logger/export?stream=params&since=0:0&limit=1")
+            c2, b2 = api("/api/logger/gpx")
+            time.sleep(1.5)
+            new = httpd_w_lines() - before
+            check("the log export and the GPX track answer 400 on a stream that "
+                  "is not jsonl or csv",
+                  c1 == 400 and c2 == 400 and "not jsonl or csv" in str(b1)
+                  and "not jsonl or csv" in str(b2),
+                  f"format={fmt} export={c1} gpx={c2} body={str(b1)[:40]!r}")
+            check("that answer costs no httpd W line", not new,
+                  " | ".join(sorted(new))[:220])
     except Exception as e:  # noqa: BLE001 - the verdict line must still print
         check(f"bench step raised {type(e).__name__}", False, str(e)[:120])
     finally:

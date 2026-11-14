@@ -57,4 +57,9 @@ served a Let's Encrypt chain under ISRG Root X1 that the bundle trusts
 either way; check the chain before blaming the device when the leg fails.
 The bench needs the DUT's internet path (DNS and 443 out); the webhook
 poster retries every `interval` seconds, so a second attempt lands within
-10 s of the registration.
+10 s of the registration. **The restore puts back the URL and the enable
+only** (found 2026-11-14): on a DUT found unregistered the `DELETE` keeps
+the bench's interval, so `ha_webhooks.interval_s` stays at 5 (60 as found)
+and the settings read `pending_reboot`. Until the bench does it itself:
+`POST /api/webhook {"url":"http://127.0.0.1/x","enabled":false,"interval":<found>}`
+and a `DELETE` put it back without a restart.
