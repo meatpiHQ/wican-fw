@@ -883,6 +883,8 @@
    "manual_override": false,
    "cert_set": "",
    "networks": "",
+   "rev": "",
+   "rev_sum": "",
    "cli": true
   },
   "schema": {
@@ -918,6 +920,12 @@
      "type": "string"
     },
     "networks": {
+     "type": "string"
+    },
+    "rev": {
+     "type": "string"
+    },
+    "rev_sum": {
      "type": "string"
     },
     "cli": {

@@ -15,7 +15,7 @@
 # land in test-reports\logs\<run>\ (gitignored).
 #
 param(
-    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'bleram', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'profilee2e', 'slcan', 'j2534auto', 'j2534std', 'j2534vbat', 'j2534vpw', 'multibus', 'kline', 'precan', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'wgcycle', 'tspublic', 'tlschain', 'tlsbyip', 'habackfill', 'garage', 'espnleasy', 'espnlapn', 'usbgps', 'usbdetach', 'abrp', 'backup', 'fwupdate', 'espnlota', 'logclock', 'sdformat', 'obdfw', 'chipprompt', 'carname', 'canfilters', 'destnets', 'canselftest', 'attpstore', 'obdbringup', 'sleepword', 'sleeptrig', 'chipwake', 'connections', 'stackaudit', 'dwc2', 'logsinks', 'release', 'all', 'list')]
+    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'bleram', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'profilee2e', 'slcan', 'j2534auto', 'j2534std', 'j2534vbat', 'j2534vpw', 'multibus', 'kline', 'precan', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'wgcycle', 'tspublic', 'tlschain', 'tlsbyip', 'pushreply', 'habackfill', 'garage', 'espnleasy', 'espnlapn', 'usbgps', 'usbdetach', 'abrp', 'backup', 'fwupdate', 'espnlota', 'logclock', 'sdformat', 'obdfw', 'chipprompt', 'carname', 'canfilters', 'destnets', 'canselftest', 'attpstore', 'obdbringup', 'sleepword', 'sleeptrig', 'chipwake', 'connections', 'stackaudit', 'dwc2', 'logsinks', 'release', 'all', 'list')]
     [string]$What,
     [Parameter(Position = 1)][string]$Component,
     [ValidateSet('6.0.2', '6.1')][string]$Idf = '6.1',  # the ESP-IDF the build stages use (6.1 since 6.0.0-beta.5, 2026-10-27; 6.0.2 stays installed; build.ps1 -Idf has the same table)
@@ -55,6 +55,11 @@ param(
                               # precan stage: a car never seen stored at
                               # start-up, the detection on an ISO 14230-4
                               # car, and the way back (three writes)
+    [switch]$Untrusted,       # pushreply stage: add the leg with the station's
+                              # network marked untrusted (the DUT's USB-C
+                              # cabled to this PC: the leg talks to the DUT
+                              # over its USB network link while the gate
+                              # closes the station; three more restarts)
     [switch]$NoConsole,       # PC bench stages: do not open the DUT's console
                               # port beside the run (Start-ConsoleTail)
     [ValidateRange(1, 120)][int]$SoakMinutes = 3, # tspublic: final continuous soak
@@ -1122,6 +1127,7 @@ function Show-Inventory {
     Write-Host '  tspublic   - Tailscale on Betty: six DUT-initiated subnet requests over pure relay through rekey (direct UDP blocked), no false direct endpoint, a second peer that opens its session itself and takes five requests to its OWN address, both peers away 200 s until every session key expired and the request to the peer''s own address again (2026-11-09), direct DISCO/ICMP/HTTP recovery, PSRAM stacks, flat RAM, zero errors/faults, exact settings restoration and scoped teardown (~15 min; needs betty and the DUT on the Pi''s internet path). Optional component stop-dial (2026-11-13): the same fixture, then Tailscale stopped while its relay misbehaves: the DUT''s TCP/443 reset and its new dials dropped on the Pi, a Wi-Fi trial takes the uplink away during the relay''s retry (nothing crashes in the 40 s behind it), then the uplink taken away twice with the relay up, then the control connection reset twice with the relay up (a stop that finds the relay connected: the relay task closes its own connection and says how much stack it never used, PSRAM and internal RAM flat over those stops). Judged from the console capture: the client is never destroyed, and no task of a new client started, while a task of the old one still runs; a stop that misses its 30 s deadline is counted and must keep the client; prints TS DERP STOP PASS (~15 min)'
     Write-Host '  tlschain   - An HTTPS chain ending in a cross-signed root (Cloudflare under GTS Root R4 as signed by GlobalSign Root CA, 2026-11-03) accepted by the built-in certificate bundle: the HA webhook pointed at such a host must get an HTTP answer, never a transport error; restored afterwards (~40 s; needs internet for the DUT)'
     Write-Host '  tlsbyip    - HTTPS to an address by IP (2026-11-14, a Home Assistant on SSL): the webhook at https://<the Pi''s address>:8444 with a certificate that names a host only delivers (the chain verified through a certificate set, the name not compared) and no esp-tls warning comes with the pushes; the quieting holds across a wildcard log level and the tag can still be raised by name; restored afterwards (~3 min, 2 planned restarts; the receiver on rpi001 over ssh)'
+    Write-Host '  pushreply  - Settings in the reply to a push (2026-11-14): a stand-in for Home Assistant on the Pi answers the DUT''s pushes with webhook settings; taken and reported as the new revision, the same again without a flash write, refused when not JSON, too long, a bad field, pinned, or from a server a registration would not be taken from (plain http or https by IP to a public address); the revision gone after a change through the settings route; restored afterwards (~7 min, 3 planned restarts; -Untrusted adds the station''s network marked untrusted, the DUT''s USB-C on this PC, 3 more restarts)'
     Write-Host '  habackfill - Store and forward (2026-11-06): a drive recorded on the SD card as JSON lines reaches the bench Home Assistant''s long-term statistics once the pushes return, through the export route and its cursor; the Catch up history button, nothing imported twice, the sleep countdown pushed out while the log is read (the supply at 12.5 V), everything restored (~12 min, 2 planned restarts; needs the bench HA on rpi001, the simulator answering 010C, internal/bench_ha_credentials.json)'
     Write-Host '  espnleasy  - the ESPNetLink easy-setup surfaces on the DUT (2026-10-13): the usb summary on /api/status against /api/espnetlink, the sim_pin key (a no-op PUT, no restart), the UI doors in the served page, the GPS hint counting away from home (ap off on the P4 for 100 s, home again) (~6 min; needs the P4 daemon)'
     Write-Host '  espnlapn   - the carrier settings relay in the USB modes (2026-10-28): a bench APN set on the WiCAN reaches the dongle through the share pass (one planned dongle restart), a plain WiCAN restart writes nothing, the APN restored as found and the LTE back (~8 min, 3 to 4 planned WiCAN restarts, 2 dongle restarts; the dongle on the connector in a USB mode with its console on; its LTE is down while the bench APN is on it)'
@@ -1884,6 +1890,35 @@ try {
                     $out = & $py -u "$repo\tools\testbench\ha\tls_by_ip_bench.py" '--dut' 'localhost:18084' '--pi' $BenchHost '--pi-ip' '10.42.1.1' 2>&1 | ForEach-Object { Write-Host $_; $_ }
                     Save-StageLog 'tls_by_ip' $out
                     if (-not ($out | Select-String -Quiet 'TLS BY IP PASS')) { throw 'no TLS BY IP PASS (the DUT on the bench AP? the Pi reachable over ssh, port 8444 on it free? testing/tlsbyip.md)' }
+                } finally {
+                    if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
+                    Stop-ConsoleTail $con
+                }
+            }
+        }
+        'pushreply' {
+            # Settings in the reply to a push (2026-11-14): Home Assistant
+            # hands its webhook settings to a device it cannot reach in its
+            # reply to the device's own push. A stand-in for Home Assistant
+            # on the Pi (plain http and https, a public address on its
+            # loopback and an mDNS name for the run) answers the pushes the
+            # way each leg asks: taken, the same again, refused, and from
+            # whom. Three planned restarts, the settings back as found.
+            # -Untrusted adds the station's network marked untrusted, over
+            # the DUT's USB network link (its USB-C on this PC). PC-side
+            # through the tunnel.
+            Invoke-Stage 'settings in the reply to a push: taken, left alone, refused' {
+                $py = $script:BenchPy
+                $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18087:${DutIp}:80", $BenchHost)
+                $con = Start-ConsoleTail 'push_reply'
+                try {
+                    Start-Sleep -Seconds 5
+                    if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (port 18087 busy?)" }
+                    $benchArgs = @('--dut', '127.0.0.1:18087', '--pi', $BenchHost, '--pi-ip', '10.42.1.1')
+                    if ($Untrusted) { $benchArgs += '--untrusted' }
+                    $out = & $py -u "$repo\tools\testbench\ha\push_reply_bench.py" @benchArgs 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    Save-StageLog 'push_reply' $out
+                    if (-not ($out | Select-String -Quiet 'PUSH REPLY PASS')) { throw 'no PUSH REPLY PASS (the DUT on the bench AP? the Pi reachable over ssh with sudo, ports 8447 and 8448 on it free, avahi running? testing/pushreply.md)' }
                 } finally {
                     if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
                     Stop-ConsoleTail $con

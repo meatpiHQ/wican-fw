@@ -887,6 +887,8 @@
    "manual_override": false,
    "cert_set": "",
    "networks": "",
+   "rev": "",
+   "rev_sum": "",
    "cli": true
   },
   "schema": {
@@ -922,6 +924,12 @@
      "type": "string"
     },
     "networks": {
+     "type": "string"
+    },
+    "rev": {
+     "type": "string"
+    },
+    "rev_sum": {
      "type": "string"
     },
     "cli": {
@@ -5454,7 +5462,9 @@ async function settingsForm(component,keys,opts={}){
   const schema=opts.schema||await api("/api/settings/"+component+"/schema");
   delete values.degraded;delete values.pending_reboot;
   const props=(schema&&schema.properties)||{};
-  const list=(keys||Object.keys(props)).filter(k=>props[k]);
+  /* opts.hide=[keys]: no row at all for a key a person never sets (the
+     value stays in `values` and goes out with the save unchanged) */
+  const list=(keys||Object.keys(props)).filter(k=>props[k]&&!(opts.hide||[]).includes(k));
   /* progressive disclosure: while a component is disabled, only its
      enable switch shows. opts.visible(state)=>keys|null overrides
      (null = all); opts.visible:false disables gating.
@@ -6690,6 +6700,9 @@ PAGES.automate=async(view,sub)=>{
     const haVals=await api("/api/settings/ha_webhooks");
     const haRows=await networksRowPicker(await certSetPicker(
       await settingsForm("ha_webhooks",null,{values:haVals,
+        /* rev + rev_sum (2026-11-14): the revision Home Assistant gave the webhook settings, written by its
+           registration or its reply to a push, never by a person: no row, the values ride along in the save */
+        hide:["rev","rev_sum"],
         advancedExcept:["enabled","interval_s","data_mode","gzip","networks"]}),"ha_webhooks",haVals),"ha_webhooks",haVals,wifiNames);
     const statsEl=h("div",{class:"rowflex",style:"flex-wrap:wrap;gap:8px;margin-top:10px"});
     const paint=async()=>{const wh=await tryGet("/api/webhook");if(!wh)return;

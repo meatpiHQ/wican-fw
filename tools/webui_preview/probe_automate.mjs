@@ -37,6 +37,13 @@ const check = (n, ok) => { console.log((ok ? "PASS " : "FAIL ") + n); if (!ok) p
   check("advanced rows sorted below essentials (HA card)",
     haKeys.indexOf("url") > haKeys.indexOf("data_mode") && haKeys.indexOf("manual_override") > haKeys.indexOf("interval_s"));
   check("no stray null in webhook stats", !/\bnull\b/.test(haCard.textContent));
+  /* rev + rev_sum (2026-11-14, settings in the reply to a push): the revision Home Assistant gave the webhook
+     settings is written by its registration or its reply, never by a person. The card shows no row for either;
+     the values stay in the object the card stages, so a save sends them back unchanged */
+  const haSchema = Object.keys(w.__mockSettings.ha_webhooks.schema.properties);
+  check("HA card: the schema has rev and rev_sum, the card has no row for them (" + haKeys.join(",") + ")",
+    haSchema.includes("rev") && haSchema.includes("rev_sum") &&
+    !haKeys.includes("rev") && !haKeys.includes("rev_sum") && haKeys.includes("interval_s") && haKeys.includes("cli"));
   const pollingRows = [...cards[0].querySelectorAll(".frow[data-key]")];
   const visible = pollingRows.filter((r) => r.style.display !== "none").map((r) => r.dataset.key);
   check("polling essentials only (" + visible.join(",") + ")",
