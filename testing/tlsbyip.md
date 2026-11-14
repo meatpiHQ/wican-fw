@@ -59,6 +59,22 @@ The legs:
 
 ## Records
 
+- 2026-11-14 20:20, **the public-certificate leg**, by hand (not a stage: it
+  needs a server of ours on the internet; the kit is kept outside the
+  repository). An HTTPS receiver on that server with a Let's Encrypt
+  certificate for its DNS name, issued that minute by the intermediate YR1,
+  the name only and no address in it: the shape of a Home Assistant on SSL
+  behind a DuckDNS name. The DUT on the image `09e67a3f6bf10e00` with NO
+  certificate set, so its built-in bundle alone, over the internet:
+  by IP 4 of 4 pushes delivered (the chain verified, the name not compared)
+  and no `esp-tls-mbedtls` W line; by name 4 of 4 (the name compared); both
+  URLs registered the way the integration registers them, by IP first, 3 of
+  3; the control, by IP at the Pi's private-CA receiver without a certificate
+  set: none delivered, two failed, `esp_err=ESP_ERR_HTTP_CONNECT` (skipping
+  the name is not skipping the chain). **TLS PUBLIC PASS**, 19 checks, 14
+  pushes at the receiver, no restart, the internal heap's floor 51,056 B. A
+  curl with the public roots agreed with the device's view of the server:
+  verified by name, refused by IP. The certificate was revoked afterwards.
 - 2026-11-14 19:56, the same unit on the image `09e67a3f6bf10e00` (the one
   below plus data_logger's export answer without a log line, the
   uncommitted trees of that evening): **TLS BY IP PASS**, 19 checks, two
@@ -107,6 +123,13 @@ The legs:
 - The W count (`health.log_warnings`) is not asserted: other components may
   warn in the same minute. The bench reads the ring and counts the lines of
   the one tag.
+- A leg that is refused on purpose (a chain the bundle does not know) costs
+  IDF's own E lines, four per attempt (`mbedtls_ssl_handshake returned
+  -0x2700` and the three that follow it), which the DUT's
+  `health.log_errors` keeps until its next restart; and a push that is under
+  way when the webhook is deleted finishes after it and leaves `failed` and a
+  count of 1 in the stats of an unregistered webhook. A second `DELETE` and a
+  planned restart put both back (done after the public-certificate leg).
 - A real Home Assistant on SSL as the receiver (the run of 2026-11-14 that
   found this): `rpi001:~/issue110`, `bench.sh` and `leg.sh` there; Home
   Assistant's `http: ssl_certificate` and the same certificate set on the DUT.
