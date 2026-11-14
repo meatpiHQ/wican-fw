@@ -33,6 +33,9 @@ Legs:
   a6  not JSON, over 2048 bytes, interval 0, a scheme that is not http(s):
       ignored, settings and revision as they were, the pushes delivered
   a7  a 503 with a settings body: not read for settings, the push failed
+  a8  the registration's snapshot carries the four diagnostic keys of the
+      integration's device catalog (`sleep_mode`, `can_protocol`,
+      `ecu_pids_num`, `loop_status`), equal to the device's own answers
   r1  the certificate set selected through the settings route and a restart:
       the settings taken from the reply and their revision survive both
   b1  plain http to a public address: registered WITH a revision (stored,
@@ -86,6 +89,7 @@ import sys
 import threading
 
 work, port, sport = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
+DIAG = ("sleep_mode", "can_protocol", "ecu_pids_num", "loop_status")
 lock = threading.Lock()
 count = 0
 
@@ -103,11 +107,13 @@ class H(http.server.BaseHTTPRequestHandler):
         rev = status.get("webhook_rev")
         with lock:
             count += 1
-            # never the payload: the count, the listener, the path, the revision
-            # and how much status came with it
+            # never the payload: the count, the listener, the path, the revision,
+            # how much status came with it and the four diagnostic keys of the
+            # integration's catalog (leg a8)
             note = {"n": count, "tls": self.server.tls, "path": self.path,
                     "has_rev": rev is not None, "rev": rev,
-                    "status_keys": len(status)}
+                    "status_keys": len(status),
+                    "diag": {k: status[k] for k in DIAG if k in status}}
             with open(work + "/pushes.log", "a") as f:
                 f.write(json.dumps(note) + "\n")
             try:
@@ -275,9 +281,11 @@ class Bench:
     def hook(self):
         return self.dut.get("/api/webhook")
 
-    def settle(self, n=2, timeout=45):
-        """Wait for n more pushes at the receiver; the new ones."""
-        n0 = len(self.pi.pushes())
+    def settle(self, n=2, timeout=45, since=None):
+        """Wait for n more pushes at the receiver; the new ones. `since` is
+        a count taken earlier: the snapshot that follows a registration is
+        at the receiver 0.4 s after it, before a count taken afterwards."""
+        n0 = len(self.pi.pushes()) if since is None else since
         wait_for(lambda: len(self.pi.pushes()) >= n0 + n, timeout)
         return self.pi.pushes()[n0:]
 
@@ -335,6 +343,39 @@ class Bench:
         return st
 
 
+def diag_expected(dut):
+    """The four diagnostic keys as the device's own routes answer them."""
+    st = dut.get("/api/autopid")["stats"]
+    paused = any(st.get(k) for k in ("paused_voltage", "paused_client",
+                                     "paused_diag", "paused_bus"))
+    rows = {p["id"]: f"{p['name']}, {p['detail']}"
+            for p in dut.get("/api/autopid/protocols")["protocols"]}
+    pinned = str(dut.settings("autopid").get("std_protocol", "0"))
+    # the setting pins a protocol, else the current car's record or the search
+    protocols = ([rows[pinned]] if pinned in rows and pinned != "0"
+                 else ["Automatic"] + list(rows.values()))
+    return {
+        "sleep_mode": ["on" if dut.get("/api/sleep")["enabled"] else "off"],
+        "can_protocol": protocols,
+        "ecu_pids_num": [st["pids"]],
+        "loop_status": ["Running" if st["running"]
+                        else "Paused" if paused else "Stopped"],
+    }
+
+
+def leg_diag(b, got):
+    """a8: the catalog's diagnostic sensors have a value to show. No
+    firmware sent these keys before 2026-11-15, so the four sensors Home
+    Assistant makes for every WiCAN stayed unknown."""
+    want = diag_expected(b.dut)
+    b.run.check("a8 the registration's snapshot carries sleep_mode, "
+                "can_protocol, ecu_pids_num and loop_status, as the device's "
+                "own routes answer them",
+                all(k in got and got[k] in want[k] for k in want),
+                f"pushed {got}, the routes "
+                f"{ {k: v if len(v) == 1 else '(the table)' for k, v in want.items()} }")
+
+
 def legs_basic(b, base):
     """a1..a7: plain http to the Pi's private address, a trusted network."""
     run, dut, pi = b.run, b.dut, b.pi
@@ -342,8 +383,9 @@ def legs_basic(b, base):
 
     pi.answer(204)
     found = b.hook()
+    n0 = len(pi.pushes())
     code, r = b.register(url)
-    new = b.settle(3)
+    new = b.settle(3, since=n0)
     run.check("a1 registered without a revision: every push carries "
               "status.webhook_rev, empty",
               code in (200, 201) and isinstance(r, dict) and r.get("rev") == ""
@@ -352,6 +394,7 @@ def legs_basic(b, base):
               f"http {code}, {len(new)} pushes, revs "
               f"{[p['rev'] if p['has_rev'] else None for p in new]}")
     resync_keys = new[0]["status_keys"] if new else 0
+    leg_diag(b, new[0].get("diag", {}) if new else {})
 
     st = b.hook()
     run.check("a2 a 204: nothing changes",
@@ -405,17 +448,24 @@ def legs_basic(b, base):
                    reply("a6a6a6a6", "ftp://10.42.1.1/x", 9), "invalid", st)
 
     pi.answer(503, reply("a7a7a7a7", url, 9))
+    # the counters are compared between two readings taken while the 503 is
+    # what the device gets: a push with the a6 answer can still land between
+    # that leg's last reading and the new answer (one more `ignored`)
     wait_for(lambda: b.hook()["fail_count"] > st["fail_count"], 30)
+    st6 = b.hook()
+    wait_for(lambda: b.hook()["fail_count"] > st6["fail_count"], 30)
     st7 = b.hook()
     run.check("a7 a 503 with a settings body: not read for settings, the "
               "push failed as before",
-              st7["fail_count"] > st["fail_count"] and st7["rev"] == "a3a3a3a3"
+              st7["fail_count"] > st6["fail_count"] and st7["rev"] == "a3a3a3a3"
               and st7["interval"] == 4
-              and st7["reply"]["applied"] == st["reply"]["applied"]
-              and st7["reply"]["ignored"] == st["reply"]["ignored"],
+              and st7["reply"]["applied"] == st6["reply"]["applied"]
+              and st7["reply"]["ignored"] == st6["reply"]["ignored"],
               f"failed +{st7['fail_count'] - st['fail_count']} rev="
               f"{st7['rev']!r} interval={st7['interval']} last_error="
-              f"{st7['last_error']!r}")
+              f"{st7['last_error']!r} applied {st6['reply']['applied']}->"
+              f"{st7['reply']['applied']} ignored {st6['reply']['ignored']}->"
+              f"{st7['reply']['ignored']}")
     pi.answer(204)
     wait_for(lambda: b.hook()["status"] == "ok", 30)
 

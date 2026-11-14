@@ -61,6 +61,14 @@ The legs:
   they were; the pushes counted as delivered.
 - **a7** a `503` with a settings body: not read for settings, the push
   counted as failed, as before.
+- **a8** (2026-11-15) the snapshot that follows the registration carries
+  the four keys of the diagnostic sensors the integration's device catalog
+  gives every WiCAN, each equal to the device's own answer: `sleep_mode`
+  (`GET /api/sleep` `enabled`), `ecu_pids_num` and `loop_status`
+  (`GET /api/autopid` `stats`), `can_protocol` (a row of
+  `GET /api/autopid/protocols` in words, the pinned one when `std_protocol`
+  pins one, or `Automatic`). No firmware sent them before: the four
+  sensors had no value in Home Assistant.
 - **r1** the certificate set selected through the settings route (a full
   `PUT /api/settings/ha_webhooks`, the web interface's way) and a restart:
   the settings taken from the reply and their revision are still there.
@@ -102,6 +110,29 @@ fingerprint stored with it matches the settings in use.
 
 ## Records
 
+- 2026-11-15 08:06, unit 14c19f457fd9 on `dev-v6` @ `f93849d` plus the
+  four diagnostic keys (components `7cbe9b5` plus that change):
+  `.\test.ps1 pushreply`: **PUSH REPLY PASS**, every check of the legs
+  above with the new a8 (pushed `sleep_mode` on, `can_protocol` ISO 15765-4
+  CAN, 11-bit, 500 kbit/s, `ecu_pids_num` 29, `loop_status` Running, each
+  equal to the unit's own route), 25 status keys in the snapshot and 8 in
+  the diff after it, three planned restarts, no reset nobody asked for, no
+  E line, `ha_webhook` stack headroom 11,056 B, the internal heap's floor
+  50,964 B. Report `test-reports/2026-11-15_0806_pushreply.md`. Two runs
+  before it the same morning failed on the bench's own timing, not on the
+  firmware (see Traps: the snapshot counted too late, 07:49; a push between
+  two readings in a7, 07:58); a probe beside them read the snapshot 0.41 s
+  after a registration with all four keys in it.
+- 2026-11-15 08:14 to 08:21, **the four keys in a real Home Assistant**, by
+  hand (the kit: `internal/ha_push_reply/fresh/second_run.sh`): a fresh
+  Home Assistant 2026.11.1 on rpi001, the integration's working tree, the
+  same unit. The four sensors that never had a value read `Running`,
+  `ISO 15765-4 CAN, 11-bit, 500 kbit/s`, `29` and `on`, also after a
+  restart of Home Assistant. Afterwards the unit's webhook settings
+  identical to as found (one planned restart), no fault. The stage beside
+  it, the same build, 08:21: `.\test.ps1 release` **RELEASE TEST PASS**.
+  The host suite: `.\test.ps1 host autopid` 186 tests PASS (the protocol in
+  words is asserted inside the protocol table's test).
 - 2026-11-14 23:27 to 23:42, **end to end with the real integration**, by
   hand (the kit: `internal/ha_push_reply/`, on the Pi `~/pushreply` beside
   the Home Assistant kit `~/issue110`). The bench Home Assistant 2026.2.3 on
@@ -186,6 +217,16 @@ fingerprint stored with it matches the settings in use.
   after https pushes, 2996 B after a reply stored over https. The stack is
   16 KB since. A PSRAM stack overflows silently: the stage keeps the
   headroom as a metric and fails under 512 B.
+- **The snapshot is at the receiver 0.4 s after the registration.** A push
+  count read after the registration's answer can already include it; the
+  legs that judge the snapshot (a3, a8) count from before the registration
+  (`settle(since=...)`). Until 2026-11-15 the first leg counted afterwards
+  and judged a later push as the snapshot whenever the count came second:
+  a3 and a8 failed on a firmware that was right.
+- **A push with the previous leg's answer can land before the next answer
+  is set.** a7 compares the reply counters between two readings taken while
+  its own 503 is in effect, not against the last reading of a6 (one more
+  `ignored` in between failed it on 2026-11-15).
 - **The stats are per boot and a `DELETE` clears them.** `reply.applied`
   and `reply.ignored` are compared as differences, never as absolute
   numbers.
