@@ -1,0 +1,92 @@
+{
+  "car_model": "Porsche: Boxster / Cayman (987.1, 2005-2008)",
+  "note": "ISO 9141-2 (K-line) only: the OBD CAN pins reach the gateway, not the DME. Needs a firmware that reads K-line replies (v6, or a 4.5x build with the fix for issue #1045). Tested on a 2005 Cayman S (DME ME7.8.1).",
+  "init": "ATSP3;",
+  "pids": [
+    {
+      "pid": "010C",
+      "parameters": {
+        "ENGINE_RPM": "[B3:B4]/4"
+      }
+    },
+    {
+      "pid": "010D",
+      "parameters": {
+        "SPEED": "B3"
+      }
+    },
+    {
+      "pid": "0104",
+      "parameters": {
+        "ENGINE_LOAD": "B3*100/255"
+      }
+    },
+    {
+      "pid": "0111",
+      "parameters": {
+        "THROTTLE": "B3*100/255"
+      }
+    },
+    {
+      "pid": "0105",
+      "parameters": {
+        "COOLANT_TMP": "B3-40"
+      }
+    },
+    {
+      "pid": "010F",
+      "parameters": {
+        "INTAKE_AIR_TMP": "B3-40"
+      }
+    },
+    {
+      "pid": "0110",
+      "parameters": {
+        "MAF": "[B3:B4]/100"
+      }
+    },
+    {
+      "pid": "010E",
+      "parameters": {
+        "TIMING_ADV": "B3/2-64"
+      }
+    },
+    {
+      "pid": "0106",
+      "parameters": {
+        "STFT": "B3*100/128-100"
+      }
+    },
+    {
+      "pid": "0107",
+      "parameters": {
+        "LTFT": "B3*100/128-100"
+      }
+    },
+    {
+      "pid": "0108",
+      "parameters": {
+        "STFT_B2": "B3*100/128-100"
+      }
+    },
+    {
+      "pid": "0109",
+      "parameters": {
+        "LTFT_B2": "B3*100/128-100"
+      }
+    },
+    {
+      "pid": "0101",
+      "parameters": {
+        "MIL_ON": "B3:7",
+        "DTC_COUNT": "B3&127"
+      }
+    },
+    {
+      "pid": "0121",
+      "parameters": {
+        "DIST_MIL": "[B3:B4]"
+      }
+    }
+  ]
+}
