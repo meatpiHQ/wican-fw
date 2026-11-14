@@ -50,6 +50,14 @@ Legs:
   c4  the interval changed through the settings route (the web interface's
       way) and a restart: the pushes report no revision; the reply's settings
       go in again
+  g1  a 410 without Home Assistant's marker (no body, another JSON): a failed
+      push, the webhook as it was
+  g2  a 410 with the marker `{"webhook": {"removed": true}}` while the
+      webhook is pinned on the device: kept (pinned)
+  g3  the marker over plain http from a public address: kept (untrusted)
+  g4  the marker from a server a registration is taken from: the webhook is
+      cleared (no address, off, no revision), the status says `removed`, no
+      push follows, the interval stays
   u1  (--untrusted, the DUT's USB-C cabled to the PC) the station's network
       marked untrusted: plain http to a private address refused, https by
       name taken
@@ -602,6 +610,98 @@ def legs_routes(b, base):
             reply("c4c4c4c4", url, 4), "c4c4c4c4", 4, stc)
 
 
+GONE = json.dumps({"webhook": {"removed": True}})
+
+
+def legs_gone(b, args, base):
+    """g1..g4: a 410 Gone, Home Assistant's word that it removed this device
+    (2026-11-15). It could not tell a car that was asleep or away at the
+    removal, so it keeps the removed webhook answering 410 with a marker.
+    Only the marker counts, only from a server a registration would be taken
+    from, and never while the webhook is pinned on the device."""
+    run, dut, pi = b.run, b.dut, b.pi
+    url = base + "-g"
+    plain_pub = f"http://{PUBLIC_IP}:{args.port}{HOOK}-g3"
+
+    def registered(address, **more):
+        """Registered at `address` and pushing; the state then."""
+        pi.answer(204)
+        b.register(address, interval=4, **more)
+        b.settle(2)
+        return b.hook()
+
+    def after_fails(st0, n=2):
+        """The state after n more pushes that failed."""
+        wait_for(lambda: b.hook()["fail_count"] >= st0["fail_count"] + n, 45)
+        return b.hook()
+
+    def kept(st, address):
+        return st["enabled"] and st["url"] == address
+
+    st = registered(url, rev="g1g1g1g1")
+    pi.answer(410)
+    st1 = after_fails(st)
+    pi.answer(410, json.dumps({"webhook": {"removed": False}, "gone": True}))
+    st1 = after_fails(st1)
+    run.check("g1 a 410 without Home Assistant's marker (no body, another "
+              "JSON): a failed push, the webhook as it was",
+              kept(st1, url) and st1["rev"] == "g1g1g1g1"
+              and st1["status"] == "failed" and st1["last_error"] == "http=410"
+              and st1["reply"] == st["reply"],
+              f"enabled={st1['enabled']} rev={st1['rev']!r} status="
+              f"{st1['status']!r} last_error={st1['last_error']!r} reply "
+              f"{st['reply']} -> {st1['reply']}")
+
+    st = registered(url, manual_override=True)
+    pi.answer(410, GONE)
+    st2 = after_fails(st)
+    run.check("g2 the marker while the webhook is pinned on the device: kept "
+              "(pinned)",
+              kept(st2, url) and st2["manual_override"] is True
+              and st2["reply"]["last"] == "pinned"
+              and st2["reply"]["ignored"] > st["reply"]["ignored"]
+              and st2["reply"]["applied"] == st["reply"]["applied"],
+              f"enabled={st2['enabled']} last={st2['reply']['last']!r} ignored "
+              f"{st['reply']['ignored']}->{st2['reply']['ignored']}")
+    registered(url, manual_override=False)
+
+    st = registered(plain_pub, rev="g3g3g3g3")
+    pi.answer(410, GONE)
+    st3 = after_fails(st)
+    run.check("g3 the marker over plain http from a public address: kept "
+              "(untrusted)",
+              kept(st3, plain_pub) and st3["rev"] == "g3g3g3g3"
+              and st3["reply"]["last"] == "untrusted"
+              and st3["reply"]["ignored"] > st["reply"]["ignored"]
+              and st3["reply"]["applied"] == st["reply"]["applied"],
+              f"enabled={st3['enabled']} last={st3['reply']['last']!r} ignored "
+              f"{st['reply']['ignored']}->{st3['reply']['ignored']}")
+
+    st = registered(url, rev="g4g4g4g4")
+    pi.answer(410, GONE)
+    wait_for(lambda: not b.hook()["enabled"], 30)
+    st4 = b.hook()
+    n0 = len(pi.pushes())
+    time.sleep(14)                      # more than three intervals of 4 s
+    later = len(pi.pushes()) - n0
+    doc = dut.settings("ha_webhooks")
+    run.check("g4 the marker from a server a registration is taken from: the "
+              "webhook is cleared (no address, off, no revision), the status "
+              "says removed, no push follows, the interval stays",
+              st4["url"] == "" and not st4["enabled"] and st4["rev"] == ""
+              and st4["status"] == "removed"
+              and st4["reply"]["last"] == "removed"
+              and st4["reply"]["applied"] == st["reply"]["applied"] + 1
+              and later == 0 and st4["interval"] == 4
+              and doc.get("url") == "" and doc.get("enabled") is False
+              and doc.get("interval_s") == 4,
+              f"url={st4['url']!r} enabled={st4['enabled']} rev={st4['rev']!r} "
+              f"status={st4['status']!r} last={st4['reply']['last']!r} applied "
+              f"{st['reply']['applied']}->{st4['reply']['applied']} pushes in "
+              f"14 s: {later}; stored url={doc.get('url')!r} enabled="
+              f"{doc.get('enabled')} interval_s={doc.get('interval_s')}")
+
+
 def submit_and_wait(dut, watch, timeout=150):
     """Submit the staged settings on `dut` and wait for the new boot as seen
     through `watch` (the other way in, where the first one closes)."""
@@ -727,6 +827,7 @@ def main():
         leg_restart(b)
         legs_trust(b, args)
         legs_routes(b, base)
+        legs_gone(b, args, base)
         if args.untrusted:
             legs_untrusted(b, args, base)
         run.metric("push_reply_pushes_at_receiver", len(pi.pushes()))

@@ -89,6 +89,18 @@ The legs:
 - **c4** the interval changed through the settings route and a restart: the
   pushes report no revision (the fingerprint no longer matches); the reply
   that follows puts Home Assistant's settings back.
+- **g1** (2026-11-15, a `410 Gone`: Home Assistant's word that it removed
+  this device) a 410 with no body, then with another JSON: a failed push
+  (`last_error` `http=410`), the webhook as it was, the reply counters
+  untouched.
+- **g2** the marker `{"webhook": {"removed": true}}` while the webhook is
+  pinned on the device: kept, `reply.last` `pinned`.
+- **g3** the marker over plain http from the public address: kept,
+  `reply.last` `untrusted`.
+- **g4** the marker from the Pi's private address: the webhook is cleared
+  (no address, off, no revision, in `GET /api/webhook` and in the stored
+  settings), `status` and `reply.last` read `removed`, no push arrives in
+  the next 14 s, the interval stays.
 - **u0, u1** (`-Untrusted`) the DUT's USB role switched to a network device
   and proven to answer at 192.168.82.1 BEFORE anything is closed; then the
   station's network marked untrusted: the API answers 403 over the station
@@ -109,6 +121,39 @@ torn pair could not lie anyway: the revision is reported only while the
 fingerprint stored with it matches the settings in use.
 
 ## Records
+
+- 2026-11-15 08:58, unit 14c19f457fd9 on `dev-v6` @ `efbded0`, components
+  `a7a614f` plus the 410 answer: `.\test.ps1 pushreply`: **PUSH REPLY PASS**
+  with the new legs g1 to g4. g1: `http=410`, the reply counters untouched;
+  g2: `pinned`, ignored 0 to 2; g3: `untrusted`, ignored 3 to 5; g4: the
+  webhook cleared, `status` and `reply.last` `removed`, applied 1 to 2, no
+  push in 14 s, the stored interval kept. Three planned restarts, no reset
+  nobody asked for, no E line, `ha_webhook` stack headroom 11,012 B, the
+  internal heap's floor 51,036 B. Report
+  `test-reports/2026-11-15_0858_pushreply.md`. The release stage on the
+  same build, 09:25, after the unit's restore: **RELEASE TEST PASS**. The
+  host suite beside it:
+  `.\test.ps1 host ha_webhooks` 11 tests PASS (its first run crashed the test
+  binary: a 410 whose body is a JSON array reached `cJSON_GetObjectItem`
+  without an object check; the check is in, the case stays in the suite).
+- 2026-11-15 09:09 to 09:25, **the 410 answer with the real integration**,
+  by hand (the kit: `internal/ha_push_reply/fresh/third_run.sh`): the unit
+  factory reset and set up with the wizard's requests, a fresh Home
+  Assistant 2026.11.1 on rpi001, the integration's working tree.
+  - The unit silenced (a blackhole route on the Pi), its device removed in
+    Home Assistant: `could not be reached: its next post is answered with
+    410 Gone`. The route gone again: the unit's first push was answered 410,
+    and the unit read `url` empty, `enabled` false, `status` `removed`,
+    `last_error` `http=410 removed in Home Assistant`, `reply.last`
+    `removed`.
+  - The same with Home Assistant restarted in between and no WiCAN entry
+    left: the unit's discovery loaded the stored removals, its next push was
+    answered 410, the unit cleared its webhook.
+  - Added again after each (the registration brings the webhook back,
+    `status` `ok`), and removed once while reachable: cleared by the
+    integration's `DELETE`.
+  - Afterwards the unit restored from its own backup file: 44 settings
+    documents identical, both cars, no fault.
 
 - 2026-11-15 08:06, unit 14c19f457fd9 on `dev-v6` @ `f93849d` plus the
   four diagnostic keys (components `7cbe9b5` plus that change):

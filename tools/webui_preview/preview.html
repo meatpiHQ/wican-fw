@@ -6715,6 +6715,8 @@ PAGES.automate=async(view,sub)=>{
         ...(wh.on_network===false?[chip("Waiting for "+(splitNets(wh.networks).join(", ")||"its networks"),"warn"),
           h("span",{class:"help",style:"flex-basis:100%"},"Not on a selected network"+(wifiNames.current?" (on "+wifiNames.current+" now)":" (no WiFi network now)")+": pushes resume when WiCAN is back on one. Nothing is counted as a failure meanwhile.")]:[]),
         ...(wh.status==="rejected"?[h("span",{class:"help",style:"color:var(--crit)"},"Home Assistant rejected this device's identity: pushes are paused until it re-registers.")]:[]),
+        /* a 410 (2026-11-15): the device was removed in Home Assistant while it could not be told */
+        ...(wh.status==="removed"?[h("span",{class:"help",style:"color:var(--crit);flex-basis:100%"},"This device was removed in Home Assistant, so WiCAN cleared its webhook and stopped pushing. Add the device in Home Assistant again to resume.")]:[]),
         wh.url?h("span",{class:"help",style:"overflow-wrap:anywhere"},"URL: ",h("b",{class:"mono",style:"color:var(--text)"},wh.url)):h("span",{class:"help"},"Not registered: the HA integration registers itself when it discovers the device"));};
     await paint();
     /* Store and forward (2026-11-06): the vehicle parameters logged to the SD
