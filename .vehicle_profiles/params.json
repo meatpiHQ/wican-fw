@@ -140,6 +140,15 @@
       "class": "temperature"
     }
   },
+  "DIST_MIL": {
+    "description": "Distance Traveled with the Malfunction Indicator Lamp On",
+    "settings": {
+      "unit": "km",
+      "class": "distance",
+      "min": "0",
+      "max": "65535"
+    }
+  },
   "DIST_SINCE_FULL_CHARGE": {
     "description": "Distance Traveled Since Last Full Charge",
     "settings": {
@@ -171,6 +180,24 @@
     "settings": {
       "unit": "",
       "class": "none"
+    }
+  },
+  "DTC_COUNT": {
+    "description": "Number of Confirmed Emission-Related Trouble Codes",
+    "settings": {
+      "unit": "",
+      "class": "none",
+      "min": "0",
+      "max": "127"
+    }
+  },
+  "ENGINE_LOAD": {
+    "description": "Calculated Engine Load",
+    "settings": {
+      "unit": "%",
+      "class": "none",
+      "min": "0",
+      "max": "100"
     }
   },
   "ENGINE_OIL_PRES": {
@@ -2523,6 +2550,24 @@
       "max": "1000000"
     }
   },
+  "LTFT": {
+    "description": "Long Term Fuel Trim (bank 1)",
+    "settings": {
+      "unit": "%",
+      "class": "none",
+      "min": "-100",
+      "max": "100"
+    }
+  },
+  "LTFT_B2": {
+    "description": "Long Term Fuel Trim (bank 2)",
+    "settings": {
+      "unit": "%",
+      "class": "none",
+      "min": "-100",
+      "max": "100"
+    }
+  },
   "LV_A": {
     "description": "12v Battery Current",
     "settings": {
@@ -2551,6 +2596,15 @@
     "settings": {
       "unit": "g/s",
       "class": "none"
+    }
+  },
+  "MIL_ON": {
+    "description": "Malfunction Indicator Lamp (check engine) on",
+    "settings": {
+      "unit": "",
+      "class": "none",
+      "min": "0",
+      "max": "1"
     }
   },
   "OCTANE_RATIO_L": {
@@ -2787,11 +2841,29 @@
       "class": "none"
     }
   },
+  "STFT_B2": {
+    "description": "Short Term Fuel Trim (bank 2)",
+    "settings": {
+      "unit": "%",
+      "class": "none",
+      "min": "-100",
+      "max": "100"
+    }
+  },
   "THROTTLE": {
     "description": "throttle position",
     "settings": {
       "unit": "%",
       "class": "none"
+    }
+  },
+  "TIMING_ADV": {
+    "description": "Ignition Timing Advance (cylinder 1)",
+    "settings": {
+      "unit": "°",
+      "class": "none",
+      "min": "-64",
+      "max": "64"
     }
   },
   "TMP_A": {
