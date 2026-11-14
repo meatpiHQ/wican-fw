@@ -9976,7 +9976,7 @@ const FAULT_INFO={
   flash_jobs_refused:["A save did not happen: memory was low","WiCAN could not run its flash worker for want of internal memory, so a settings save, a file write or an update step was refused. Restart WiCAN and repeat the action; report it if it comes back."],
   internal_ram_low:["Internal memory ran low","Free internal memory fell under the safe limit. In that state Bluetooth or the web page can stop answering. Restart WiCAN, and report which features were in use."],
   logger_file_corrupt:["A log file was damaged","The Logger found a damaged file on the SD card, set it aside and went on in a new one. The detail names the file. Usually the card was pulled or the power was lost in the middle of a write."],
-  logger_storage_error:["The Logger cannot write to the SD card","The Logger could not open a file on the card and now tries again every 10 seconds. Check that the card is in and not full; format it from the Logger page if it stays like this."],
+  logger_storage_error:["The Logger cannot write its files","The Logger could not open a file and now tries again every 10 seconds; what it records meanwhile is lost. If the detail says out of internal RAM, the SD card is fine: WiCAN ran short of internal memory (see Internal RAM on this page), so switch off a feature you do not need, or restart WiCAN. Otherwise check that the card is in and not full; format it from the Logger page if it stays like this."],
 };
 function faultCode(code){
   const info=FAULT_INFO[code];

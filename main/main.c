@@ -343,6 +343,12 @@ void app_main(void)
     main_boot_init("settings_manager_start", settings_manager_start);
     main_boot_init("log_manager_start", log_manager_start);
 
+    /* the internal-RAM guard: its 10 s timer latches `internal_ram_low`
+       with the heap's numbers. Never started until 2026-11-14 (the status
+       manager is passive otherwise, so nobody missed the call): a unit at
+       5 KB of internal RAM reported a logger fault and nothing else */
+    main_boot_start("dev_status_manager", dev_status_manager_start);
+
     bool fs_ok = main_boot_start("filesystem", filesystem_start);
     bool sd_ok = main_boot_start("external_storage", external_storage_start);
     /* LED first among the peripherals: boot state is visible early */

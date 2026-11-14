@@ -10,6 +10,32 @@ Host **unit** suites (`components/*/host_test`, 526 tests across 44 components a
 
 **Pi offline:** `bash tools/testbench/host_gcc_wsl.sh <vpn_manager|config_backup>` from WSL compiles that PURE suite with the system gcc + Unity under ASan/UBSan (no IDF build; 2026-10-16, issues #985 to #989: `vpn_manager` 11, `config_backup` 24; add a case per IDF-free suite)
 
+**2026-11-14:** the logger on a unit short of internal RAM (a field report on
+6.0.0-beta.5: `logger_storage_error` detail `params`, no file name, the
+newest log not downloadable, `abort()` in task `dl_writer`; the device half
+and its red reproductions are in [live.md](live.md)). Three suites through
+`.\test.ps1 host <component>` on the Pi, all PASS:
+`data_logger` 45 (3 new, `test_recover.c`:
+`test_open_floor_is_one_kilobyte_in_one_block`, the report's 3.6 KB block
+opens a file now that the stdio buffer is kept and nothing under
+`DL_OPEN_RAM_MIN` does; `test_fault_detail_tells_the_memory_from_the_card`,
+`params` and `can` as before, `params: out of internal RAM` for the heap, a
+buffer too small answers an empty text and never a cut one;
+`test_corrupt_is_no_verdict_under_the_floor`, an engine's "corrupt" counts
+only while the unit can read its card), `filesystem` 17 (3 new,
+`test_path.c`: the descriptor set of the card streams knows only what it was
+told, forgets a closed descriptor and takes its next owner, and a descriptor
+out of range is never a card stream, which sends it to the flash worker) and
+`external_storage` 18 (4 new: the close guard's rule, a close that worked is
+left alone, a failed close of a file FatFs still knows is made again without
+the "modified" and "dirty" bits, an unknown file is not, and the two bits are
+FatFs's own values). Reports `test-reports/2026-11-14_*_host_data_logger.md`,
+`_host_filesystem.md`, `_host_external_storage.md`. A first run of the
+logger's suite was a BUILD FAILED of my own making: a patch script sent
+through a Bash heredoc had turned a `'\0'` into a NUL byte in
+`data_logger_recover.c` (`null character(s) preserved in literal`); the line
+reads `out[0] = 0;` now.
+
 **2026-11-13:** `j2534_server` 31 PASS, including production READ_VBATT
 conversion/rounding, a closed device, unavailable and invalid ADC readings.
 Report `test-reports/2026-11-13_1554_host_j2534_server.md`; the device/DLL half
