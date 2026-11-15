@@ -12867,6 +12867,188 @@
       ]
     },
     {
+      "car_model": "Porsche: Boxster / Cayman (987.1, 2005-2008)",
+      "init": "ATSP3;",
+      "pids": [
+        {
+          "pid": "010C",
+          "parameters": [
+            {
+              "name": "ENGINE_RPM",
+              "expression": "[B3:B4]/4",
+              "unit": "RPM",
+              "class": "frequency"
+            }
+          ]
+        },
+        {
+          "pid": "010D",
+          "parameters": [
+            {
+              "name": "SPEED",
+              "expression": "B3",
+              "unit": "km/h",
+              "class": "speed"
+            }
+          ]
+        },
+        {
+          "pid": "0104",
+          "parameters": [
+            {
+              "name": "ENGINE_LOAD",
+              "expression": "B3*100/255",
+              "unit": "%",
+              "class": "none",
+              "min": "0",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "0111",
+          "parameters": [
+            {
+              "name": "THROTTLE",
+              "expression": "B3*100/255",
+              "unit": "%",
+              "class": "none"
+            }
+          ]
+        },
+        {
+          "pid": "0105",
+          "parameters": [
+            {
+              "name": "COOLANT_TMP",
+              "expression": "B3-40",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        },
+        {
+          "pid": "010F",
+          "parameters": [
+            {
+              "name": "INTAKE_AIR_TMP",
+              "expression": "B3-40",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        },
+        {
+          "pid": "0110",
+          "parameters": [
+            {
+              "name": "MAF",
+              "expression": "[B3:B4]/100",
+              "unit": "g/s",
+              "class": "none"
+            }
+          ]
+        },
+        {
+          "pid": "010E",
+          "parameters": [
+            {
+              "name": "TIMING_ADV",
+              "expression": "B3/2-64",
+              "unit": "°",
+              "class": "none",
+              "min": "-64",
+              "max": "64"
+            }
+          ]
+        },
+        {
+          "pid": "0106",
+          "parameters": [
+            {
+              "name": "STFT",
+              "expression": "B3*100/128-100",
+              "unit": "%",
+              "class": "none"
+            }
+          ]
+        },
+        {
+          "pid": "0107",
+          "parameters": [
+            {
+              "name": "LTFT",
+              "expression": "B3*100/128-100",
+              "unit": "%",
+              "class": "none",
+              "min": "-100",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "0108",
+          "parameters": [
+            {
+              "name": "STFT_B2",
+              "expression": "B3*100/128-100",
+              "unit": "%",
+              "class": "none",
+              "min": "-100",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "0109",
+          "parameters": [
+            {
+              "name": "LTFT_B2",
+              "expression": "B3*100/128-100",
+              "unit": "%",
+              "class": "none",
+              "min": "-100",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "0101",
+          "parameters": [
+            {
+              "name": "MIL_ON",
+              "expression": "B3:7",
+              "unit": "",
+              "class": "none",
+              "min": "0",
+              "max": "1"
+            },
+            {
+              "name": "DTC_COUNT",
+              "expression": "B3&127",
+              "unit": "",
+              "class": "none",
+              "min": "0",
+              "max": "127"
+            }
+          ]
+        },
+        {
+          "pid": "0121",
+          "parameters": [
+            {
+              "name": "DIST_MIL",
+              "expression": "[B3:B4]",
+              "unit": "km",
+              "class": "distance",
+              "min": "0",
+              "max": "65535"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "car_model": "Porsche: Taycan",
       "init": "ATST96;ATFCSD300000;ATFCSM1;",
       "pids": [
