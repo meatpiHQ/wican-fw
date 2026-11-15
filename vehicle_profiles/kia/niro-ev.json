@@ -8,9 +8,9 @@
         "SOC": "B10/2",
         "REGEN_MAX": "[B11:B12]/100",
         "POWER_MAX": "[B13:B14]/100",
-        "HV_A": "(65536-([B17:B18]))/10",
+        "HV_A": "[B17:B18]/10",
         "HV_V": "[B19:B20]/10",
-        "HV_W": "([B19:B20]/10)*((65536-([B17:B18]))/10)",
+        "HV_W": "([B19:B20]/10)*([B17:B18]/10)",
         "HV_T_MAX": "B21",
         "HV_T_MIN": "B22",
         "HV_T_1": "B23",
@@ -18,7 +18,7 @@
         "HV_T_3": "B26",
         "HV_T_4": "B27",
         "HV_T_5": "B28",
-        "HV_T_I": "B30",
+        "HV_T_I": "B30-40",
         "HV_C_V_MAX": "B31/50",
         "HV_C_V_MAX_NO": "B33",
         "HV_C_V_MIN": "B34/50",
@@ -34,14 +34,14 @@
         "SOC_D": "B41/2",
         "HV_C_D_MIN_NO": "B39",
         "HV_C_D_MAX_NO": "B36",
-        "HV_C_D_MIN": "[B37:B38]/10"
+        "HV_C_D_MIN_AH": "[B37:B38]/10"
       }
     },
     {
       "pid": "22B002",
       "pid_init": "ATSH7C6;ATFCSH7C6;",
       "parameters": {
-        "ODOMETER": "[B5:B6]"
+        "ODOMETER": "[B13:B14]"
       }
     }
   ]
