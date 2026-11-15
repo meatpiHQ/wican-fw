@@ -436,7 +436,7 @@ def main():
         return 2
     dut = opt("--dut", "localhost:18081")
     base = "http://" + dut.rstrip("/")
-    pcan = opt("--pcan", "PCAN_USBBUS1")
+    pcan = opt("--pcan", os.environ.get("WICAN_PCAN_DUT", "PCAN_USBBUS1"))
     profiles = opt("--profiles", apb.PROFILES_URL)
     car_sel = opt("--car", DEFAULT_CAR)
     watch_s = float(opt("--watch", 60))

@@ -71,7 +71,7 @@ ACTOR = os.path.join(HERE, "..", "actors", "pcan_wwh_ecu.py")
 PY = sys.executable
 
 DUT = "localhost:8081"
-PCAN = "PCAN_USBBUS1"
+PCAN = os.environ.get("WICAN_PCAN_DUT", "PCAN_USBBUS1")
 ONLY = []
 LOGDIR = tempfile.gettempdir()
 args = sys.argv[1:]

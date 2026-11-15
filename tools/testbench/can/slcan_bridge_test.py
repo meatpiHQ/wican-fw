@@ -384,7 +384,7 @@ def main():
     ap.add_argument("--dut-ip", default="10.42.1.194", help="the DUT's address as the Pi sees it (leg L)")
     ap.add_argument("--pi", default="rpi001")
     ap.add_argument("--skip-pi", action="store_true")
-    ap.add_argument("--pcan", default="PCAN_USBBUS1")
+    ap.add_argument("--pcan", default=os.environ.get("WICAN_PCAN_DUT", "PCAN_USBBUS1"))
     ap.add_argument("--n", type=int, default=200)
     ap.add_argument("--fps", type=float, default=100.0)
     a = ap.parse_args()

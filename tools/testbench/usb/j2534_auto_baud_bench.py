@@ -219,7 +219,7 @@ def main():
     ap.add_argument("--dut", default="localhost:18081")
     ap.add_argument("--j2534", default="localhost:18534")
     ap.add_argument("--slcan", default="localhost:18333")
-    ap.add_argument("--pcan", default="PCAN_USBBUS1")
+    ap.add_argument("--pcan", default=os.environ.get("WICAN_PCAN_DUT", "PCAN_USBBUS1"))
     a = ap.parse_args()
 
     dut = Dut(a.dut)

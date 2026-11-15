@@ -51,7 +51,7 @@ import j1939_ref as J  # noqa: E402
 from pcbench import Actor, Bench, Dut, Run  # noqa: E402
 
 DUT_HOST = "localhost:8081"
-PCAN = "PCAN_USBBUS1"
+PCAN = os.environ.get("WICAN_PCAN_DUT", "PCAN_USBBUS1")
 ONLY = []
 LOGDIR = tempfile.gettempdir()
 args = sys.argv[1:]
