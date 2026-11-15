@@ -231,7 +231,16 @@ def write_summary(path, obj):
     tmp = path + ".tmp"
     with open(tmp, "w") as f:
         json.dump(obj, f)
-    os.replace(tmp, path)
+    # on Windows the replace is refused while the bench (or the antivirus)
+    # holds the file open: that refusal killed the ECU halfway through a run
+    # (2026-11-16, WinError 5, and every request behind it read NO DATA).
+    # A summary that is one write late is no loss; a dead ECU is.
+    for _ in range(10):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:
+            time.sleep(0.05)
 
 
 def main():

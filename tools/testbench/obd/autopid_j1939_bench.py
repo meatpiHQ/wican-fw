@@ -602,11 +602,16 @@ def leg_a8():
     run.check("a8_nothing_new_published", pub == 0, f"{pub} publications in 30 s of silence")
     run.check("a8_rows_still_looked_at", s1.get("passive_ok", 0) > s0.get("passive_ok", 0),
               f"passive_ok {s0.get('passive_ok')} -> {s1.get('passive_ok')}")
+    # the truck's values: a GPS receiver on the unit (the ESPNetLink's fix,
+    # published as gps_* parameters every two seconds) is not the truck and
+    # goes on, which failed both checks on 2026-11-16 (min age 276 ms)
+    mine = [n for n in p0 if not n.startswith("gps_")]
     same = all(p1.get(n, {}).get("value") == p0.get(n, {}).get("value")
-               and p1.get(n, {}).get("ts_us") == p0.get(n, {}).get("ts_us") for n in p0)
+               and p1.get(n, {}).get("ts_us") == p0.get(n, {}).get("ts_us") for n in mine)
     run.check("a8_values_keep_their_last_reading_and_time", same)
     now_us = s1.get("now_us", 0)
-    ages = [(now_us - p1[n]["ts_us"]) / 1000 for n in p1 if isinstance(p1[n].get("ts_us"), (int, float))]
+    ages = [(now_us - p1[n]["ts_us"]) / 1000 for n in p1
+            if not n.startswith("gps_") and isinstance(p1[n].get("ts_us"), (int, float))]
     run.check("a8_values_are_old_now", bool(ages) and min(ages) >= 30000,
               f"min age {round(min(ages)) if ages else None} ms")
 

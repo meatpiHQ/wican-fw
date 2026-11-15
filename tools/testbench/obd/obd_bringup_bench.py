@@ -323,8 +323,15 @@ def leg_warm_start(i, autopid_on):
     check("%s: bring-up done in under %d ms" % (label, BRINGUP_MAX_MS),
           ms is not None and ms < BRINGUP_MAX_MS, "%s ms" % ms)
     g = oc.get("eeprom_guard", {})
-    check("%s: memory_off 1 and pp_restores 0 after the boot" % label,
-          g.get("memory_off") == 1 and g.get("pp_restores") == 0, json.dumps(g))
+    # with AutoPID polling, every protocol switch on the request path sends
+    # its own ATM0 (a profile that changes headers counts dozens a minute):
+    # one exactly only on a unit that polls nothing (2026-11-16: 79 on the
+    # bench unit with the MEB profile on, three FAILs of this check alone)
+    mem = g.get("memory_off")
+    check("%s: memory_off %s and pp_restores 0 after the boot"
+          % (label, "1 or more (AutoPID on)" if autopid_on else "1"),
+          (isinstance(mem, int) and mem >= 1 if autopid_on else mem == 1)
+          and g.get("pp_restores") == 0, json.dumps(g))
     if autopid_on:
         print("%s %s: AutoPID on, the stored-protocol read-back skipped" % (now(), label), flush=True)
     else:

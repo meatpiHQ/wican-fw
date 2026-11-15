@@ -113,6 +113,13 @@ try {
     const after = await currentCar();
     check(`${label}: the store carries "${to}"`, !!after && after.name === to && after.key === found.key, after && after.name);
     await open();
+    /* the same address again is no reload: this is the page that went through
+       the restart, and its header carries the name of its last status poll
+       until the next one repaints it (the name from before the rename, for a
+       few seconds: two runs in three failed here on 2026-11-16, always in the
+       restore leg, where the staged name and the old one differ). The page's
+       own poll is what is judged, so it gets its time. */
+    try { await page.waitForFunction((n) => document.querySelector("#cp-name-t").textContent === n, to, { timeout: 15000 }); } catch (e) { /* the check below says so */ }
     const s2 = await header();
     check(`${label}: the header and the tab carry "${to}"`, s2.name === to && !s2.staged && s2.title === to + " · WiCAN Pro" && s2.submit === "Saved", s2);
   }

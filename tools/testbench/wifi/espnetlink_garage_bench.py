@@ -680,13 +680,21 @@ def main():
             dt = wait_until("dongle paired per mode", paired_per_mode, 150)
             run.check(f"g1_dongle_paired_{a.mode}", dt >= 0, f"{dt:.0f} s")
             run.metric("g1_boot_to_dongle_s", round(time.time() - t_on, 1))
-            dt = wait_until("GPS valid", lambda: (obs.get("/api/espnetlink", "home")
-                            .get("gps") or {}).get("valid") is True, 300)
-            run.check("g1_gps_valid_within_300s", dt >= 0,
-                      f"{dt:.0f} s" + (" (the wire is live in the USB modes: the "
-                                       "known GNSS desense)" if a.mode != "wifi_modem"
-                                       else ""))
-            run.metric("g1_gps_fix_s", round(dt, 1) if dt >= 0 else -1)
+            if a.mode == "wifi_modem":
+                # at home the station is on the home network and the dongle is
+                # released: its fix is read over its AP only, so nothing can be
+                # valid here (g4 holds exactly that: the polls stop). The fix
+                # is judged away, in g6. Until 2026-11-16 this check waited
+                # 300 s for it and failed every wifi_modem run.
+                print("  g1: no GPS check at home in wifi_modem (the dongle's fix "
+                      "is read over its AP; judged away in g6)", flush=True)
+            else:
+                dt = wait_until("GPS valid", lambda: (obs.get("/api/espnetlink", "home")
+                                .get("gps") or {}).get("valid") is True, 300)
+                run.check("g1_gps_valid_within_300s", dt >= 0,
+                          f"{dt:.0f} s (the wire is live in the USB modes: the "
+                          "known GNSS desense)")
+                run.metric("g1_gps_fix_s", round(dt, 1) if dt >= 0 else -1)
             if a.vpn == "A":
                 dt = wait_until("VPN paused at home", lambda: obs.get(
                     "/api/vpn", "home").get("state") == "paused", 60)
@@ -762,7 +770,12 @@ def main():
                 dt = pub_moves_off_home(n0, 180)
                 run.check("g2_pub_posts_move_off_home", dt >= 0, f"{dt:.0f} s")
             if have_console and a.mode == "wifi_modem":
-                want = r"uplink: wifi -> espnetlink \(AP\)"
+                # the switch is logged in two steps: `uplink: wifi -> none`
+                # when home is lost, `uplink: none -> espnetlink (AP)` about
+                # 10 s later, once the station sits on the dongle's AP (the
+                # one-line form this check waited for until 2026-11-16 was
+                # never logged: its FAIL of 2026-10-18 and 2026-11-16)
+                want = r"uplink: (wifi|none) -> espnetlink \(AP\)"
                 # the lines of the switch were consumed by the block above
                 # (2026-10-18: the 10 s wait for a NEWER one failed on a
                 # clean leg): look there first

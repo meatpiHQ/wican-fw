@@ -431,8 +431,14 @@ def main():
             run.check("o1_n1_offered", d.get("verdict") == "update_available" and d.get("available") is True and d.get("installable") is True and d.get("target_version") == VER_N1,
                       json.dumps({k: d.get(k) for k in ("verdict", "available", "installable", "target_version", "reason")}))
             run.check("o1_latest_summary", "Bench dongle release" in (d.get("latest") or {}).get("summary", "") and (d.get("latest") or {}).get("size") == images["N1"]["size"], json.dumps(d.get("latest")))
+            # the notes are the page's own fetch since 2026-11-02 (the firmware
+            # update bench was moved then, this check was not and failed on
+            # 2026-11-16): the snapshot names their address on the release
+            # server, the device never downloads them and the route is gone
+            nu = (d.get("latest") or {}).get("notes_url", "")
+            run.check("o1_dongle_notes_url_named", nu.endswith("/notes/%s.md" % VER_N1), nu)
             code, txt = raw(base, "/api/fw_update/notes?target=dongle&version=%s" % VER_N1, "GET", None, "text/plain", 30)
-            run.check("o1_dongle_notes_proxied", code == 200 and txt.startswith("# ESPNetLink %s" % VER_N1), "%s %s" % (code, txt[:80]))
+            run.check("o1_dongle_notes_route_gone", code == 404, "%s" % code)
             run.check("o1_uplink_is_wifi", (st.get("cellular") or {}).get("is_cellular") is False, json.dumps(st.get("cellular")))
 
         # ---- o2: the install over USB ------------------------------------------------------------
