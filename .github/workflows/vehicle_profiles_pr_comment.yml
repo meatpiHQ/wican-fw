@@ -1,0 +1,74 @@
+name: PR Comment for Vehicle Profiles
+
+# Posts the "download and test" comment on a pull request once
+# "PR Workflow for Vehicle Profiles" (vehicle_profiles_pr.yml) has passed on it.
+#
+# A `workflow_run` workflow always runs the copy of this file that is on the
+# default branch, with a token that can write, also when the pull request comes
+# from a fork. So it must never check out, download or run anything from the
+# pull request. It only reads the facts of the finished run from the event and
+# from the API, and posts a fixed comment.
+
+on:
+  workflow_run:
+    workflows: ['PR Workflow for Vehicle Profiles']
+    types: [completed]
+
+permissions:
+  actions: read
+  pull-requests: write
+
+jobs:
+  comment:
+    if: github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Comment on PR with testing instructions
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const run = context.payload.workflow_run;
+            const { owner, repo } = context.repo;
+
+            // The pull request of the run. The run's own list of pull requests
+            // is empty for a fork, so find it by the head branch and keep the
+            // one that still sits on the commit the run has checked.
+            const headOwner = run.head_repository?.owner?.login;
+            if (!headOwner) {
+              core.notice('The head repository of the run is gone: no comment.');
+              return;
+            }
+            const pulls = await github.rest.pulls.list({
+              owner,
+              repo,
+              state: 'open',
+              head: `${headOwner}:${run.head_branch}`,
+              per_page: 100
+            });
+            const pr = pulls.data.find((p) => p.head.sha === run.head_sha);
+            if (!pr) {
+              core.notice(`No open pull request sits on ${run.head_sha}: no comment.`);
+              return;
+            }
+
+            // The merged profiles the run has uploaded.
+            const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
+              owner,
+              repo,
+              run_id: run.id,
+              per_page: 100
+            });
+            const artifact = artifacts.data.artifacts.find((a) => a.name === 'vehicle_profiles.json');
+            if (!artifact) {
+              core.setFailed(`Run ${run.id} has no vehicle_profiles.json artifact.`);
+              return;
+            }
+
+            const link = `${run.html_url}/artifacts/${artifact.id}`;
+            const message = `✅ Vehicle profiles merged successfully!\n\nPlease download and test the updated [vehicle_profiles.json](${link}).`;
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: pr.number,
+              body: message
+            });

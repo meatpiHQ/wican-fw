@@ -1,15 +1,24 @@
 name: PR Workflow for Vehicle Profiles
 
-permissions:
-  contents: read
-  pull-requests: write
-  issues: write
+# This workflow runs code that comes with the pull request (npm ci, npm run
+# validate, npm run build), and the pull request can come from a fork. So it
+# runs on `pull_request`, where a fork gets a read-only token and no secrets.
+# Do not move it back to `pull_request_target`: that would run a fork's code
+# with a token that can write to this repository.
+#
+# The comment on the pull request needs a token that can write, so it is posted
+# by vehicle_profiles_pr_comment.yml, which starts when this workflow finishes
+# and never checks out or runs anything from the pull request. That workflow
+# finds this one by its name and the artifact by its name: keep both in step.
 
 on:
-  pull_request_target:
+  pull_request:
     paths:
       - 'vehicle_profiles/**'
       - '.vehicle_profiles/**'
+
+permissions:
+  contents: read
 
 jobs:
   vehicle-profiles-check:
@@ -21,7 +30,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
@@ -50,24 +59,8 @@ jobs:
           echo "Generated file size: $(wc -c < ../vehicle_profiles.json) bytes"
 
       - name: Upload merged vehicle profiles
-        id: upload
         if: success()
         uses: actions/upload-artifact@v7
         with:
           name: vehicle_profiles.json
-          path: ${{ github.workspace }}/vehicle_profiles.json # Relative to the working-directory
-
-      - name: Comment on PR with testing instructions
-        if: success()
-        uses: actions/github-script@v9
-        env:
-          link: '${{steps.upload.outputs.artifact-url}}'
-        with:
-          script: |
-            const prNumber = context.payload.pull_request.number;
-            const message = `✅ Vehicle profiles merged successfully!\n\nPlease download and test the updated [vehicle_profiles.json](${process.env.link}).`;
-            await github.rest.issues.createComment({
-              ...context.repo,
-              issue_number: prNumber,
-              body: message
-            });
+          path: ${{ github.workspace }}/vehicle_profiles.json
