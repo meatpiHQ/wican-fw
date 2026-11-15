@@ -1,6 +1,6 @@
 {
   "car_model": "Porsche: Boxster / Cayman (987.1, 2005-2008)",
-  "note": "ISO 9141-2 (K-line) only: the OBD CAN pins reach the gateway, not the DME. Needs a firmware that reads K-line replies (v6, or a 4.5x build with the fix for issue #1045). Tested on a 2005 Cayman S (DME ME7.8.1).",
+  "note": "**Only supported in [WiCAN PRO](https://www.crowdsupply.com/meatpi-electronics/wican-pro) version**",
   "init": "ATSP3;",
   "pids": [
     {
