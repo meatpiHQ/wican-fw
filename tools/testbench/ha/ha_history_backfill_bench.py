@@ -376,10 +376,10 @@ def last_finished(ha, entry_id):
     return ((d.get("history_sync") or {}).get("finished_at")) or 0
 
 
-def stored_watermark(pi_host, entry_id):
+def stored_watermark(pi_host, entry_id, ha_config):
     """The integration's TIME watermark as stored (HA's .storage), 0 when none:
     the diagnostics carry the last RUN's fields, not the stored marks."""
-    rc, out = pi(pi_host, f"cat ~/.homeassistant/.storage/wican.history_{entry_id} 2>/dev/null")
+    rc, out = pi(pi_host, f"cat {ha_config}/.storage/wican.history_{entry_id} 2>/dev/null")
     try:
         return float((json.loads(out).get("data") or {}).get("watermark") or 0)
     except (ValueError, AttributeError):
@@ -428,6 +428,12 @@ def main():
     ap.add_argument("--psu", default="auto", help="the OWON's port, or none to skip the voltage part of b5")
     ap.add_argument("--only", default="", help="comma list of legs (b0..b6); b0 and b6 always run")
     ap.add_argument("--keep-ha", action="store_true", help="leave ha-bench running even when this run started it")
+    # another Home Assistant on the Pi than the bench one (2026-11-16: the
+    # fresh 2026.11 install beside it, `ha-fresh`): its unit, its config
+    # folder (the integration's marks live under it) and its hass binary
+    ap.add_argument("--ha-unit", default="ha-bench", help="the systemd unit of the Home Assistant on the Pi")
+    ap.add_argument("--ha-config", default="/home/meatpi/.homeassistant", help="that Home Assistant's config folder on the Pi")
+    ap.add_argument("--ha-bin", default="/home/meatpi/ha/bin/hass", help="that Home Assistant's hass binary on the Pi")
     ap.add_argument("--logdir", default=None)
     args = ap.parse_args()
     only = set(x.strip() for x in args.only.split(",") if x.strip())
@@ -465,10 +471,10 @@ def main():
         rc, pi_ip = pi(args.pi, "hostname -I | awk '{print $1}'")
         ha_base = args.ha or f"http://{pi_ip}:8123"
         ha = Ha(ha_base)
-        rc, active = pi(args.pi, "systemctl is-active ha-bench")
+        rc, active = pi(args.pi, f"systemctl is-active {args.ha_unit}")
         if active.strip() != "active":
-            log("ha-bench is not running: starting it for this run")
-            pi(args.pi, "sudo -n systemd-run --unit=ha-bench --collect -p User=meatpi -p WorkingDirectory=/home/meatpi /home/meatpi/ha/bin/hass -c /home/meatpi/.homeassistant")
+            log(f"{args.ha_unit} is not running: starting it for this run")
+            pi(args.pi, f"sudo -n systemd-run --unit={args.ha_unit} --collect -p User=meatpi -p WorkingDirectory=/home/meatpi {args.ha_bin} -c {args.ha_config}")
             started_ha = True
         t0 = time.time()
         while time.time() - t0 < 180 and not ha.up():
@@ -502,7 +508,7 @@ def main():
         # device cursor of the LAST run would make this run's seeded hours "older
         # than what was imported" and reject them: run 3, 2026-11-06); the reload
         # re-registers the webhook and runs the probe's pull
-        rc, out = pi(args.pi, f"rm -fv ~/.homeassistant/.storage/wican.history_{entry_id}")
+        rc, out = pi(args.pi, f"rm -fv {args.ha_config}/.storage/wican.history_{entry_id}")
         log(f"the entry's history marks cleared ({out.strip() or 'none stored'}); reloading the entry")
         ha.reload(entry_id)
         time.sleep(8)
@@ -673,7 +679,7 @@ def main():
             check("[b4] the Catch up history button pressed", code == 200, f"{btn} {code}")
             hs = wait_sync(ha, entry_id, fin_before, 120, "b4")
             check("[b4] the second pull ran", hs is not None)
-            rc, marks4 = pi(args.pi, f"cat ~/.homeassistant/.storage/wican.history_{entry_id} 2>/dev/null")
+            rc, marks4 = pi(args.pi, f"cat {args.ha_config}/.storage/wican.history_{entry_id} 2>/dev/null")
             log(f"b4: marks stored {' '.join(marks4.split())[:160]}; device export {json.dumps(dut.get('/api/logger').get('export'))}")
             if hs:
                 # the live rows of the hour in progress sit among the seeded rows
@@ -773,7 +779,7 @@ def main():
             # importable only when the integration's watermark has not passed
             # that hour (it has when the hour rolled over during the run and
             # the live rows of the hour before were imported meanwhile)
-            wm5 = stored_watermark(args.pi, entry_id)
+            wm5 = stored_watermark(args.pi, entry_id, args.ha_config)
             importable = wm5 <= hour - 3600
             log(f"b5: the watermark is {wm5:.0f} ({'the hour before this one is still open to an import' if importable else 'past the hour before this one: the pages are read, nothing new is imported'})")
             w0 = dut.get("/api/logger").get("written", 0)
@@ -784,7 +790,7 @@ def main():
             check("[b5] the rows written to the card", written >= w0 + 3000, f"written {written} (was {w0})")
             # where this pull starts and what the device holds (run 4 left the
             # partial import of this hour unexplained)
-            rc, marks5 = pi(args.pi, f"cat ~/.homeassistant/.storage/wican.history_{entry_id} 2>/dev/null")
+            rc, marks5 = pi(args.pi, f"cat {args.ha_config}/.storage/wican.history_{entry_id} 2>/dev/null")
             code, fsl = dut.api("/api/fs/list?path=/sd/logs")
             log(f"b5: before the press: marks {' '.join(marks5.split())[:160]}; device export {json.dumps(dut.get('/api/logger').get('export'))}; "
                 f"files {[(e.get('name'), e.get('size')) for e in (fsl.get('entries') or []) if isinstance(e, dict) and str(e.get('name', '')).startswith('dl_')] if isinstance(fsl, dict) else fsl}")
@@ -878,8 +884,8 @@ def main():
             if ha is not None and ha.token and entry_id:
                 ha.reload(entry_id)
             if started_ha and not args.keep_ha:
-                pi(args.pi, "sudo -n systemctl stop ha-bench")
-                log("ha-bench stopped (this run started it)")
+                pi(args.pi, f"sudo -n systemctl stop {args.ha_unit}")
+                log(f"{args.ha_unit} stopped (this run started it)")
         except Exception as e:
             check("[b6] restore", False, f"{type(e).__name__}: {e}")
         with open(os.path.join(logdir, "summary.json"), "w") as f:
