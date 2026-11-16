@@ -1,16 +1,16 @@
 # WiCAN J2534 PassThru driver (Windows)
 
-`wican_j2534_setup_1.7.0.exe` installs the WiCAN SAE J2534-1 (04.04) PassThru
+`wican_j2534_setup_1.8.0.exe` installs the WiCAN SAE J2534-1 (04.04) PassThru
 driver: a 32-bit `wican_j2534.dll` that lets Windows diagnostic and reflash
 tools drive a vehicle's bus through a WiCAN PRO, over USB or WiFi.
 
 | | |
 |---|---|
-| Version | 1.7.0 (the DLL reports itself as `WiCAN J2534 1.7`; 2026-11-14: `READ_VBATT` returns the battery voltage the WiCAN measures instead of a fixed 12.0 V, the driver is under the GNU GPL version 3 and the installer opens with a disclaimer to accept, see below; 1.6, 2026-11-06: `PassThruWriteMsgs` sends every message of a call in one request and, with `Timeout` 0, returns as soon as it is on the link instead of waiting for the WiCAN's answer, see below; 1.5, 2026-10-27: `PassThruGetLastError` explains every device refusal in words; 1.4, the same day: `PassThruReadMsgs` waits on an event instead of a `Sleep(1)` poll, and the driver log is on by default at `C:\Users\Public\Documents\WiCAN\wican_j2534.log` with every message in full both ways; 1.3: accepts the J1850 VPW protocol; 1.2: event-driven ACK wait, GET_CONFIG answers, requests serialized across threads) |
-| SHA-256 | `799def771395cc510f2032174d436ee509da6d532072a30f118e7c4871e054b1` |
-| Requires | WiCAN PRO on firmware v6 (a build of 2026-10-20 or later for ISO15765 and J1850 VPW, 6.0.0-beta.10 or later for the measured battery voltage: see below), Windows 10 or 11 |
+| Version | 1.8.0 (the DLL reports itself as `WiCAN J2534 1.8`; 2026-11-17: VW TP 2.0 as its own protocol, `TP2_0_PS`, and `PassThruReadMsgs` no longer waits out its timeout once it holds a message, see below; 1.7, 2026-11-14: `READ_VBATT` returns the battery voltage the WiCAN measures instead of a fixed 12.0 V, the driver is under the GNU GPL version 3 and the installer opens with a disclaimer to accept, see below; 1.6, 2026-11-06: `PassThruWriteMsgs` sends every message of a call in one request and, with `Timeout` 0, returns as soon as it is on the link instead of waiting for the WiCAN's answer, see below; 1.5, 2026-10-27: `PassThruGetLastError` explains every device refusal in words; 1.4, the same day: `PassThruReadMsgs` waits on an event instead of a `Sleep(1)` poll, and the driver log is on by default at `C:\Users\Public\Documents\WiCAN\wican_j2534.log` with every message in full both ways; 1.3: accepts the J1850 VPW protocol; 1.2: event-driven ACK wait, GET_CONFIG answers, requests serialized across threads) |
+| SHA-256 | `41a4b4703c877af8a90ce8a84935795ebd360d236d3944b6e064e1fd330f118c` |
+| Requires | WiCAN PRO on firmware v6 (a build of 2026-10-20 or later for ISO15765 and J1850 VPW, 6.0.0-beta.10 or later for the measured battery voltage, a firmware after 6.0.0-beta.11 for TP 2.0: see below), Windows 10 or 11 |
 | Licence | GNU General Public License, version 3. Used at your own risk: the installer shows the disclaimer and installs only when you accept it. |
-| Protocols | CAN, ISO15765 (ISO-TP) on the CAN controller, and J1850 VPW (GM Class 2) on the device's OBD chip. J1850 PWM, ISO9141 and ISO14230 return `ERR_NOT_SUPPORTED`. |
+| Protocols | CAN, ISO15765 (ISO-TP) and VW TP 2.0 (`TP2_0_PS`, SAE J2534-2) on the CAN controller, and J1850 VPW (GM Class 2) on the device's OBD chip. J1850 PWM, ISO9141 and ISO14230 return `ERR_NOT_SUPPORTED`. |
 
 ISO15765 messages are passed to and from the device exactly as SAE J2534-1
 lays them out: the 4-byte CAN id first, then the UDS payload, the pad flag
@@ -80,6 +80,31 @@ with no warranty and no liability) and goes on only when you accept it,
 then installs `DISCLAIMER.txt` and `LICENSE.txt` next to the DLL. A
 silent install (`/SILENT`, `/VERYSILENT`) shows no wizard pages, the
 disclaimer page included. Everything else behaves as in 1.6.
+
+Driver 1.8 (2026-11-17) adds VW TP 2.0 as a protocol of its own
+(`TP2_0_PS`, protocol id 0x800E, SAE J2534-2 section 19), contributed by
+Elias Kotlyar. An application opens a TP 2.0 channel and the WiCAN does
+the transport as SAE J2819 describes it: the connection
+(`REQUEST_CONNECTION`, `TEARDOWN_CONNECTION`), the telegrams and their
+block acknowledgements, what the ECU asks for again, and a connection test
+once a second. The application writes and reads whole messages of up to
+4092 bytes, and a message passes untouched: the two length bytes a VW ECU
+expects in front of a message are the application's, on a write and on a
+read. `SET_CONFIG` and `GET_CONFIG` reach the device on such a channel,
+`GET_DEVICE_INFO` answers with an SPARAM_LIST, and a write to an id
+without a connection returns `ERR_NO_CONNECTION_ESTABLISHED` (0x00010001).
+It needs a firmware after 6.0.0-beta.11; on older firmware the connect is
+refused. It is tested against a model of an ECU that follows SAE J2819
+and against a published exchange of a real engine ECU, not yet on a car.
+A tool that does TP 2.0 itself on a raw CAN channel is not affected by
+that, but it does get the second change: on CAN, ISO15765 and J1850 VPW,
+`PassThruReadMsgs` now returns the messages it has once nothing more
+arrived for 4 ms, where it used to wait for the full count until its
+timeout. A flasher that asks for a whole TP 2.0 block in one read waited
+out that timeout at every block end (35 s of a 66 s read on the
+contributor's bench). A read that got nothing still waits its timeout.
+The installer also writes a `TP2_0` registry value beside `CAN` and
+`ISO15765`. Everything else behaves as in 1.7.
 
 The installer is not code-signed, so Windows SmartScreen may ask you to
 confirm before it runs. The same file is attached to each firmware release.
