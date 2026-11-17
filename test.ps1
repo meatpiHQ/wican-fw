@@ -15,7 +15,7 @@
 # land in test-reports\logs\<run>\ (gitignored).
 #
 param(
-    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'bleram', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'profilee2e', 'slcan', 'j2534auto', 'j2534std', 'j2534vbat', 'j2534vpw', 'j2534tp20', 'multibus', 'kline', 'precan', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'wgcycle', 'tspublic', 'tlschain', 'tlsbyip', 'rulepost', 'pushreply', 'habackfill', 'garage', 'espnleasy', 'espnlapn', 'usbgps', 'usbdetach', 'abrp', 'backup', 'fwupdate', 'espnlota', 'logclock', 'sdformat', 'obdfw', 'chipprompt', 'carname', 'canfilters', 'destnets', 'canselftest', 'attpstore', 'obdbringup', 'sleepword', 'sleeptrig', 'chipwake', 'connections', 'stackaudit', 'dwc2', 'logsinks', 'release', 'all', 'list')]
+    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'bleram', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'profilee2e', 'slcan', 'j2534auto', 'j2534std', 'j2534vbat', 'j2534vpw', 'j2534tp20', 'j2534fc', 'multibus', 'kline', 'precan', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'wgcycle', 'tspublic', 'tlschain', 'tlsbyip', 'rulepost', 'pushreply', 'habackfill', 'garage', 'espnleasy', 'espnlapn', 'usbgps', 'usbdetach', 'abrp', 'backup', 'fwupdate', 'espnlota', 'logclock', 'sdformat', 'obdfw', 'chipprompt', 'carname', 'canfilters', 'destnets', 'canselftest', 'attpstore', 'obdbringup', 'sleepword', 'sleeptrig', 'chipwake', 'connections', 'stackaudit', 'dwc2', 'logsinks', 'release', 'all', 'list')]
     [string]$What,
     [Parameter(Position = 1)][string]$Component,
     [ValidateSet('6.0.2', '6.1')][string]$Idf = '6.1',  # the ESP-IDF the build stages use (6.1 since 6.0.0-beta.5, 2026-10-27; 6.0.2 stays installed; build.ps1 -Idf has the same table)
@@ -1119,6 +1119,7 @@ function Show-Inventory {
     Write-Host '  j2534vbat  - READ_VBATT on the wire and through the DLL at 13.5/14.5 V; fake-device error cases; restore. Optional component driver runs only the fake-device checks.'
     Write-Host '  j2534vpw   - J1850 VPW through the PassThru server (2026-11-11): ECU sim v2 on VPW alone, the J2534 server switched on for the run, CONNECT J1850VPW, a PASS filter on the functional reply target 6B, 01 00 and 01 0C each answered 48 6B 10 41 ..; the chip''s memory compared before and after (nothing written); the simulator and the settings restored (2 planned restarts, 2 simulator restarts, ~1 min). Until that day the channel''s init sent ATD behind ATTP2 and three ST pass filters, and never heard a VPW node'
     Write-Host '  j2534tp20  - TP2.0 as its own J2534 protocol (TP2_0_PS) against an ECU that follows SAE J2819, played by the PCAN (2026-11-16): the channel setup, data both ways (a 601-byte request in blocks), the connection test once a second answered with a connection acknowledge and the connection kept, the broadcast key 55 55 / AA AA, the re-triggered broadcast (five, then one per period), ERR_NO_CONNECTION_ESTABLISHED 0x10001, GET_DEVICE_INFO with a parameter list, a request nobody answers, the teardown; an exchange published from a real car byte for byte, four connections at once, 4092-byte messages at full speed with every byte and the CAN counters checked, an ISO15765 channel beside it, a lost telegram / receiver not ready / a break injected by the ECU; then the built driver DLL called like an application; restore (2 planned restarts, ~1 min)'
+    Write-Host '  j2534fc    - ISO 15765 flow control as a J2534 tool sets it (2026-11-17): an ECU played by the PCAN the way ISO 15765-2 writes it, every flow control read off the bus; a channel opens with ISO15765_BS 8 / ISO15765_STMIN 1 (what the device always sent), SET_CONFIG changes an open session and GET_CONFIG reads the values back, each value alone, STMIN in microseconds, the scope (a later filter, a second channel, a channel opened again), BS 0 over 585 consecutive frames with one flow control, values out of range refused with nothing changed, a list with DATA_RATE and LOOPBACK beside them, the id alone as drivers up to 1.8 send it; 100 answers of 4095 bytes at the full line rate with every byte, the CAN loss counters and the ISO-TP provider''s counters checked (the unit''s flash at rest: a flash write costs frames at that rate); the device''s own UDS client still at BS 8 / STmin 1 ms; then the built driver DLL called like an application; restore (2 planned restarts, ~1.5 min)'
     Write-Host '  multibus   - Automate rows on MS, single-wire and CH CAN beside the car''s OBD protocol (2026-11-11): the Test route on each bus and its refusals, a bus at another speed than its usual one, the words the chip stores (STP nn, VTP nnn, ATLNK) refused in a row that is on, in a test and in a car''s own init, a type init with one kept as typed, never sent and its rows on the car''s protocol not asked, seven rows polled over four buses (every row answered, about four changes of bus a round, the chip on the car''s protocol between the rounds), the rows of the other buses with the HS bus off, a bus that ends in CAN ERROR rested, nothing asked on any bus under the voltage pause, an ELM app in the middle of it; the chip''s memory compared before and after (nothing written); ECU sim v2 with its four CAN buses, which is the unit''s supply too (3 planned restarts, ~8 min)'
     Write-Host '  kline      - a K-line car through the firmware''s own paths (GitHub issue #1045, 2026-11-12): ECU sim v2 as an ISO 9141-2 car alone; the Test call with ATSP3 as its init on a unit whose own car is CAN (the bus started once for three calls, the protocol''s own request header behind the init, 800 rpm from the three byte header, a call behind 6.5 s of silence starts the bus again), std_protocol takes 3, three rows polled with it pinned and no restart of the bus between two requests, the ignition off and on under the poll, a ten second period kept alive by the poller''s one short request, the same rows with std_protocol 2 on a J1850 VPW car, and the same Test call on ISO 14230-4 (fast and 5 baud init) and SAE J1850 VPW and PWM; the chip''s memory compared before and after (nothing written). -Detect adds Detect my vehicle on the K-line car and the way back (the car''s protocol is saved in the OBD chip: one write there, one back, one more restart) (3 planned restarts, ~6 min)'
     Write-Host '  precan     - a pre-CAN car found without being asked for (2026-11-13): ECU sim v2 as an ISO 9141-2 car alone at start-up (the stored CAN protocol stays silent, the walk goes on behind CAN and finds the car on protocol 3, the rows are answered), a CAN vehicle that answers nothing standard (traffic on the CAN pins: SAE J1850 and the K-line are left alone), nobody there at all (the walk goes round with a growing gap), a J1850 VPW car that turns up in that boot (found on protocol 2), a CAN car on 250 kbit/s that says nothing until asked (ten requests of the Test route with Automate off, and found on protocol 8 when it wakes up behind a boot with nobody there: the chip''s own requests, which the unit''s own CAN node acknowledges, do not name the bus), and the unit''s own CAN car again; the chip''s memory compared before and after (nothing written). -Detect adds a car never seen (a J1850 VPW one, found and stored at start-up by a detection nobody asked for), Detect my vehicle on an ISO 14230-4 car and the way back (the car''s protocol is saved in the OBD chip: three writes, three more restarts) (7 planned restarts, ~8 min)'
@@ -1611,6 +1612,36 @@ try {
                     $out = & $py -u "$repo\tools\testbench\usb\j2534_tp20_ps_bench.py" --dut 'localhost:18081' --j2534 'localhost:18534' --pcan $PcanChannel @dllArgs 2>&1 | ForEach-Object { Write-Host $_; $_ }
                     Save-StageLog 'j2534_tp20' $out
                     if (-not ($out | Select-String -Quiet '^J2534 TP20 PASS')) { throw 'no J2534 TP20 PASS (PCAN on the DUT bus? the DUT on the bench AP? a firmware that serves TP2_0_PS?)' }
+                } finally {
+                    if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
+                    Stop-ConsoleTail $con
+                }
+            }
+        }
+        'j2534fc' {
+            # ISO 15765 flow control as a J2534 tool sets it (2026-11-17):
+            # ISO15765_BS and ISO15765_STMIN through SET_CONFIG, the values a
+            # channel opens with (BS 8 / STmin 1 ms, what the device always
+            # sent), GET_CONFIG answered by the device. The PCAN plays ECUs
+            # that follow ISO 15765-2 and reads every flow control off the
+            # bus; a hundred 4095-byte answers at the full line rate are
+            # counted; then the driver DLL called like an application when
+            # the driver repo holds a build (or WICAN_J2534_DLL names one).
+            # The tunnel carries the web API and the J2534 port; two planned
+            # restarts.
+            Invoke-Stage 'ISO 15765 flow control through the J2534 server' {
+                $py = $script:BenchPy
+                $dll = if ($env:WICAN_J2534_DLL) { $env:WICAN_J2534_DLL } else { Join-Path $repo '..\..\wican-j2534-driver\build\Release\wican_j2534.dll' }
+                $dllArgs = @()
+                if (Test-Path $dll) { $dllArgs = @('--dll', (Resolve-Path $dll).Path) }
+                $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", '-L', "18534:${DutIp}:6809", $BenchHost)
+                $con = Start-ConsoleTail 'j2534_fc'
+                try {
+                    Start-Sleep -Seconds 3
+                    if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (ports 18081/18534 busy?)" }
+                    $out = & $py -u "$repo\tools\testbench\usb\j2534_flow_control_bench.py" --dut 'localhost:18081' --j2534 'localhost:18534' --pcan $PcanChannel @dllArgs 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    Save-StageLog 'j2534_fc' $out
+                    if (-not ($out | Select-String -Quiet '^J2534 FLOW CONTROL PASS')) { throw 'no J2534 FLOW CONTROL PASS (PCAN on the DUT bus? the DUT on the bench AP? a firmware that takes ISO15765_BS and ISO15765_STMIN?)' }
                 } finally {
                     if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
                     Stop-ConsoleTail $con
