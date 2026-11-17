@@ -46,8 +46,25 @@ const row = (k) => $('#view .frow[data-key="' + k + '"]');
   const apCard = cardByTitle("WiFi Access Point"), staCard = cardByTitle("WiFi Network");
   check("live chips: AP shows clients + address, station shows connected + IP", /client/.test(apCard.textContent) && /Connected/.test(staCard.textContent));
 
+  /* access point + station share one radio (2026-11-18, Ali: "warn user in the UI of
+     performance degradation"): one warning line in the mode card with the detail in a
+     bubble, and the search interval as a station setting behind Show advanced */
+  const apstaWarn = () => $('#view .note[data-key="apsta_warn"]');
+  check("Access point + Station shows the shared-radio warning in the mode card, with an info button",
+    !!apstaWarn() && shown(apstaWarn()) && cardByTitle("WiFi mode").contains(apstaWarn()) && /share one radio/.test(apstaWarn().textContent) && /performance/.test(apstaWarn().textContent) && !!apstaWarn().querySelector(".ibtn"));
+  apstaWarn().querySelector(".ibtn").click(); await sleep(100);
+  const bubble = $(".ibubble");
+  check("its bubble names the search interval and Access point only", !!bubble && /Search interval/.test(bubble.textContent) && /Access point only/.test(bubble.textContent), bubble && bubble.textContent.slice(0, 80));
+  w.eval("closeBubble()");
+  const si = row("sta_search_interval_s");
+  const siIn = si && si.querySelector("input");
+  check("the search interval is a station setting, 30 s by default, behind Show advanced",
+    !!si && staCard.contains(si) && /Search interval/.test(si.textContent) && !!siIn && siIn.value === "30" && !shown(si),
+    si && { text: si.textContent.slice(0, 60), value: siIn && siIn.value, shown: shown(si) });
+
   /* station only: the AP card folds to a note, the station stays */
   tile("sta").click(); await sleep(150);
+  check("Station only hides the shared-radio warning", apstaWarn().style.display === "none");
   check("picking Station only stages one change and marks the tile", w.eval("store").count() === 1 && tile("sta").classList.contains("on") && !tile("apsta").classList.contains("on"));
   check("Access Point card folds to its note; station fields stay", !shown(row("ap_ssid")) && /access point is off in this mode/i.test(apCard.textContent) && shown(row("sta_ssid")));
   /* access point only: the station card folds */
@@ -58,6 +75,7 @@ const row = (k) => $('#view .frow[data-key="' + k + '"]');
   check("WiFi off shows the USB/Bluetooth warning and folds both cards", /USB or Bluetooth/.test($("#view").textContent) && !shown(row("ap_ssid")) && !shown(row("sta_ssid")));
   tile("apsta").click(); await sleep(150);
   check("back to Access point + Station: both cards open, warning gone", shown(row("ap_ssid")) && shown(row("sta_ssid")) && $$("#view .note.warn").every((n) => !/USB or Bluetooth/.test(n.textContent) || n.style.display === "none"));
+  check("and the shared-radio warning is back (it was hidden for Access point only and WiFi off too)", shown(apstaWarn()));
   /* radio arbitration lives in the WiFi tab (2026-09-07) */
   const im = cardByTitle("Radio Arbitration");
   check("Radio Arbitration card sits in the WiFi tab with its three switches and the Bluetooth note", !!im && ["enabled", "sta_ble_handover", "ap_ble_exclusive"].every((k) => !!row(k) && im.contains(row(k))) && /share one radio/.test(im.textContent));

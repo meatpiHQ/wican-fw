@@ -1782,6 +1782,7 @@
    "hostname": "",
    "sta_auto_reconnect": true,
    "sta_max_retry": -1,
+   "sta_search_interval_s": 30,
    "sta_ip_mode": "dhcp",
    "sta_static_ip": "",
    "sta_static_netmask": "255.255.255.0",
@@ -1877,6 +1878,11 @@
      "type": "integer",
      "minimum": -1,
      "maximum": 1000
+    },
+    "sta_search_interval_s": {
+     "type": "integer",
+     "minimum": 10,
+     "maximum": 3600
     },
     "sta_ip_mode": {
      "type": "string",

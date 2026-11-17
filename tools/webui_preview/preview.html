@@ -1786,6 +1786,7 @@
    "hostname": "",
    "sta_auto_reconnect": true,
    "sta_max_retry": -1,
+   "sta_search_interval_s": 30,
    "sta_ip_mode": "dhcp",
    "sta_static_ip": "",
    "sta_static_netmask": "255.255.255.0",
@@ -1881,6 +1882,11 @@
      "type": "integer",
      "minimum": -1,
      "maximum": 1000
+    },
+    "sta_search_interval_s": {
+     "type": "integer",
+     "minimum": 10,
+     "maximum": 3600
     },
     "sta_ip_mode": {
      "type": "string",
@@ -5143,7 +5149,7 @@ const LABELS={
   sta_ssid:"Network name (SSID)",sta_password:"Password",sta_trusted:"Trusted network",hostname:"Hostname",
   sta_auto_reconnect:"Auto-reconnect",sta_max_retry:"Max connect retries",sta_ip_mode:"IP assignment",
   sta_static_ip:"Static IP address",sta_static_netmask:"Subnet mask",sta_static_gw:"Gateway",sta_dns:"DNS server",
-  sta_roam_interval_s:"Roam check interval (s)",
+  sta_roam_interval_s:"Roam check interval (s)",sta_search_interval_s:"Search interval (s)",
   /* ble_manager */
   passkey:"Pairing passkey",tx_power_dbm:"TX power (dBm)",pairing_at_boot:"Allow pairing at boot",bonding:"Remember paired devices",
   sc_only:"Secure connections only",conn_profile:"Connection profile",
@@ -5244,6 +5250,7 @@ const HELP={
   sta_trusted:"On an untrusted network the web UI and API are blocked over the station link; MQTT and the USB link stay up.",
   hostname:()=>"Leave blank for wican_"+((conn.info&&conn.info.device_id)||"<device id>")+".",
   sta_roam_interval_s:"How often to look for a higher-priority network while connected to a backup one (0 = never).",
+  sta_search_interval_s:"How often the WiCAN looks for its WiFi network while that is out of reach. Each search pauses the access point for a moment: a longer interval means fewer pauses, and a later reconnect once the network is back.",
   sta_max_retry:"-1 = keep retrying forever.",
   ap_channel:"Only used while no station is connected: in Access point + Station the AP follows the station's channel.",
   wifi_ram_profile:"Lean frees ~14 KB of internal RAM at no measured throughput cost: recommended when WiFi and Bluetooth run together.",
@@ -6278,7 +6285,9 @@ async function bridgesCard(){
           ic("plus"),"Add a CAN bus connection on "+String(s.proto||"tcp").toUpperCase()+" "+s.port+" ("+brProtoForPort(s.port)+")"))));
     if(c.errs.length||!touched)return;
     if(JSON.stringify(c.bridges)!==JSON.stringify(bm.bridges||[]))store.stage("bridge_manager",{bridges:c.bridges});
-    if(JSON.stringify(c.srv)!==JSON.stringify(servers))store.stage("socket_manager",{servers:c.srv});
+    /* the whole object: a PUT replaces it, and the servers alone would put
+       every other key of the component back to its default (2026-11-18) */
+    if(JSON.stringify(c.srv)!==JSON.stringify(servers))store.stage("socket_manager",{...sm,servers:c.srv});
     if(JSON.stringify(c.chn)!==JSON.stringify(channels))store.stage("websocket_manager",{channels:c.chn});
   }
   function rowBox(r,i){
@@ -6454,11 +6463,17 @@ PAGES.settings=async(view,sub)=>{
       {v:"off",t:"WiFi off",i:"power",d:"The radio stays down. Reach the WiCAN over USB or Bluetooth only."}];
     const modeEl=h("div",{class:"wm-modes"});
     const offWarn=note("warn","With WiFi off, this page is only reachable over USB or Bluetooth after the restart.");
+    /* access point + station share one radio (Ali, 2026-11-18: "warn user in
+       the UI of performance degradation"): one line, the rest in a bubble */
+    const apstaWarn=note("warn",["Access point and station share one radio, which costs performance: a device on the access point sees short pauses in live data whenever the WiCAN searches for its WiFi network. ",
+      infoBtn("About the pauses","Access point + Station","While the WiFi network is out of reach (on the road), the WiCAN looks for it again and again, every 30 seconds unless the Search interval says otherwise, and each search takes the radio away from the access point for up to a second or so. For live CAN data while driving, use Access point only, or raise the Search interval in the station card (Show advanced). At home, turning the access point off while the station is connected avoids the pauses as well.")]);
+    apstaWarn.dataset.key="apsta_warn";
     function paintModes(){const cur=String(wifiVals.mode||"ap");
       modeEl.replaceChildren(...MODES.map(m=>h("button",{type:"button",class:"wm-mode"+(m.v===cur?" on":""),"data-mode":m.v,
         onclick:()=>{if(wifiVals.mode===m.v)return;wifiVals.mode=m.v;store.stage("wifi_manager",wifiVals);paintModes();wifiDirty();}},
         h("div",{class:"wt"},ic(m.i),m.t),h("div",{class:"wd"},m.d))));
-      offWarn.style.display=cur==="off"?"":"none";}
+      offWarn.style.display=cur==="off"?"":"none";
+      apstaWarn.style.display=cur==="apsta"?"":"none";}
     /* why the station is not connected (2026-09-06): the firmware keeps the
        last attempt's entry + disconnect reason + failed-attempt streak;
        there is no time-based ban any more: a rejected entry is tried
@@ -6541,7 +6556,7 @@ PAGES.settings=async(view,sub)=>{
             :AP_KEYS.filter(k=>!k.startsWith("wifi_static_")&&k!=="wifi_cache_tx")}),
       settingsForm("wifi_manager",staKeys,{...shared,
         advanced:["sta_trusted","sta_auto_reconnect","sta_max_retry",
-          "sta_roam_interval_s","hostname","sta_dns","sta_ip_mode",
+          "sta_search_interval_s","sta_roam_interval_s","hostname","sta_dns","sta_ip_mode",
           "sta_static_ip","sta_static_netmask","sta_static_gw"],
         visible:st=>st.sta_ip_mode==="static"?null
           :staKeys.filter(k=>!k.startsWith("sta_static_"))}),
@@ -6590,7 +6605,7 @@ PAGES.settings=async(view,sub)=>{
     paintModes();syncSta();
     tabbedPage(wrap,"settings",[
       {id:"wifi",el:h("div",{class:"pane"},
-        card("WiFi mode","sliders",modeEl,offWarn,apNudge),
+        card("WiFi mode","sliders",modeEl,offWarn,apstaWarn,apNudge),
         cardTools("WiFi Access Point","wifi",[apChip],apBits,apOff),
         cardTools("WiFi Network (Station)","signal",[staChip,scanBtn],staBits,staOff),
         imRows.length?card("Radio Arbitration","bt",...imRows,imNote):null)},
@@ -11928,7 +11943,7 @@ SCREENS.wifi=async()=>{
       radio("qs-mode","qs-mode-sta",W.wifiMode==="sta","Station only (recommended)",
         "WiCAN's own access point stays off; you reach WiCAN at its address on "+net+". If it ever cannot join, hold its button for 5 seconds: the access point comes up for 10 minutes with your password.",
         ()=>{W.wifiMode="sta";paintMode();}),
-      radio("qs-mode","qs-mode-apsta",W.wifiMode==="apsta","Access point + Station","WiCAN keeps its own network as a second way in.",()=>{W.wifiMode="apsta";paintMode();}),
+      radio("qs-mode","qs-mode-apsta",W.wifiMode==="apsta","Access point + Station","WiCAN keeps its own network as a second way in. The two share one radio, which costs performance: a device on the access point sees short pauses in live data while WiCAN searches for "+net+".",()=>{W.wifiMode="apsta";paintMode();}),
       W.wifiMode==="apsta"?h("label",{class:"qs-agree",style:"margin-left:28px;padding:8px 12px"},
         h("input",{type:"checkbox",id:"qs-ap-auto",checked:W.apAuto,onchange:e=>{W.apAuto=e.target.checked;}}),
         h("div",{},h("b",{},"Turn the access point off while WiCAN is on "+net+" (recommended)"),h("span",{},"It comes back by itself whenever "+net+" is lost."))):null));

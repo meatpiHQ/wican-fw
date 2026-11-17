@@ -67,6 +67,7 @@ const DEFAULT_CHANNELS = [
   check("mock settings reachable", !!(S && S.bridge_manager && S.socket_manager && S.websocket_manager));
   S.bridge_manager.values.bridges = DEFAULT_BRIDGES.map((b) => ({ ...b }));
   S.socket_manager.values.servers = DEFAULT_SERVERS.map((s) => ({ ...s }));
+  S.socket_manager.values.some_other_key = 128;             // a key the card knows nothing of
   S.websocket_manager.values.channels = DEFAULT_CHANNELS.map((c) => ({ ...c }));
 
   nav("#/settings/connections");
@@ -89,6 +90,11 @@ const DEFAULT_CHANNELS = [
   check("port input found on the new row", !!port4);
   if (port4) { setText(port4, "35001"); await sleep(200); }
   check("OBD chip shared by four connections is accepted", warns().length === 0, warns());
+  /* 3b. the socket settings are staged whole (2026-11-18): a PUT replaces the object,
+         so the servers alone would put every other key of the component back to its default */
+  const smPend = w.eval("store").pending.get("socket_manager");
+  check("the staged socket settings carry the new server and keep the component's other keys",
+    !!smPend && smPend.some_other_key === 128 && (smPend.servers || []).some((s) => s.port === 35001), smPend && Object.keys(smPend));
 
   /* 4. the cap follows the firmware (6): rows 5 and 6 as WebSocket paths, a 7th refused */
   for (let i = 5; i <= 6; i++) {
