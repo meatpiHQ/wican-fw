@@ -36,10 +36,17 @@ Legs (one planned restart to configure, one to restore):
      the ECU sending without a pause; every byte compared, one flow control each, the
      CAN node's loss counters unchanged, the ISO-TP provider fed exactly the frames
      the ECU sent and dropped none; two answers with BS 8 / STMIN 1 first, for the time.
-     The run wants the unit's flash at rest and says so when it was not: a flash write
-     holds the CAN receive task longer than its 64-frame queue lasts at this rate (the
-     configuration backup, written about 25 s after a restart that changed a setting,
-     cost 28 and 30 frames and one answer on 2026-11-17), so the leg waits that write out
+     This is the run with the unit's flash at rest, and it says so when it was not: the
+     configuration backup is written about 25 s after a restart that changed a setting
+     (the stage's own), so the leg waits that write out. With the CAN node's receive
+     queue at 64 frames that write cost 28 and 30 frames and one answer (2026-11-17)
+  W  the same rate while the unit writes its flash: three files of 32 KB uploaded to
+     /data while the answers run (the flash counters must have moved, else the leg
+     tested nothing); every answer whole, no loss counter moved, the provider fed
+     every frame. An erase stops every task for about 23 ms and leaves the receive
+     interrupt alone, so the frames of that time wait in the CAN node's receive queue
+     (256 frames since 2026-11-17) and then arrive at once in the queues behind it
+     (the channel's own, at 32 frames, dropped 201 of them that day)
   U  the device's own UDS client (POST /api/uds/request) is not the tool's channel: it
      keeps BS 8 / STmin 1 ms
   D  the driver DLL called like an application (--dll, the 32-bit Python):
@@ -60,6 +67,7 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.request
 
 import can
 
@@ -81,6 +89,7 @@ MAX_PDU = 4095                                  # the largest message ISO 15765-
 OPENS_WITH = (8, 1)                             # ISO15765_BS, ISO15765_STMIN of a channel nobody has set
 FC_OPENS_WITH = bytes([0x30, OPENS_WITH[0], OPENS_WITH[1]])
 LOSS_COUNTERS = tp.LOSS_COUNTERS
+FLASH_PROBE = "/data/j2534fc_flash_probe.bin"   # leg W writes it and takes it away again
 
 fails, passes = [], []
 hexs = tp.hexs
@@ -440,7 +449,7 @@ def leg_n(t, ecus, ch, dut, n):
                   1000 * t_fast, MAX_PDU / t_fast, 1000 * t_slow, MAX_PDU / t_slow, 1000 * sum(bus) / len(bus)), flush=True)
     c1, p1, f1 = dut.can(*LOSS_COUNTERS, "rx"), provider(), flash_ops(dut)[0]
     frames = ecus.sent.get(ECU1 + 8, 0) - sent0
-    check("N0 the unit's flash was at rest for the run (a flash write holds the CAN receive task: the run would not count)", f1 == f0,
+    check("N0 the unit's flash was at rest for the run (leg W is the run with the flash written)", f1 == f0,
           {k: (f0.get(k), f1.get(k)) for k in f1 if f0.get(k) != f1.get(k)})
     check("N3 the CAN node lost nothing: no loss counter moved and it received at least the %d frames the ECU sent" % frames,
           all(c1.get(k) == c0.get(k) for k in LOSS_COUNTERS) and (c1.get("rx") or 0) - (c0.get("rx") or 0) >= frames,
@@ -449,6 +458,63 @@ def leg_n(t, ecus, ch, dut, n):
     pdus = (p1.get("pdus_rx") or 0) - (p0.get("pdus_rx") or 0)
     check("N4 the ISO-TP provider was fed exactly those %d frames, made %d messages of them and dropped none" % (frames, n + 2),
           fed == frames and pdus == n + 2 and p1.get("rx_dropped") == p0.get("rx_dropped"),
+          {"frames_fed": fed, "pdus_rx": pdus, "rx_dropped": (p0.get("rx_dropped"), p1.get("rx_dropped"))})
+
+
+def upload(dut, n_bytes):
+    """One file of n_bytes written to the unit's /data: erases and writes on its flash."""
+    req = urllib.request.Request(dut.base + "/api/fs/upload?path=" + FLASH_PROBE, data=os.urandom(n_bytes), method="POST",
+                                 headers={"Content-Type": "application/octet-stream"})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        return r.read().decode(errors="replace")
+
+
+def leg_w(t, ecus, ch, dut, uploads=3, size=32768):
+    print("== W: the line at full rate while the unit writes its flash", flush=True)
+
+    def provider():
+        return ((dut.get("/api/uds") or {}).get("provider_stats") or {})
+
+    st = set_cfg(t, ch, [(CFG_BS, 0), (CFG_STMIN, 0)])
+    f0, c0, p0, sent0 = flash_ops(dut)[0], dut.can(*LOSS_COUNTERS, "rx"), provider(), ecus.sent.get(ECU1 + 8, 0)
+    done, over = [], threading.Event()
+
+    def writer():
+        time.sleep(0.5)
+        for _ in range(uploads):
+            try:
+                done.append(upload(dut, size))
+            except Exception as e:
+                done.append("%s: %s" % (type(e).__name__, e))
+            time.sleep(1.0)
+        over.set()
+
+    th = threading.Thread(target=writer, daemon=True)
+    th.start()
+    n = ok = one_fc = 0
+    while (not over.is_set() or n < 20) and n < 400:
+        _s, whole, fcs = ask(t, ecus, ch, ECU1, MAX_PDU, n & 0xFF, 15.0)
+        n, ok, one_fc = n + 1, ok + (1 if whole else 0), one_fc + (1 if fcs == [b"\x30\x00\x00"] else 0)
+    th.join(5)
+    f1, c1, p1 = flash_ops(dut)[0], dut.can(*LOSS_COUNTERS, "rx"), provider()
+    try:
+        dut.api("/api/fs/file?path=" + FLASH_PROBE, "DELETE")
+    except Exception:
+        pass
+    frames = ecus.sent.get(ECU1 + 8, 0) - sent0
+    erases = (f1.get("erases") or 0) - (f0.get("erases") or 0)
+    check("W0 the unit wrote its flash during the run: %d uploads of %d bytes taken, the erase counter up" % (uploads, size),
+          st == 0 and len(done) == uploads and all('"ok":true' in r for r in done) and erases > 0,
+          {"erases": erases, "writes": (f1.get("writes") or 0) - (f0.get("writes") or 0), "answers": [r[:40] for r in done]})
+    check("W1 %d answers of %d bytes meanwhile: every byte arrived, one flow control each" % (n, MAX_PDU), ok == n and one_fc == n,
+          "%d whole, %d with one flow control, of %d" % (ok, one_fc, n))
+    check("W2 the CAN node lost nothing: no loss counter moved and it received at least the %d frames the ECU sent" % frames,
+          all(c1.get(k) == c0.get(k) for k in LOSS_COUNTERS) and (c1.get("rx") or 0) - (c0.get("rx") or 0) >= frames,
+          {k: (c0.get(k), c1.get(k)) for k in c0 if c0.get(k) != c1.get(k)})
+    fed = (p1.get("frames_fed") or 0) - (p0.get("frames_fed") or 0)
+    pdus = (p1.get("pdus_rx") or 0) - (p0.get("pdus_rx") or 0)
+    check("W3 the ISO-TP provider was fed exactly those %d frames, made %d messages of them and dropped none" % (frames, n),
+          fed == frames and pdus == n and p1.get("rx_dropped") == p0.get("rx_dropped"),
           {"frames_fed": fed, "pdus_rx": pdus, "rx_dropped": (p0.get("rx_dropped"), p1.get("rx_dropped"))})
 
 
@@ -569,6 +635,7 @@ def main():
         leg_z(t, ecus, ch)
         leg_r(t, ecus, ch)
         leg_n(t, ecus, ch, dut, a.big)
+        leg_w(t, ecus, ch, dut)
         t.call(b.DISCONNECT, channel=ch)
         t.call(b.CLOSE)
     except Exception as e:
