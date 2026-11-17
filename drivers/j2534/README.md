@@ -7,7 +7,7 @@ tools drive a vehicle's bus through a WiCAN PRO, over USB or WiFi.
 | | |
 |---|---|
 | Version | 1.9.0 (the DLL reports itself as `WiCAN J2534 1.9`; 2026-11-17: a tool's `ISO15765_BS` and `ISO15765_STMIN` reach the WiCAN and read back from it, see below; 1.8, the same day: VW TP 2.0 as its own protocol, `TP2_0_PS`, and `PassThruReadMsgs` no longer waits out its timeout once it holds a message, see below; 1.7, 2026-11-14: `READ_VBATT` returns the battery voltage the WiCAN measures instead of a fixed 12.0 V, the driver is under the GNU GPL version 3 and the installer opens with a disclaimer to accept, see below; 1.6, 2026-11-06: `PassThruWriteMsgs` sends every message of a call in one request and, with `Timeout` 0, returns as soon as it is on the link instead of waiting for the WiCAN's answer, see below; 1.5, 2026-10-27: `PassThruGetLastError` explains every device refusal in words; 1.4, the same day: `PassThruReadMsgs` waits on an event instead of a `Sleep(1)` poll, and the driver log is on by default at `C:\Users\Public\Documents\WiCAN\wican_j2534.log` with every message in full both ways; 1.3: accepts the J1850 VPW protocol; 1.2: event-driven ACK wait, GET_CONFIG answers, requests serialized across threads) |
-| SHA-256 | `b817ca2ed88a8fe7729b59436a9a90bbcfae06740cf2931a80eaa1f42fcb0dc1` |
+| SHA-256 | `0ee1262c4bdaada37f8c74b22ea42ee4315a3271e95e7b92c47908b1751be678` |
 | Requires | WiCAN PRO on firmware v6 (a build of 2026-10-20 or later for ISO15765 and J1850 VPW, 6.0.0-beta.10 or later for the measured battery voltage, a firmware after 6.0.0-beta.11 for TP 2.0 and for the ISO 15765 flow control values: see below), Windows 10 or 11 |
 | Licence | GNU General Public License, version 3. Used at your own risk: the installer shows the disclaimer and installs only when you accept it. |
 | Protocols | CAN, ISO15765 (ISO-TP) and VW TP 2.0 (`TP2_0_PS`, SAE J2534-2) on the CAN controller, and J1850 VPW (GM Class 2) on the device's OBD chip. J1850 PWM, ISO9141 and ISO14230 return `ERR_NOT_SUPPORTED`. |
@@ -119,18 +119,15 @@ its whole answer in one go: on the bench a 4095-byte answer was with the
 tool 0.16 s after the request, against 0.72 s with 8 / 1. `ISO15765_BS`
 takes 0 to 0xFF, `ISO15765_STMIN` 0 to 0x7F (milliseconds) and 0xF1 to
 0xF9 (100 to 900 microseconds); another value returns
-`ERR_INVALID_IOCTL_VALUE` and nothing of that list is taken. A channel
-still opens with BS 8 / STmin 1 ms, where SAE J2534-1 names 0 and 0, so a
-tool that sets nothing sees no change. The reason: with BS 0 the ECU
-sends without a pause, and if the WiCAN writes its own flash during such
-an answer it loses frames and the answer with them (the tool sees that
-one request unanswered). On the bench that happened to one answer of 100,
-while the WiCAN saved its configuration backup shortly after a restart
-that followed a settings change. It needs a firmware after
-6.0.0-beta.11; on older firmware the two values are acknowledged without
-effect, as before, and `GET_CONFIG` reads 8 and 1. A tool that already
-sets them changes with this driver: udsoncan's J2534 connection sets
-BS 0x20 / STMIN 0 and now gets its long answers 32 frames at a time
+`ERR_INVALID_IOCTL_VALUE` and nothing of that list is taken. It needs a
+firmware after 6.0.0-beta.11. On that firmware a channel opens with
+BS 0 / STmin 0, as SAE J2534-1 says, so a tool that sets nothing gets
+its long answers in one go too; a tool or an ECU that needs the old pace
+gets it with `ISO15765_BS` 8 and `ISO15765_STMIN` 1. On older firmware
+the two values are acknowledged without effect, as before: the WiCAN
+sends BS 8 / STmin 1 ms and `GET_CONFIG` reads 8 and 1. A tool that
+already sets them changes with this driver: udsoncan's J2534 connection
+sets BS 0x20 / STMIN 0 and now gets its long answers 32 frames at a time
 without a gap. Everything else behaves as in 1.8.
 
 The installer is not code-signed, so Windows SmartScreen may ask you to

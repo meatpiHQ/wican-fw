@@ -4,9 +4,9 @@
 SAE J2534-1 gives an ISO15765 channel two receive parameters, ISO15765_BS (0x1E) and
 ISO15765_STMIN (0x1F): the block size and the separation time the interface writes into
 the flow control it sends when an ECU answers with more than one frame. Until 2026-11-17
-the device sent BS 8 / STmin 1 ms whatever the tool set. It still opens a channel with
-those two (the standard names 0 and 0; see leg N for why), takes what the tool sets and
-answers GET_CONFIG with the values in force. This bench plays the ECU on the PCAN the way
+the device sent BS 8 / STmin 1 ms whatever the tool set. It opens a channel with the
+standard's 0 and 0 now, takes what the tool sets and answers GET_CONFIG with the values
+in force. This bench plays the ECU on the PCAN the way
 ISO 15765-2 writes it down (a first frame, then only the consecutive frames the flow
 control allows, at the pace it asks for), reads every flow control off the bus and drives
 the device over the wire protocol the Windows DLL speaks. The ECUs: request ids 0x6F2, 0x6F3, 0x6F4, answers on the id + 8 (ids the
@@ -15,14 +15,14 @@ bench simulator does not answer). A request 22 hh ll ss is answered by 0xhhll by
 
 Legs (one planned restart to configure, one to restore):
   C  configure: j2534 on with allow_lan, autopid's groups paused
-  A  a channel as it opens: GET_CONFIG reads ISO15765_BS 8 and ISO15765_STMIN 1, a
-     20-byte answer draws one flow control, 30 08 01
+  A  a channel as it opens: GET_CONFIG reads ISO15765_BS 0 and ISO15765_STMIN 0 (SAE
+     J2534-1's defaults), a 20-byte answer draws one flow control, 30 00 00
   B  SET_CONFIG on a session that is open: BS 4 / STMIN 2 read back, a 100-byte answer
      draws 30 04 02 after the first frame and after every four consecutive frames
   T  the two values one by one (the other kept), STMIN in microseconds (0xF3 = 300 us),
      the largest values (BS 0xFF, STMIN 0x7F)
   S  the scope: a filter opened after SET_CONFIG has the channel's values, a second
-     channel has its own, a channel opened again starts at 8 / 1
+     channel has its own, a channel opened again starts at 0 / 0
   Z  BS 0 means the rest of the message: 4095 bytes (585 consecutive frames, more than
      the 255 a block counter holds) draw exactly one flow control, every byte arrives
   R  what is refused and what is let through: BS 0x100 and a reserved STMIN (0x80,
@@ -86,7 +86,7 @@ ERR_INVALID_IOCTL_VALUE = 0x05
 RX_NOT_A_MESSAGE = b.RX_TX_MSG_TYPE | b.RX_START_OF_MESSAGE | b.RX_TX_INDICATION
 ECU1, ECU2, ECU3 = 0x6F2, 0x6F3, 0x6F4          # request ids; an ECU answers on the id + 8
 MAX_PDU = 4095                                  # the largest message ISO 15765-2 carries with a 12-bit length
-OPENS_WITH = (8, 1)                             # ISO15765_BS, ISO15765_STMIN of a channel nobody has set
+OPENS_WITH = (0, 0)                             # ISO15765_BS, ISO15765_STMIN of a channel nobody has set
 FC_OPENS_WITH = bytes([0x30, OPENS_WITH[0], OPENS_WITH[1]])
 LOSS_COUNTERS = tp.LOSS_COUNTERS
 FLASH_PROBE = "/data/j2534fc_flash_probe.bin"   # leg W writes it and takes it away again
@@ -282,11 +282,11 @@ def leg_a(t, ecus):
     check("A1 CONNECT(ISO15765) and a FLOW_CONTROL filter %03X / %03X accepted" % (ECU1, ECU1 + 8), st == 0 and ch >= 1 and st2 == 0,
           (hex(st), ch, hex(st2)))
     st, got = get_cfg(t, ch)
-    check("A2 GET_CONFIG reads ISO15765_BS 8 and ISO15765_STMIN 1, what the device has always sent", st == 0 and flow(got) == OPENS_WITH,
+    check("A2 GET_CONFIG reads ISO15765_BS 0 and ISO15765_STMIN 0, SAE J2534-1's defaults", st == 0 and flow(got) == OPENS_WITH,
           (hex(st), got))
     st, whole, fcs = ask(t, ecus, ch, ECU1, 20, 1)
     check("A3 a 20-byte answer arrives whole", st == 0 and whole, hex(st))
-    check("A4 the ECU saw one flow control for it: 30 08 01", fcs == [FC_OPENS_WITH], fcs_hex(fcs))
+    check("A4 the ECU saw one flow control for it: 30 00 00", fcs == [FC_OPENS_WITH], fcs_hex(fcs))
     return ch
 
 
@@ -332,7 +332,7 @@ def leg_s(t, ecus, ch):
     st2 = fc_filter(t, ch2, ECU3)
     _s3, got2 = get_cfg(t, ch2)
     _s, whole, fcs = ask(t, ecus, ch2, ECU3, 30, 8)
-    check("S2 a second channel has its own: GET_CONFIG 8 / 1 and 30 08 01", st == 0 and ch2 not in (0, ch) and st2 == 0 and whole
+    check("S2 a second channel has its own: GET_CONFIG 0 / 0 and 30 00 00", st == 0 and ch2 not in (0, ch) and st2 == 0 and whole
           and flow(got2) == OPENS_WITH and fcs == [FC_OPENS_WITH], (hex(st), ch2, got2, fcs_hex(fcs)))
     st = set_cfg(t, ch2, [(CFG_BS, 5)])
     _s3, got = get_cfg(t, ch)
@@ -342,7 +342,7 @@ def leg_s(t, ecus, ch):
     t.call(b.DISCONNECT, channel=ch2)
     st, ch3 = connect(t)
     _s3, got = get_cfg(t, ch3)
-    check("S4 a channel opened again starts at 8 / 1", st == 0 and flow(got) == OPENS_WITH, (hex(st), ch3, got))
+    check("S4 a channel opened again starts at 0 / 0", st == 0 and flow(got) == OPENS_WITH, (hex(st), ch3, got))
     t.call(b.DISCONNECT, channel=ch3)
 
 
@@ -556,7 +556,7 @@ def leg_d(py32, jh, jp, dll, ecus):
           p is not None and p.returncode == 0 and "DLL CHECK DONE" in out and "BAD: " not in out,
           "exit %s" % (p.returncode if p else "none"))
     fcs = ecus.flow_controls(f0)
-    check("D2 the ECU saw what the application set: 30 08 01 as the channel opened, then 30 04 02 four times for 14 consecutive "
+    check("D2 the ECU saw what the application set: 30 00 00 as the channel opened, then 30 04 02 four times for 14 consecutive "
           "frames, then 30 00 F2", fcs == [FC_OPENS_WITH] + [b"\x30\x04\x02"] * 4 + [b"\x30\x00\xF2"], fcs_hex(fcs))
     check("D3 the ECU ended every answer", ecus.errors[e0:] == [], ecus.errors[e0:][:4])
 

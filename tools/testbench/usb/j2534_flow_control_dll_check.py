@@ -132,7 +132,7 @@ if not say("PassThruConnect ISO15765", st == 0, ("0x%X" % (st & 0xFFFFFFFF), las
 ch = ch.value
 
 st, vals = config(ch, GET_CONFIG, [(ISO15765_BS, 0xEE), (ISO15765_STMIN, 0xEE)])
-say("GET_CONFIG on a new channel reads ISO15765_BS 8 and ISO15765_STMIN 1", st == 0 and vals == [8, 1], ("0x%X" % st, vals))
+say("GET_CONFIG on a new channel reads ISO15765_BS 0 and ISO15765_STMIN 0", st == 0 and vals == [0, 0], ("0x%X" % st, vals))
 
 fid = ctypes.c_ulong(0)
 st = d.PassThruStartMsgFilter(ch, FLOW_CONTROL_FILTER, ctypes.byref(iso(b"\xFF\xFF\xFF\xFF")), ctypes.byref(iso(struct.pack(">I", RSP))),
