@@ -18,7 +18,9 @@ Legs (each check prints PASS/FAIL/SKIP; the verdict is the last line):
      names both; python-can through --slcan receives exactly N frames in
      order while a /ws/can client beside it receives the same N; python-can
      TX and a WS TX land on PCAN; both bridges pumped the same chunk count;
-     0 drops at the server, the bridges and the controller.
+     0 drops at the server, the bridges and the controller. Then the burst
+     (2026-11-18): 400 and 2000 slcan lines written in one go reach the bus
+     once each, in order, nothing refused or dropped on the way.
   L  Linux on the Pi (--pi; SKIP with the reason when python-can or sudo is
      missing there): python-can straight at the DUT, and the manual's
      socat + slcand + SocketCAN route (candump, cansend).
@@ -379,6 +381,51 @@ def pi_leg(pi, script_text, interp, args, pcan, n, fps, timeout_s=40):
     return result, lines[-6:]
 
 
+# ---- leg B, the burst: a client writes faster than the bus takes --------------------
+
+BURST_ID = 0x326
+FLASH_PROBE = "/data/slcan_flash_probe.bin"     # B15 writes it and takes it away again
+
+
+def burst_leg(dut, pcan, sl_host, sl_port, n):
+    """n slcan lines (BURST_ID, a 32-bit counter) written to the server in one
+    go: (the counters PCAN saw in order, the unit's counters that moved)"""
+    def counters():
+        bl = dut.get("/api/bridges") or {}
+        br = next((b for b in bl.get("bridges", []) if b["name"] == "br_slcan"), {}).get("stats", {})
+        sk = dut.get("/api/sockets") or {}
+        sv = next((x for x in sk.get("servers", []) if x["name"] == "slcan0"), {}).get("stats", {})
+        can = dut.get("/api/can") or {}
+        return {"send_errors": br.get("send_errors", 0), "codec_errors": br.get("codec_errors", 0),
+                "rx_drops": sv.get("rx_drops", 0), "tx": can.get("tx", 0), "tx_refused": can.get("tx_refused", 0),
+                "tx_lost": can.get("tx_lost", 0)}
+
+    c0 = counters()
+    s = socket.create_connection((sl_host, sl_port), timeout=5)
+    s.sendall(HELLO)
+    time.sleep(0.5)
+    pcan.clear_seen()
+    s.settimeout(30)
+    s.sendall(b"".join(b"t%03X8%08XAA550000\r" % (BURST_ID, i) for i in range(n)))
+    last = -1
+    quiet_since = time.time()
+    end = time.time() + 30
+    while time.time() < end:
+        with pcan._lock:
+            have = len(pcan.seen.get(BURST_ID, []))
+        if have != last:
+            last = have
+            quiet_since = time.time()
+        elif time.time() - quiet_since > 1.5:
+            break
+        time.sleep(0.05)
+    s.close()
+    with pcan._lock:
+        got = [int(h[:8], 16) for h in pcan.seen.get(BURST_ID, [])]
+    c1 = counters()
+    return got, {k: c1[k] - c0[k] for k in c0}
+
+
 # ---- leg S: a client that stalls ---------------------------------------------------
 
 STALL_CLIENT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "slcan_stall_client.py")
@@ -415,6 +462,81 @@ class Stream(threading.Thread):
     def close(self):
         self._halt.set()
         self.join(timeout=2)
+
+
+def duplex_leg(pcan, sl_host, sl_port, n, fps, during=None):
+    """n slcan lines (BURST_ID) written in one go WHILE the bus streams fps
+    frames a second (GEN_ID) to the same client: (the burst's counters PCAN
+    saw, the stream frames sent from the client's first one on, the ones of
+    them the client did not get). `during` runs beside the stream in place
+    of the burst when n is 0 (the flash writes of B15)."""
+    s = socket.create_connection((sl_host, sl_port), timeout=5)
+    s.sendall(HELLO)
+    got = set()
+    first = []
+    stop = threading.Event()
+    head = b"t%03X8" % GEN_ID
+
+    def reader():
+        buf = b""
+        s.settimeout(0.5)
+        while not stop.is_set():
+            try:
+                d = s.recv(65536)
+            except socket.timeout:
+                continue
+            except OSError:
+                break
+            if not d:
+                break
+            buf += d
+            parts = buf.split(b"\r")
+            buf = parts.pop()
+            for ln in parts:
+                if ln.startswith(head) and len(ln) >= 13:
+                    try:
+                        c = int(ln[5:13], 16)
+                    except ValueError:
+                        continue
+                    if not first:
+                        first.append(c)
+                    got.add(c)
+
+    th = threading.Thread(target=reader, daemon=True)
+    th.start()
+    time.sleep(0.5)
+    pcan.clear_seen()
+    stream = Stream(pcan, fps)
+    time.sleep(2.0)
+    t0 = time.time()
+    if during is not None:
+        side = threading.Thread(target=during, daemon=True)
+        side.start()
+        side.join(60)
+    if n:
+        s.sendall(b"".join(b"t%03X8%08XAA550000\r" % (BURST_ID, i) for i in range(n)))
+    last = -1
+    quiet_since = time.time()
+    while n and time.time() - t0 < 60:
+        with pcan._lock:
+            have = len(pcan.seen.get(BURST_ID, []))
+        if have != last:
+            last = have
+            quiet_since = time.time()
+        elif time.time() - quiet_since > 1.5:
+            break
+        time.sleep(0.05)
+    time.sleep(1.0)
+    stream.close()
+    sent = stream.sent
+    time.sleep(2.0)
+    stop.set()
+    th.join(timeout=3)
+    s.close()
+    with pcan._lock:
+        burst = [int(h[:8], 16) for h in pcan.seen.get(BURST_ID, [])]
+    start = first[0] if first else 0
+    return burst, sent - start, sorted(set(range(start, sent)) - got)
 
 
 class RawCounter(threading.Thread):
@@ -547,13 +669,23 @@ def legs_stall(a, dut, pcan, sl_host, sl_port):
                            "lost": res["lost_inside"], "tx_drops": s1.get("tx_drops", 0) - s0.get("tx_drops", 0),
                            "bus_lost": s1["bus_lost"] - s0["bus_lost"]})
 
-        # S4: a stall longer than the backlog holds: the client stays, the loss is counted
+        # S4: a stall longer than the backlog holds: the client stays, the loss is
+        # counted. The backlog is 64 KB since 2026-11-18 and /api/sockets reports
+        # it (32 KB on a build before that, which reports nothing), so the
+        # stall is one and a half times what the buffer and lwIP's send buffer
+        # (20 KB) hold of this bus as slcan text (22 bytes a frame), and stays
+        # under the 10 s after which a silent client is closed.
+        buf = (dut.get("/api/sockets") or {}).get("client_buffer_bytes") or 32768
+        long_ms = min(8000, int(1500.0 * (buf + 20480) / (STALL_FPS * 22)))
+        every = long_ms // 1000 + 4
+        print("   the client buffer is %d bytes: the long stall is %d ms, one every %d s" % (buf, long_ms, every),
+              flush=True)
         s0 = stats()
         b0, c0 = ring("a client is behind"), ring("the client caught up")
-        res, _ = stall_run(a.pi, a.dut_ip, 24, 2500, 6, "delay", 8)
+        res, _ = stall_run(a.pi, a.dut_ip, 3 * every + 8, long_ms, every, "delay", 8)
         s1 = stats()
         drops = s1.get("tx_drops", 0) - s0.get("tx_drops", 0)
-        check("S4 ACKs late by 2.5 s: the client stays",
+        check("S4 ACKs late by %.1f s: the client stays" % (long_ms / 1000.0),
               bool(res) and res["gaps"] >= 2 and res["closes"] == 0, res and {"gaps": res["gaps"], "closes": res["closes"]})
         check("S4 the frames it lost are counted (tx_drops) and said in the log, none lost before the server",
               # a dropped chunk carries one to seven frames, and the unit's own traffic on
@@ -568,11 +700,13 @@ def legs_stall(a, dut, pcan, sl_host, sl_port):
         s0 = stats()
         good = RawCounter(sl_host, sl_port)
         time.sleep(0.5)
-        res, _ = stall_run(a.pi, a.dut_ip, 16, 2500, 5, "delay", 6)
+        s5_secs = 2 * every + 6
+        res, _ = stall_run(a.pi, a.dut_ip, s5_secs, long_ms, every, "delay", 6)
         time.sleep(0.5)
         good.close()
         check("S5 a client that keeps up loses nothing beside one that is behind",
-              bool(res) and res["closes"] == 0 and not good.closed and good.cnt > 12 * STALL_FPS and good.lost() == 0,
+              bool(res) and res["closes"] == 0 and not good.closed and good.cnt > (s5_secs - 4) * STALL_FPS
+              and good.lost() == 0,
               {"keeps_up": {"frames": good.cnt, "lost": good.lost(), "closed": good.closed},
                "behind": res and {"gaps": res["gaps"], "lost": res["lost_inside"]}})
 
@@ -808,6 +942,71 @@ def legs_bridged(a, dut, pcan, found, br, submit, sl_host, sl_port, ws_host, ws_
           can1.get("rx_missed", 1) - can0.get("rx_missed", 0) == 0,
           {"server": st1, "dispatch_drops": can1.get("dispatch_drops"), "rx_missed": can1.get("rx_missed")})
     check("B10 the server's bytes_out moved", st1.get("bytes_out", 0) > stats0.get("slcan0", {}).get("bytes_out", 0), st1.get("bytes_out"))
+
+    # a client that writes a whole block at once (2026-11-18): until then the
+    # controller refused the frame behind the 16 it had in flight and of 400
+    # lines 161 to 209 reached the bus
+    for name, n in (("B11", 400), ("B12", 2000)):
+        got, moved = burst_leg(dut, pcan, sl_host, sl_port, n)
+        missing = sorted(set(range(n)) - set(got))
+        check("%s a burst of %d lines written in one go: every frame on the bus once, in order" % (name, n),
+              got == list(range(n)),
+              {"on_the_bus": len(got), "missing": len(missing), "first_missing": missing[0] if missing else None,
+               "duplicates": len(got) - len(set(got))})
+        check("%s nothing refused or dropped on the way" % name,
+              moved["send_errors"] == 0 and moved["codec_errors"] == 0 and moved["rx_drops"] == 0
+              and moved["tx_refused"] == 0 and moved["tx_lost"] == 0 and moved["tx"] >= n, moved)
+
+    # the same burst while the bus streams to the same client (2026-11-18): a
+    # first fix waited for the bus in the bridge's pump, the burst arrived and
+    # the client lost 162 of the stream's frames meanwhile (1015 at 2000 a
+    # second). The order is asserted too: until that day a frame of ours that
+    # lost arbitration was sent again BEHIND the frames handed over after it
+    # (42 of 2000 out of place at 1100 frames a second, 349 at 2000).
+    for name, fps in (("B13", STALL_FPS), ("B14", 2000.0)):
+        n = 2000
+        burst, sent, lost = duplex_leg(pcan, sl_host, sl_port, n, fps)
+        check("%s a burst of %d lines into a bus streaming %d frames a second: every frame on the bus once, in order" % (name, n, fps),
+              burst == list(range(n)),
+              {"on_the_bus": len(burst), "missing": len(set(range(n)) - set(burst)),
+               "duplicates": len(burst) - len(set(burst)),
+               "out_of_place": sum(1 for i, c in enumerate(burst) if c != i),
+               "arb_lost": (dut.get("/api/can") or {}).get("arb_lost")})
+        check("%s the client lost no frame of the stream meanwhile" % name,
+              sent > fps and not lost,
+              {"stream_frames": sent, "lost": len(lost), "first_lost_at": lost[0] if lost else None})
+
+    # the stream while the unit writes its flash (2026-11-18): an erase stops
+    # every task for about 23 ms, the frames of that time reach the jack at
+    # once, and its queue of 32 lost the client 384 frames at 2000 a second
+    # (886 at 3000) under three uploads; 256 places since
+    def flash_writes():
+        for _ in range(3):
+            try:
+                req = urllib.request.Request(dut.base + "/api/fs/upload?path=" + FLASH_PROBE,
+                                             data=os.urandom(32768), method="POST",
+                                             headers={"Content-Type": "application/octet-stream"})
+                urllib.request.urlopen(req, timeout=30).read()
+            except Exception as e:
+                print("   upload failed: %s" % e, flush=True)
+            time.sleep(1.0)
+
+    def flash_erases():
+        return ((((dut.get("/api/status") or {}).get("health") or {}).get("flash") or {}).get("erases") or 0)
+
+    e0, c0 = flash_erases(), dut.get("/api/can") or {}
+    burst, sent, lost = duplex_leg(pcan, sl_host, sl_port, 0, 2000.0, during=flash_writes)
+    e1, c1 = flash_erases(), dut.get("/api/can") or {}
+    try:
+        dut.api("/api/fs/file?path=" + FLASH_PROBE, "DELETE")
+    except Exception:
+        pass
+    check("B15 a bus streaming 2000 frames a second while the unit writes its flash (3 files of 32 KB): no frame lost",
+          e1 > e0 and sent > 2000 and not lost
+          and c1.get("dispatch_drops") == c0.get("dispatch_drops") and c1.get("rx_missed") == c0.get("rx_missed"),
+          {"erases": e1 - e0, "stream_frames": sent, "lost": len(lost),
+           "dispatch_drops": (c0.get("dispatch_drops"), c1.get("dispatch_drops")),
+           "rx_missed": (c0.get("rx_missed"), c1.get("rx_missed"))})
 
     # ---- leg L: Linux on the Pi -------------------------------------------------------
     print("== L: the Linux clients on %s" % a.pi, flush=True)
