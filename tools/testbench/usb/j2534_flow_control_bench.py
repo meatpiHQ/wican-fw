@@ -47,6 +47,14 @@ Legs (one planned restart to configure, one to restore):
      interrupt alone, so the frames of that time wait in the CAN node's receive queue
      (256 frames since 2026-11-17) and then arrive at once in the queues behind it
      (the channel's own, at 32 frames, dropped 201 of them that day)
+  Q  the other direction, a long REQUEST: 125, 1000 and 4000 bytes written to an ECU
+     whose flow control asks for no gap (30 00 00). The device then sends its
+     consecutive frames as fast as the bus takes them. Until 2026-11-18 the CAN driver
+     refused the frame behind the 16 it had in flight and that ended the transfer: a
+     request above 118 bytes stopped after 16 or 17 consecutive frames and the write
+     came back ERR_TIMEOUT (with 30 00 01 it went through)
+  K  many raw CAN frames in ONE PassThruWriteMsgs on a CAN channel: 40 and 121 frames,
+     every one on the bus once, in order (until 2026-11-18: 17 on the bus, ERR_FAILED)
   U  the device's own UDS client (POST /api/uds/request) is not the tool's channel: it
      keeps BS 8 / STmin 1 ms
   D  the driver DLL called like an application (--dll, the 32-bit Python):
@@ -85,6 +93,7 @@ CFG_DATA_RATE, CFG_LOOPBACK, CFG_BS, CFG_STMIN = 0x01, 0x03, 0x1E, 0x1F
 ERR_INVALID_IOCTL_VALUE = 0x05
 RX_NOT_A_MESSAGE = b.RX_TX_MSG_TYPE | b.RX_START_OF_MESSAGE | b.RX_TX_INDICATION
 ECU1, ECU2, ECU3 = 0x6F2, 0x6F3, 0x6F4          # request ids; an ECU answers on the id + 8
+RAW_ID = 0x333                                  # leg K's raw frames: a 32-bit counter in bytes 0..3
 MAX_PDU = 4095                                  # the largest message ISO 15765-2 carries with a 12-bit length
 OPENS_WITH = (0, 0)                             # ISO15765_BS, ISO15765_STMIN of a channel nobody has set
 FC_OPENS_WITH = bytes([0x30, OPENS_WITH[0], OPENS_WITH[1]])
@@ -123,6 +132,7 @@ class Ecus(threading.Thread):
         self.sent = {}          # answer id -> frames put on the bus
         self.pdus = []          # (answer id, bytes, seconds from the first frame to the last one handed to the PCAN)
         self.errors = []
+        self.raw = []           # the counters of RAW_ID frames, in the order they were on the bus
 
     def run(self):
         while not self.halt.is_set():
@@ -145,6 +155,8 @@ class Ecus(threading.Thread):
         cid, d = m.arbitration_id, bytes(m.data)
         if cid in self.req_ids and d[0] >> 4 == 3:
             self.fcs.append((m.timestamp, cid, d[:3]))
+        if cid == RAW_ID and len(d) >= 4:
+            self.raw.append(struct.unpack(">I", d[:4])[0])
         return cid, d
 
     def _send(self, can_id, data):
@@ -393,6 +405,38 @@ def leg_r(t, ecus, ch):
     t.call(b.DISCONNECT, channel=chc)
 
 
+def leg_q(t, ecus, ch):
+    print("== Q: a long request, the ECU's flow control asks for no gap", flush=True)
+    set_cfg(t, ch, [(CFG_BS, 0), (CFG_STMIN, 0)])
+    for name, n in (("Q1", 125), ("Q2", 1000), ("Q3", 4000)):
+        req = b"\x36" + tp.pattern(n & 0xFF, n - 1)
+        e0 = len(ecus.errors)
+        t0 = time.perf_counter()
+        st = t.call(b.WRITE_MSGS, ch, struct.pack("<I", 1) + iso_msg(struct.pack(">I", ECU1) + req))[0]
+        took = time.perf_counter() - t0
+        r = t.wait_rx(lambda x: x[1] == ch and not (x[2] & RX_NOT_A_MESSAGE) and x[3][:4] == struct.pack(">I", ECU1 + 8), 8.0)
+        check("%s a request of %d bytes to an ECU that answers 30 00 00: written, taken whole, its echo back whole" % (name, n),
+              st == 0 and r is not None and r[3][4:] == answer_to(req) and len(ecus.errors) == e0,
+              {"write": hex(st), "write_s": round(took, 2), "echo_bytes": None if r is None else len(r[3]) - 4,
+               "ecu": ecus.errors[e0:e0 + 1]})
+
+
+def leg_k(t, ecus):
+    print("== K: many raw CAN frames in one PassThruWriteMsgs", flush=True)
+    st, rch = connect(t, b.PROT_CAN)
+    for name, n in (("K1", 40), ("K2", 121)):
+        del ecus.raw[:]
+        body = struct.pack("<I", n) + b"".join(
+            tp.any_msg(b.PROT_CAN, struct.pack(">I", RAW_ID) + struct.pack(">I", i) + b"\xAA\x55\x00\x00") for i in range(n))
+        wst = t.call(b.WRITE_MSGS, rch, body)[0]
+        time.sleep(0.8)
+        seen = list(ecus.raw)
+        check("%s %d raw CAN frames in one write: every frame on the bus once, in order" % (name, n),
+              st == 0 and wst == 0 and seen == list(range(n)),
+              {"connect": hex(st), "write": hex(wst), "on_the_bus": len(seen), "in_order": seen == sorted(seen)})
+    t.call(b.DISCONNECT, channel=rch)
+
+
 def flash_ops(dut):
     """The unit's flash counters since boot and its uptime in seconds."""
     st = dut.get("/api/status") or {}
@@ -634,8 +678,10 @@ def main():
         leg_s(t, ecus, ch)
         leg_z(t, ecus, ch)
         leg_r(t, ecus, ch)
+        leg_q(t, ecus, ch)
         leg_n(t, ecus, ch, dut, a.big)
         leg_w(t, ecus, ch, dut)
+        leg_k(t, ecus)
         t.call(b.DISCONNECT, channel=ch)
         t.call(b.CLOSE)
     except Exception as e:
