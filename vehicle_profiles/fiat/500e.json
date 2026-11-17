@@ -1,0 +1,69 @@
+{
+    "car_model": "Fiat: 500e (2020-)",
+    "note": "BMS (0x44) and body controller (0x40) only answer while the car is Ready, or for a few minutes after charging (re)starts. SOC_D is the dashboard value, SOC the raw BMS value. Negative HV_A = charging.",
+    "init": "ATSP7;ATCP18;ATSH18DA44F1;ATFCSH18DA44F1;ATCRA18DAF144;",
+    "pids": [
+        {
+            "pid": "22A010",
+            "pid_init": "ATSH18DA44F1;ATFCSH18DA44F1;ATCRA18DAF144;",
+            "parameters": {
+                "SOC_D": "(B5/(0.9*255)*100)-5",
+                "SOC": "(B5/255)*100"
+            }
+        },
+        {
+            "pid": "22A029",
+            "pid_init": "ATSH18DA44F1;ATFCSH18DA44F1;ATCRA18DAF144;",
+            "parameters": {
+                "SOH": "([B11:B12]*100.0)/[B9:B10]",
+                "HV_CAPACITY": "[B11:B12]/10.0",
+                "BATT_CAPACITY": "[B9:B10]/10.0"
+            }
+        },
+        {
+            "pid": "22A011",
+            "pid_init": "ATSH18DA44F1;ATFCSH18DA44F1;ATCRA18DAF144;",
+            "parameters": {
+                "HV_V": "[B5:B6]/10.0"
+            }
+        },
+        {
+            "pid": "22A00A",
+            "pid_init": "ATSH18DA44F1;ATFCSH18DA44F1;ATCRA18DAF144;",
+            "parameters": {
+                "HV_A": "([B4:B5]-32768)/20.0"
+            }
+        },
+        {
+            "pid": "22A009",
+            "pid_init": "ATSH18DA44F1;ATFCSH18DA44F1;ATCRA18DAF144;",
+            "parameters": {
+                "HV_C_V_MAX": "((B7*256)+B9)/1000.0",
+                "HV_C_V_MIN": "[B10:B11]/1000.0",
+                "HV_T_MAX": "[B14:B15]-32768",
+                "HV_T_MIN": "[B17:B18]-32768"
+            }
+        },
+        {
+            "pid": "22A042",
+            "pid_init": "ATSH18DA44F1;ATFCSH18DA44F1;ATCRA18DAF144;",
+            "parameters": {
+                "LV_V": "[B4:B5]/1000.0"
+            }
+        },
+        {
+            "pid": "22013C",
+            "pid_init": "ATSH18DA40F1;ATFCSH18DA40F1;ATCRA18DAF140;",
+            "parameters": {
+                "OUTSIDE_TEMPERATURE": "(B4/2.0)-40"
+            }
+        },
+        {
+            "pid": "222001",
+            "pid_init": "ATSH18DA40F1;ATFCSH18DA40F1;ATCRA18DAF140;",
+            "parameters": {
+                "ODOMETER": "[B4:B6]/10.0"
+            }
+        }
+    ]
+}
