@@ -883,6 +883,7 @@ void autopid_update_values(void)
         if ((curr_pid->pid_type == PID_STD && !all_pids->pid_std_en) ||
             (curr_pid->pid_type == PID_CUSTOM && !all_pids->pid_custom_en) ||
             (curr_pid->pid_type == PID_SPECIFIC && !all_pids->pid_specific_en)) {
+            value_index += curr_pid->parameters_count;  // keep index aligned with the flat table
             continue;
         }
 
@@ -2636,21 +2637,32 @@ void autopid_init(char* id)
         ESP_LOGE(TAG, "Failed to create autopid_values mutex");
         return;
     }
-    autopid_values = malloc(sizeof(autopid_value_t) * all_pids->pid_count);
+    // One entry per parameter (a vehicle profile PID can carry several parameters),
+    // in the same flat order autopid_update_values() walks them.
+    uint32_t total_params = 0;
+    for (uint32_t i = 0; i < all_pids->pid_count; i++)
+    {
+        total_params += all_pids->pids[i].parameters_count;
+    }
+    autopid_values = calloc(total_params ? total_params : 1, sizeof(autopid_value_t));
     if (!autopid_values)
     {
         ESP_LOGE(TAG, "Failed to allocate memory for autopid_values");
         return;
     }
 
-    for (int i = 0; i < all_pids->pid_count; i++)
+    uint32_t v = 0;
+    for (uint32_t i = 0; i < all_pids->pid_count; i++)
     {
-        autopid_values[i].name = malloc(strlen(all_pids->pids[i].parameters->name) + 1);
-        strcpy(autopid_values[i].name, all_pids->pids[i].parameters->name);
-        autopid_values[i].value = FLT_MAX;
-        autopid_values[i].sensor_type = all_pids->pids[i].parameters->sensor_type;
+        for (uint32_t j = 0; j < all_pids->pids[i].parameters_count; j++, v++)
+        {
+            parameter_t *param = &all_pids->pids[i].parameters[j];
+            autopid_values[v].name = param->name ? strdup(param->name) : NULL;
+            autopid_values[v].value = FLT_MAX;
+            autopid_values[v].sensor_type = param->sensor_type;
+        }
     }
-    autopid_values_count = all_pids->pid_count;
+    autopid_values_count = total_params;
 
 
     
