@@ -15,7 +15,7 @@
 # land in test-reports\logs\<run>\ (gitignored).
 #
 param(
-    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'bleram', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'profilee2e', 'slcan', 'j2534auto', 'j2534std', 'j2534vbat', 'j2534vpw', 'j2534tp20', 'j2534fc', 'multibus', 'kline', 'precan', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'wgcycle', 'tspublic', 'tlschain', 'tlsbyip', 'rulepost', 'pushreply', 'habackfill', 'garage', 'espnleasy', 'espnlapn', 'usbgps', 'usbdetach', 'abrp', 'backup', 'fwupdate', 'espnlota', 'logclock', 'sdformat', 'obdfw', 'chipprompt', 'carname', 'canfilters', 'destnets', 'canselftest', 'attpstore', 'obdbringup', 'sleepword', 'sleeptrig', 'chipwake', 'connections', 'stackaudit', 'dwc2', 'logsinks', 'release', 'all', 'list')]
+    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'bleram', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'profilee2e', 'slcan', 'canmax', 'j2534auto', 'j2534std', 'j2534vbat', 'j2534vpw', 'j2534tp20', 'j2534fc', 'multibus', 'kline', 'precan', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'wgcycle', 'tspublic', 'tlschain', 'tlsbyip', 'rulepost', 'pushreply', 'habackfill', 'garage', 'espnleasy', 'espnlapn', 'usbgps', 'usbdetach', 'abrp', 'backup', 'fwupdate', 'espnlota', 'logclock', 'sdformat', 'obdfw', 'chipprompt', 'carname', 'canfilters', 'destnets', 'canselftest', 'attpstore', 'obdbringup', 'sleepword', 'sleeptrig', 'chipwake', 'connections', 'stackaudit', 'dwc2', 'logsinks', 'release', 'all', 'list')]
     [string]$What,
     [Parameter(Position = 1)][string]$Component,
     [ValidateSet('6.0.2', '6.1')][string]$Idf = '6.1',  # the ESP-IDF the build stages use (6.1 since 6.0.0-beta.5, 2026-10-27; 6.0.2 stays installed; build.ps1 -Idf has the same table)
@@ -1114,6 +1114,7 @@ function Show-Inventory {
     Write-Host '  autobaud   - CAN listen-before-talk, auto bit rate and the autopid bus guard: PCAN keeps the bus alive and counts error frames (~9 min)'
     Write-Host '  profilee2e - a published vehicle profile end to end (2026-10-21): the Leaf ZE1 profile imported the way the web UI imports it (index shift, renames, passive filters) and polled against an ECU played FROM THE PROFILE on the PCAN (every reply and every filter frame with bytes the bench chose); the values the device publishes must be what the profile''s expressions mean, every request answered, the filters decoded, the rows re-read, restore (2 planned restarts, ~5 min; by hand --profiles <checkout>\vehicle_profiles.json tests a profile before it is pushed)'
     Write-Host '  slcan      - slcan over TCP 3333 (2026-10-16): first the trap (the server on with no connection row: client connected, nothing arrives, the W line and bridge:null say why), then the bridged path: python-can on the PC and on rpi001, slcand + SocketCAN, the /ws/can monitor beside the TCP client, exactly-N with PCAN as the generator, TX both ways, restore (2 to 3 planned restarts, ~3 min)'
+    Write-Host '  canmax     - the most frames a CAN bus can carry (2026-11-18): the bus kept full (one frame after the other) at 500 and 1000 kbit/s with three frame shapes (8 data bytes, no data = the most frames, 29-bit), exactly N frames each; the CAN driver must count every one and a slcan client on TCP 3333 must get every one, once and in order; the most classic CAN can carry (20,833 frames a second at 1000 kbit/s) is above what the unit takes, and there every lost frame must be in a counter (needs: PCAN on the DUT bus (WICAN_PCAN_DUT) + ECU sim v2 + rpi001; prints CAN MAX RATE PASS; about 3 min, three planned restarts)'
     Write-Host '  j2534auto  - a tester states the bit rate on a silent bus (2026-10-17): with Automatic and a bus that only answers when asked, a J2534 CONNECT at a rate the node does not know is refused and said so (tx_refused, the W lines), a CONNECT at 500k is taken (adopted, writes and the ISO15765 reply flow, frames then prove it), after a restart an slcan client''s S6 does the same through the bridge, restore (3 planned restarts, ~4 min)'
     Write-Host '  j2534std   - a standard J2534 tool through the PassThru server (2026-10-19): udsoncan''s byte stream through the DLL replayed byte-exact (the 4-byte id first, the pad flag per message, TxDone and START_OF_MESSAGE indications, a multi-frame VIN, two ECUs on one channel, functional 7DF through a PASS filter, the reflash gate behind the id), then the installed wican_j2534.dll driven by udsoncan under the 32-bit Python; restore (2 planned restarts, ~1 min)'
     Write-Host '  j2534vbat  - READ_VBATT on the wire and through the DLL at 13.5/14.5 V; fake-device error cases; restore. Optional component driver runs only the fake-device checks.'
@@ -1483,6 +1484,31 @@ try {
                     $out = & $py -u "$repo\tools\testbench\can\slcan_bridge_test.py" --dut 'localhost:18081' --slcan 'localhost:18333' --dut-ip $DutIp --pi $BenchHost 2>&1 | ForEach-Object { Write-Host $_; $_ }
                     Save-StageLog 'slcan' $out
                     if (-not ($out | Select-String -Quiet '^SLCAN BRIDGE PASS')) { throw 'no SLCAN BRIDGE PASS (PCAN wired? the DUT on the bench AP?)' }
+                } finally {
+                    if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
+                    Stop-ConsoleTail $con
+                }
+            }
+        }
+        'canmax' {
+            # The most frames a CAN bus can carry (2026-11-18, Ali: "we need to
+            # test for max possible frames on CAN bus to see if our device can
+            # handle"). The bus is kept full at each bit rate with three frame
+            # shapes; the unit's counters and one slcan client on TCP 3333 must
+            # account for every frame. The bench moves the unit's CAN interface
+            # and ECU sim v2 to the bit rate, switches AutoPID off for the run
+            # and puts everything back. The slcan port rides a second forward
+            # of the tunnel, as in the slcan stage.
+            Invoke-Stage 'CAN line rate' {
+                $py = $script:BenchPy
+                $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", '-L', "18333:${DutIp}:3333", $BenchHost)
+                $con = Start-ConsoleTail 'canmax'
+                try {
+                    Start-Sleep -Seconds 3
+                    if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (ports 18081/18333 busy?)" }
+                    $out = & $py -u "$repo\tools\testbench\can\can_maxrate_bench.py" --dut 'localhost:18081' --slcan 'localhost:18333' --pcan $PcanChannel 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    Save-StageLog 'canmax' $out
+                    if (-not ($out | Select-String -Quiet '^CAN MAX RATE PASS')) { throw 'no CAN MAX RATE PASS (PCAN on the DUT bus? ECU sim v2 reachable? the bus quiet?)' }
                 } finally {
                     if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
                     Stop-ConsoleTail $con
