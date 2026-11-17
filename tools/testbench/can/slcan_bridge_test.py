@@ -22,6 +22,14 @@ Legs (each check prints PASS/FAIL/SKIP; the verdict is the last line):
   L  Linux on the Pi (--pi; SKIP with the reason when python-can or sudo is
      missing there): python-can straight at the DUT, and the manual's
      socat + slcand + SocketCAN route (candump, cansend).
+  S  a client that stalls (2026-11-17, a field report: port 3333 closed on
+     a phone about once a minute and held on a laptop). 1,100 frames/s on
+     the bus; slcan_stall_client.py on the Pi holds its ACKs back (tc
+     netem) or drops them (nft). ACKs late by 300 and 600 ms: no close, no
+     frame lost. Late by 2.5 s: the client stays, the loss is counted
+     (tx_drops) and said in the log. A client that keeps up beside one that
+     is behind loses nothing. A client that takes nothing for 10 s is
+     closed, the next one receives. SKIP without sudo, tc and nft there.
   R  settings back as found (one restart), planned restarts only, E lines
      and unexpected resets unchanged.
 
@@ -299,7 +307,7 @@ for i in $(seq 1 20); do [ -e /dev/netcan0 ] && break; sleep 0.25; done
 sudo -n slcand -o -c -s6 /dev/netcan0 can0 || { echo "RESULT fail slcand"; exit 0; }
 sleep 0.5
 sudo -n ip link set can0 up || { echo "RESULT fail link"; exit 0; }
-( timeout $SECS candump -n $N can0 > $OUT 2>&1; echo CANDUMP_DONE >> $OUT ) &
+( timeout $SECS candump -n $N can0,123:7FF > $OUT 2>&1; echo CANDUMP_DONE >> $OUT ) &
 sleep 0.4; echo READY
 while ! grep -q CANDUMP_DONE $OUT; do sleep 0.2; done
 cansend can0 325#2525
@@ -371,6 +379,220 @@ def pi_leg(pi, script_text, interp, args, pcan, n, fps, timeout_s=40):
     return result, lines[-6:]
 
 
+# ---- leg S: a client that stalls ---------------------------------------------------
+
+STALL_CLIENT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "slcan_stall_client.py")
+STALL_FPS = 1100.0
+
+
+class Stream(threading.Thread):
+    """PCAN at a steady frame rate: GEN_ID, DLC 8, a 32-bit counter in bytes
+    0..3 (big endian), what slcan_stall_client.py counts"""
+
+    def __init__(self, pcan, fps):
+        super().__init__(daemon=True)
+        self.pcan = pcan
+        self.fps = fps
+        self.sent = 0
+        self._halt = threading.Event()
+        self.start()
+
+    def run(self):
+        period = 1.0 / self.fps
+        nxt = time.perf_counter()
+        while not self._halt.is_set():
+            m = self.pcan.can.Message(arbitration_id=GEN_ID, is_extended_id=False,
+                                      data=self.sent.to_bytes(4, "big") + b"\xAA\x55\x00\x00")
+            try:
+                self.pcan.bus.send(m, timeout=0.2)
+                self.sent += 1
+            except Exception:
+                pass
+            nxt += period
+            while time.perf_counter() < nxt:
+                time.sleep(0)
+
+    def close(self):
+        self._halt.set()
+        self.join(timeout=2)
+
+
+class RawCounter(threading.Thread):
+    """a client on this PC that reads all the time and counts the stream"""
+
+    def __init__(self, host, port):
+        super().__init__(daemon=True)
+        self.s = socket.create_connection((host, port), timeout=5)
+        self.s.sendall(HELLO)
+        self.s.settimeout(0.5)
+        self.first = self.last = None
+        self.cnt = 0
+        self.closed = False
+        self._halt = threading.Event()
+        self.start()
+
+    def run(self):
+        buf = b""
+        while not self._halt.is_set():
+            try:
+                d = self.s.recv(65536)
+            except socket.timeout:
+                continue
+            except OSError:
+                self.closed = True
+                break
+            if not d:
+                self.closed = True
+                break
+            buf += d
+            parts = buf.split(b"\r")
+            buf = parts.pop()
+            for line in parts:
+                if len(line) == 21 and line.startswith(b"t1238"):
+                    c = int(line[5:13], 16)
+                    self.first = c if self.first is None else self.first
+                    self.last = c
+                    self.cnt += 1
+
+    def lost(self):
+        return (self.last - self.first + 1 - self.cnt) if self.cnt else 0
+
+    def close(self):
+        self._halt.set()
+        self.join(timeout=2)
+        self.s.close()
+
+
+def stall_ready(pi):
+    """sudo, tc and nft on the Pi, or the reason the leg cannot run"""
+    try:
+        r = subprocess.run(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", pi,
+                            "sudo -n true && sudo -n tc -V >/dev/null && sudo -n nft -v >/dev/null && echo STALL_OK"],
+                           capture_output=True, text=True, timeout=30)
+    except Exception as e:
+        return "ssh to the Pi failed: %s" % e
+    return "" if "STALL_OK" in r.stdout else "sudo, tc (netem) or nft missing on the Pi"
+
+
+def stall_run(pi, dut_ip, secs, gap_ms, every_s, mode, quiet_end_s=1.0):
+    """one run of the stall client on the Pi: (result dict or None, EVENT close lines)"""
+    cmd = "python3 /tmp/slcan_stall_client.py %s 3333 %g %d %g %s %g" % (
+        dut_ip, secs, gap_ms, every_s, mode, quiet_end_s)
+    p = subprocess.run(["ssh", "-o", "BatchMode=yes", pi, cmd],
+                       capture_output=True, text=True, timeout=secs + 90)
+    res = None
+    for line in p.stdout.splitlines():
+        if line.startswith("RESULT "):
+            res = json.loads(line[7:])
+    return res, [l for l in p.stdout.splitlines() if l.startswith("EVENT close")]
+
+
+def stall_clean(pi, dut_ip):
+    """no rule and no delay left on the Pi, whatever a run left behind"""
+    subprocess.run(["ssh", "-o", "BatchMode=yes", pi,
+                    "sudo -n nft delete table ip slcanrepro 2>/dev/null; "
+                    "sudo -n tc qdisc del dev $(ip -o route get %s | sed -n 's/.* dev \\([^ ]*\\).*/\\1/p') root 2>/dev/null; true" % dut_ip],
+                   capture_output=True, timeout=30)
+
+
+def legs_stall(a, dut, pcan, sl_host, sl_port):
+    """A client whose ACKs come late keeps its connection and its frames; the
+    loss of a stall longer than the backlog is counted; a client that is gone
+    is closed; a client that keeps up is not held back by one that does not."""
+    print("== S: a client that stalls (%d frames/s on the bus)" % STALL_FPS, flush=True)
+    if a.skip_pi:
+        skip("S the stall legs", "--skip-pi")
+        return
+    why = stall_ready(a.pi)
+    if why:
+        skip("S the stall legs", why)
+        return
+    subprocess.run(["scp", "-q", STALL_CLIENT, a.pi + ":/tmp/slcan_stall_client.py"], check=True, timeout=30)
+
+    def stats():
+        """the server's counters, with the controller's two loss counters beside them"""
+        sk = dut.get("/api/sockets") or {}
+        st = dict(next((s for s in sk.get("servers", []) if s["name"] == "slcan0"), {}).get("stats", {}))
+        can = dut.get("/api/can") or {}
+        st["bus_lost"] = can.get("dispatch_drops", 0) + can.get("rx_missed", 0)
+        return st
+
+    def ring(needle):
+        return dut.ring_count(needle)
+
+    stream = Stream(pcan, STALL_FPS)
+    try:
+        time.sleep(1.0)
+
+        # S1: the control, a client that reads all the time
+        s0 = stats()
+        res, _ = stall_run(a.pi, a.dut_ip, 10, 0, 3, "none")
+        s1 = stats()
+        check("S1 no stall: the client holds, every frame arrives",
+              bool(res) and res["closes"] == 0 and res["lost_inside"] == 0 and res["frames"] > 8 * STALL_FPS
+              and s1.get("tx_drops", 0) == s0.get("tx_drops", 0) and s1["bus_lost"] == s0["bus_lost"],
+              res and {"closes": res["closes"], "frames": res["frames"], "lost": res["lost_inside"],
+                       "bus_lost": s1["bus_lost"] - s0["bus_lost"]})
+
+        # S2, S3: the ACKs late by 300 ms and by 600 ms, every 3 s (6.0.0-beta.11
+        # closed the client at 166 ms)
+        for n, gap in (("S2", 300), ("S3", 600)):
+            s0 = stats()
+            res, _ = stall_run(a.pi, a.dut_ip, 20, gap, 3, "delay", 3)
+            s1 = stats()
+            check("%s ACKs late by %d ms: no close, no frame lost, nothing dropped" % (n, gap),
+                  bool(res) and res["gaps"] >= 4 and res["closes"] == 0 and res["lost_inside"] == 0
+                  and s1.get("tx_drops", 0) == s0.get("tx_drops", 0) and s1["bus_lost"] == s0["bus_lost"],
+                  res and {"gaps": res["gaps"], "closes": res["closes"], "frames": res["frames"],
+                           "lost": res["lost_inside"], "tx_drops": s1.get("tx_drops", 0) - s0.get("tx_drops", 0),
+                           "bus_lost": s1["bus_lost"] - s0["bus_lost"]})
+
+        # S4: a stall longer than the backlog holds: the client stays, the loss is counted
+        s0 = stats()
+        b0, c0 = ring("a client is behind"), ring("the client caught up")
+        res, _ = stall_run(a.pi, a.dut_ip, 24, 2500, 6, "delay", 8)
+        s1 = stats()
+        drops = s1.get("tx_drops", 0) - s0.get("tx_drops", 0)
+        check("S4 ACKs late by 2.5 s: the client stays",
+              bool(res) and res["gaps"] >= 2 and res["closes"] == 0, res and {"gaps": res["gaps"], "closes": res["closes"]})
+        check("S4 the frames it lost are counted (tx_drops) and said in the log, none lost before the server",
+              # a dropped chunk carries one to seven frames, and the unit's own traffic on
+              # the bus (AutoPID) is dropped with the generator's without being counted lost
+              bool(res) and res["lost_inside"] > 0 and drops > 0
+              and drops <= res["lost_inside"] * 1.1 + 50 and res["lost_inside"] <= drops * 7
+              and ring("a client is behind") > b0 and ring("the client caught up") > c0
+              and s1["bus_lost"] == s0["bus_lost"],
+              res and {"lost": res["lost_inside"], "tx_drops": drops, "bus_lost": s1["bus_lost"] - s0["bus_lost"]})
+
+        # S5: a client that keeps up beside one that is behind
+        s0 = stats()
+        good = RawCounter(sl_host, sl_port)
+        time.sleep(0.5)
+        res, _ = stall_run(a.pi, a.dut_ip, 16, 2500, 5, "delay", 6)
+        time.sleep(0.5)
+        good.close()
+        check("S5 a client that keeps up loses nothing beside one that is behind",
+              bool(res) and res["closes"] == 0 and not good.closed and good.cnt > 12 * STALL_FPS and good.lost() == 0,
+              {"keeps_up": {"frames": good.cnt, "lost": good.lost(), "closed": good.closed},
+               "behind": res and {"gaps": res["gaps"], "lost": res["lost_inside"]}})
+
+        # S6: a client that is gone (no ACK at all for 15 s) is closed after 10 s
+        g0 = ring("took no data for")
+        res, closes = stall_run(a.pi, a.dut_ip, 30, 15000, 5, "ack", 1)
+        st = stats()
+        check("S6 a client that takes nothing for 10 s is closed, with the reason in the log",
+              bool(res) and res["closes"] == 1 and ring("took no data for") == g0 + 1,
+              {"closes": res and res["closes"], "log": ring("took no data for") - g0, "events": closes[:2]})
+        res, _ = stall_run(a.pi, a.dut_ip, 6, 0, 3, "none")
+        check("S6 the next client receives again",
+              bool(res) and res["closes"] == 0 and res["frames"] > 4 * STALL_FPS and res["lost_inside"] == 0
+              and st.get("clients", 1) == 0,
+              res and {"frames": res["frames"], "lost": res["lost_inside"], "clients_before": st.get("clients")})
+    finally:
+        stream.close()
+        stall_clean(a.pi, a.dut_ip)
+
+
 # ---- the legs ------------------------------------------------------------------------
 
 def bridges_on(bridges, jack):
@@ -404,7 +626,7 @@ def main():
     unexp0 = st.get("unexpected_resets")
     err0 = (st.get("health") or {}).get("log_errors")
     print("dut: %s boot_count=%s unexpected=%s log_errors=%s" % (st.get("version"), boot0, unexp0, err0), flush=True)
-    found = {c: dut.settings(c) for c in ("socket_manager", "bridge_manager", "can_manager")}
+    found = {c: dut.settings(c) for c in ("socket_manager", "bridge_manager", "can_manager", "websocket_manager")}
     print("as found: servers=%s bridges=%s can=%s" % (
         [(s["name"], s["enabled"]) for s in found["socket_manager"]["servers"]],
         [(b["name"], b["a"], b["b"], b.get("enabled")) for b in found["bridge_manager"]["bridges"]],
@@ -415,10 +637,11 @@ def main():
         print("SLCAN BRIDGE FAIL: PCAN %s not usable: %s" % (a.pcan, e))
         sys.exit(1)
 
-    def submit(sock=None, br=None, can=None, why=""):
+    def submit(sock=None, br=None, can=None, ws=None, why=""):
         nonlocal planned
         changed = False
-        for comp, obj in (("socket_manager", sock), ("bridge_manager", br), ("can_manager", can)):
+        for comp, obj in (("socket_manager", sock), ("bridge_manager", br), ("can_manager", can),
+                          ("websocket_manager", ws)):
             if obj is None:
                 continue
             r = dut.api("/api/settings/" + comp, "PUT", obj)
@@ -491,8 +714,9 @@ def main():
 
     # ---- leg R: restore -----------------------------------------------------------------
     print("== R: restore", flush=True)
-    submit(found["socket_manager"], found["bridge_manager"], found["can_manager"], why="the settings as found")
-    back = {c: dut.settings(c) for c in ("socket_manager", "bridge_manager", "can_manager")}
+    submit(found["socket_manager"], found["bridge_manager"], found["can_manager"], found["websocket_manager"],
+           why="the settings as found")
+    back = {c: dut.settings(c) for c in found}
     check("R1 settings back as found", back == found,
           {c: "same" if back[c] == found[c] else "DIFFERS" for c in found})
     st = dut.get("/api/status") or {}
@@ -519,9 +743,23 @@ def legs_bridged(a, dut, pcan, found, br, submit, sl_host, sl_port, ws_host, ws_
     br2["bridges"] = [b for b in br2["bridges"] if b["name"] not in ("br_slcan", "br_can")]
     br2["bridges"].append({"name": "br_can", "a": "can", "b": "ws_can", "translator": "slcan", "enabled": True})
     br2["bridges"].append({"name": "br_slcan", "a": "can", "b": "slcan0", "translator": "slcan", "enabled": True})
-    if len(br2["bridges"]) > 6:
-        raise RuntimeError("no free bridge slot for the rows (%d configured)" % len(br2["bridges"]))
-    submit(br=br2, why="the connection rows")
+    # six rows at most: a unit that carries five of its own (the canonical
+    # bench set since 2026-11) lends one for the run, leg R gives it back
+    while len(br2["bridges"]) > 6:
+        spare = next((b for b in reversed(br2["bridges"])
+                      if b["name"] not in ("br_slcan", "br_can")
+                      and not {"can", "slcan0", "ws_can"} & {b.get("a"), b.get("b")}), None)
+        if spare is None:
+            raise RuntimeError("no free bridge slot for the rows (%d configured)" % len(br2["bridges"]))
+        print("no free connection row: %s (%s, %s) is left out for the run" % (spare["name"], spare["a"], spare["b"]),
+              flush=True)
+        br2["bridges"].remove(spare)
+    # the monitor's channel is off on a unit with the canonical bench settings
+    ws2 = json.loads(json.dumps(found["websocket_manager"]))
+    for ch in ws2.get("channels", []):
+        if ch.get("name") == "ws_can":
+            ch["enabled"] = True
+    submit(br=br2, ws=ws2, why="the connection rows")
 
     bl = dut.get("/api/bridges") or {}
     up = {b["name"]: b.get("up") for b in bl.get("bridges", [])}
@@ -596,6 +834,8 @@ def legs_bridged(a, dut, pcan, found, br, submit, sl_host, sl_port, ws_host, ws_
                 ok = res is not None and len(res) == 3 and res[1] == str(n2)
                 check("L3 socat + slcand + candump on the Pi: N=%d frames" % n2, ok, res or tail)
                 check("L4 cansend from can0 reached the bus (0x325)", pcan.saw(0x325, "2525"), dict(pcan.seen))
+
+    legs_stall(a, dut, pcan, sl_host, sl_port)
 
 
 if __name__ == "__main__":
