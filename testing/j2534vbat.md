@@ -32,7 +32,7 @@ The driver repo's `.\build.ps1` builds it without changing the installed driver.
   document are restored in nested finally blocks, even on a failed leg.
   Only the two planned settings restarts may occur.
 
-Host half: `.\test.ps1 host j2534_server`, 32 Unity tests. The voltage cases
+Host half: `.\test.ps1 host j2534_server`, 41 Unity tests (2026-11-17). The voltage cases
 run the production helper with a stubbed battery owner: rounding, valid zero,
 closed session, unavailable reading and invalid float values, and the
 byte-exact request and replies of the wire protocol's section 3.
@@ -84,6 +84,15 @@ byte-exact request and replies of the wire protocol's section 3.
   Driver-only: the bench legs at 13.5 and 14.5 V were not rerun, the DLL's
   code is that of the 2026-11-13 runs apart from the version string. The
   installer itself was not run (its disclaimer page was not seen on screen).
+- 2026-11-17, driver 1.9 (the DLL of installer 1.9.0, `WiCAN J2534 1.9`,
+  pointed at with `WICAN_J2534_DLL`; 1.9 sends and reads `ISO15765_BS` and
+  `ISO15765_STMIN`, [j2534fc.md](j2534fc.md), and touches READ_VBATT in
+  nothing): PASS twice, the full stage with the fake-device cases and both
+  supply voltages. On the 6.0.0-beta.11 release image: the DLL 13,594 mV
+  at 13.557 V of supply and 14,594 mV at 14.553 V
+  (`2026-11-17_1942_j2534vbat.md`). On the firmware with the flow control
+  change: 13,583 and 14,602 mV (`2026-11-17_1938_j2534vbat.md`). The
+  installer itself was not run.
 
 ## Traps
 
