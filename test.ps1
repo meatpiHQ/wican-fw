@@ -1422,7 +1422,7 @@ try {
                 # PCAN_USBBUS1, which is the other bus when the plugs are swapped)
                 $out = & $py -u "$repo\tools\testbench\can\can_conservation_test.py" --dut $DutIp --pcan $PcanChannel 2>&1 | ForEach-Object { Write-Host $_; $_ }
                 Save-StageLog 'can_conservation' $out
-                if (-not ($out | Select-String -Quiet 'CAN CONSERVATION PASS')) { throw 'no CAN CONSERVATION PASS (PCAN on the DUT bus? the bus quiet: AutoPID off, no broadcast from the simulator?)' }
+                if (-not ($out | Select-String -Quiet 'CAN CONSERVATION PASS')) { throw 'no CAN CONSERVATION PASS (PCAN on the DUT bus? a broadcast from the simulator on it? AutoPID the bench switches off itself)' }
             }
             Invoke-Stage 'USB-NCM conservation' {
                 # needs the DUT in role=device/class=ncm (TESTING.md);

@@ -22,6 +22,11 @@ DUT's bus):
          [--pcan PCAN_USBBUS1] [--only flash] [--flash-frames 20000]
 The PCAN channel defaults to the WICAN_PCAN_DUT variable (the adapter's
 two plugs may be swapped), the DUT to the newest lease on the Pi.
+The counts are of the bench's own frames, so the bus must carry nothing
+else: when AutoPID is on as found the bench switches it off for the run
+and puts it back after it (two planned restarts, since 2026-11-18; the
+stage was red on a unit as found until then). A broadcast from the
+simulator still fails the quiet-bus check.
 Expected final line: CAN CONSERVATION PASS
 """
 import argparse
@@ -58,6 +63,55 @@ def pi(cmd, timeout=40):
     p = subprocess.run(["ssh", "-o", "BatchMode=yes", "rpi001", cmd],
                        capture_output=True, text=True, timeout=timeout)
     return p.stdout.strip()
+
+
+def api(ip, path, method="GET", body=None, timeout=10):
+    """One request to the unit, made from the Pi; a body goes through stdin."""
+    cmd = f"curl -s -m {timeout} -X {method} "
+    if body is not None:
+        cmd += "-H 'Content-Type: application/json' --data-binary @- "
+    cmd += f"http://{ip}{path}"
+    p = subprocess.run(["ssh", "-o", "BatchMode=yes", "rpi001", cmd],
+                       input=json.dumps(body) if body is not None else None,
+                       capture_output=True, text=True, timeout=timeout + 30)
+    try:
+        return json.loads(p.stdout)
+    except ValueError:
+        return p.stdout.strip()
+
+
+def uptime_s(ip):
+    st = api(ip, "/api/status", timeout=4)
+    parts = str(st.get("uptime", "")).split(":") if isinstance(st, dict) else []
+    if len(parts) == 3 and all(p.isdigit() for p in parts):
+        return int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+    return -1
+
+
+def autopid_settings(ip):
+    s = api(ip, "/api/settings/autopid")
+    if isinstance(s, dict):
+        for k in ("degraded", "pending_reboot"):
+            s.pop(k, None)
+    return s
+
+
+def autopid_put(ip, obj, why):
+    """The AutoPID settings and the submit that applies them. A submit that
+    restarts the unit is waited for, and then the unit's first 30 s: it
+    writes its flash 20 s after a boot that follows a settings change."""
+    api(ip, "/api/settings/autopid", "PUT", obj)
+    r = api(ip, "/api/settings/submit", "POST")
+    if isinstance(r, dict) and r.get("reboot"):
+        print(f"  planned restart ({why})…", flush=True)
+        time.sleep(6)
+        end = time.time() + 150
+        while time.time() < end and uptime_s(ip) < 0:
+            time.sleep(2)
+        if uptime_s(ip) < 0:
+            raise RuntimeError(f"the unit did not come back after the restart ({why})")
+        while 0 <= uptime_s(ip) < 30:
+            time.sleep(2)
 
 
 def canstats(ip):
@@ -175,6 +229,31 @@ def main():
         "sort -n | tail -1 | awk '{print $3}'")
     print("DUT", ip, "PCAN", a.pcan)
 
+    # AutoPID's requests and their answers are frames on this bus, and the
+    # counts below are of the bench's own frames: it is off for the run and
+    # put back after it (two planned restarts; none when it is off as found)
+    ap_found = autopid_settings(ip)
+    quieted = isinstance(ap_found, dict) and bool(ap_found.get("enabled"))
+    if quieted:
+        print("AutoPID is on as found: off for the run", flush=True)
+        off = dict(ap_found)
+        off["enabled"] = False
+        autopid_put(ip, off, "AutoPID off for the run")
+    try:
+        run(a, ip)
+    finally:
+        if quieted:
+            autopid_put(ip, ap_found, "AutoPID back as found")
+            check("autopid_back_as_found", autopid_settings(ip) == ap_found)
+
+    if fails:
+        print("CAN CONSERVATION FAIL: " + ", ".join(fails))
+        return 1
+    print("CAN CONSERVATION PASS")
+    return 0
+
+
+def run(a, ip):
     # quiet-bus precondition: nothing else may inject frames
     print("quiet-bus precheck (3 s counter watch)…", flush=True)
     c0 = canstats(ip)
@@ -214,12 +293,6 @@ def main():
         flash_tier(ip, bus, msg, a.flash_frames)
 
     bus.shutdown()
-
-    if fails:
-        print("CAN CONSERVATION FAIL: " + ", ".join(fails))
-        return 1
-    print("CAN CONSERVATION PASS")
-    return 0
 
 
 if __name__ == "__main__":

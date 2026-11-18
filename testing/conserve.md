@@ -2,7 +2,7 @@
 
 Command: `.\test.ps1 conserve`. Its CAN part alone: `python tools\testbench\can\can_conservation_test.py --dut <the DUT's address on the Pi's network> --pcan <the PCAN channel on the DUT's bus> [--only tiers|flash] [--flash-frames 20000]` (PC; the bench asks the DUT through `ssh rpi001 curl`).
 
-Needs: PCAN on the DUT's bus (`WICAN_PCAN_DUT`, the adapter's plugs may be swapped) + rpi001 + a quiet bus (AutoPID off, nothing broadcast by the simulator: the bench checks for three seconds and fails `bus_quiet` otherwise). Prints `CAN CONSERVATION PASS`, about 1 min for the CAN part. The USB-NCM part needs the DUT in the device role and is skipped without it.
+Needs: PCAN on the DUT's bus (`WICAN_PCAN_DUT`, the adapter's plugs may be swapped) + rpi001 + a quiet bus. AutoPID the bench switches off itself for its run and puts back after it (two planned restarts when it is on as found, none otherwise); nothing may be broadcast by the simulator: the bench checks for three seconds and fails `bus_quiet` otherwise. Prints `CAN CONSERVATION PASS`, about 1 min for the CAN part, 2.5 min with the two restarts. The USB-NCM part needs the DUT in the device role and is skipped without it.
 
 The index row and the other stages: [../TESTING.md](../TESTING.md). The same idea for J1939: `tools/testbench/can/j1939_conservation_test.py`. The line rate through ISO-TP: [j2534fc.md](j2534fc.md), legs N and W.
 
@@ -27,9 +27,13 @@ The flash tier is the unit's own flash against its own bus: an erase stops every
 
 **2026-11-17, through `.\test.ps1 conserve` on the build with the three queues at 256 (the receive queue, the J2534 channel's, the ISO-TP provider's): `CAN CONSERVATION PASS`.** The three tiers 5000 of 5000 each, the flash tier 56,530 of 56,530 with 27 erases, nothing missed, nothing dropped. USB-NCM skipped (the DUT not in the device role), `WIFI CONSERVATION PASS`. The CAN part again on the build of the final sources: the three tiers, and the flash tier 58,070 of 58,070 with 28 erases.
 
+**2026-11-18 20:20 and 20:23, the bench switching AutoPID off for its run (Ali's decision that evening; the unit as found has AutoPID on), the final build of that day (ELF `eb50e90bb22b268f`): `CAN CONSERVATION PASS` twice.** The three tiers 5000 of 5000 each in both runs, the flash tier 56,780 of 56,780 (27 erases) and 57,947 of 57,947 (28 erases), `autopid_back_as_found` green, the unit's restart count up by two a run and no unexpected reset. `WIFI CONSERVATION PASS` both times, USB-NCM skipped (the DUT not in the device role). Until then the CAN part was red on a unit as found: `bus_quiet` and every tier counted AutoPID's requests and their answers (5,060 and 5,093 for 5,000 that afternoon).
+
+The first run with the change, at 20:06 straight behind the `j2534std` stage, failed its first tier with 3 frames too many (5,003 for 5,000, nothing missed, nothing dropped, the other tiers exact). Not found again: the same tier three times by hand after the same restart, with every frame the simulator received read from its log meanwhile (only the bench's), then the two stage runs above. Where those three frames came from is not known; the simulator's own transmissions are in no log.
+
 ## Traps
 
 - `bus.send()` of python-can returns when the adapter's driver has the frame, not when the frame is on the wire: 40,000 frames are "sent" in two seconds and take ten to leave. A first version of the flash tier timed its uploads against the send loop and found none of them "inside the burst". The tier now ends its hand-over on the uploads and reads the unit's own `rx` until it stands still.
 - Until 2026-11-17 the bench took the newest lease on the Pi as the DUT and `PCAN_USBBUS1` as the bus. Both are arguments now and the stage passes its own (`-DeviceId`, `WICAN_PCAN_DUT`).
-- The bus must be quiet: with AutoPID on, the OBD chip's requests and the simulator's answers are counted in `rx` too.
+- The bus must be quiet: with AutoPID on, the OBD chip's requests and the simulator's answers are counted in `rx` too. The bench switches AutoPID off for its run since 2026-11-18 and puts the settings back in a `finally`, so a run that dies in a tier still restores them; it then waits until the unit has been up 30 s (the configuration copies are refreshed 20 s after a boot that follows a settings change). A run killed from outside leaves AutoPID off: switch it on again on the AutoPID page.
 - The flash tier leaves nothing behind (it deletes its file), but each upload makes the configuration backup refresh its copies a little later: a stage that runs straight after it and needs the flash at rest has to wait for that (see `wait_flash_at_rest()` in the flow control bench).
