@@ -96,10 +96,11 @@ MATRIX = {
     "rtc_sntp": "r2", "batt_sampler": "r2", "batt_events": "r2",
     "imu_events": "r2", "imu_detector": "r2", "sd_detect": "r2",
     "usb_presence": "r2", "usb_net_dev": "r2", "can_bridge": "r6",
+    "can_bridge_tx": "r6", "socket_pace": "r6", "ws_tx": "r5",
     "j2534_cdc": "reviewed", "config_mode": "reviewed",
     "data_dest": "r7", "vpn_state": "reviewed", "can_core_rx": "r6",
     "isotp": "reviewed", "j1939": "reviewed", "j2534": "reviewed",
-    "j2534_rx": "reviewed", "espnl_link": "reviewed",
+    "j2534_rx": "reviewed", "j2534_per": "reviewed", "espnl_link": "reviewed",
     "usb_acm_rx": "reviewed", "usb_acm_gps": "reviewed",
 }
 # "reviewed": no step drives the task on this rig (no dongle, no J2534 tester,

@@ -15,7 +15,7 @@
 # land in test-reports\logs\<run>\ (gitignored).
 #
 param(
-    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'blephy', 'blethru', 'bleram', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'profilee2e', 'slcan', 'canmax', 'j2534auto', 'j2534std', 'j2534vbat', 'j2534vpw', 'j2534tp20', 'j2534fc', 'multibus', 'kline', 'precan', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'wgcycle', 'tspublic', 'tlschain', 'tlsbyip', 'rulepost', 'pushreply', 'habackfill', 'garage', 'espnleasy', 'espnlapn', 'usbgps', 'usbdetach', 'abrp', 'backup', 'fwupdate', 'espnlota', 'logclock', 'sdformat', 'obdfw', 'chipprompt', 'carname', 'canfilters', 'destnets', 'canselftest', 'attpstore', 'obdbringup', 'sleepword', 'sleeptrig', 'chipwake', 'connections', 'stackaudit', 'dwc2', 'logsinks', 'release', 'all', 'list')]
+    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'bleoverload', 'blephy', 'blethru', 'bleram', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'profilee2e', 'slcan', 'canmax', 'mqttbatch', 'canbusoff', 'logtail', 'usbobd', 'httpauth', 'uploadconfirm', 'j2534auto', 'j2534std', 'j2534vbat', 'j2534vpw', 'j2534tp20', 'j2534fc', 'j2534session', 'multibus', 'kline', 'precan', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'wgcycle', 'tspublic', 'tlschain', 'tlsbyip', 'rulepost', 'pushreply', 'habackfill', 'garage', 'espnleasy', 'espnlapn', 'usbgps', 'usbdetach', 'abrp', 'backup', 'fwupdate', 'espnlota', 'logclock', 'sdformat', 'obdfw', 'chipprompt', 'carname', 'canfilters', 'destnets', 'canselftest', 'attpstore', 'obdbringup', 'sleepword', 'sleeptrig', 'chipwake', 'connections', 'stackaudit', 'dwc2', 'logsinks', 'release', 'all', 'list')]
     [string]$What,
     [Parameter(Position = 1)][string]$Component,
     [ValidateSet('6.0.2', '6.1')][string]$Idf = '6.1',  # the ESP-IDF the build stages use (6.1 since 6.0.0-beta.5, 2026-10-27; 6.0.2 stays installed; build.ps1 -Idf has the same table)
@@ -1108,6 +1108,7 @@ function Show-Inventory {
     Write-Host '  blehttp    - the HTTP API over BLE: storage (/data + /sd), settings, UDS, errors (BLE API PASS + BLE STORAGE PASS)'
     Write-Host '  blej2534   - J2534 PassThru over BLE: CAN, filters, ISO15765, reflash gate, second tester refused'
     Write-Host '  blecanraw  - binary CAN records over BLE (can <-raw-> ble bridge): live bus, answered requests, 29-bit'
+    Write-Host '  bleoverload - the Bluetooth data pipe under overload (2026-11-18), slcan over BLE: a bus that makes three times what the link carries (what arrives is whole lines only, every byte that does not arrive is counted, a write during it is answered within 2 s), then writes while the unit cannot send (a write it accepts reaches the bus, one it cannot hold is refused with an ATT error and counted), the link up all through (needs: rpi001 with its Bluetooth adapter, the PCAN on the unit''s bus (WICAN_PCAN_DUT), ECU sim v2; prints BLE OVERLOAD PASS; about 3 min, two planned restarts)'
     Write-Host '  blephy     - BLE 5 settings: 1M vs 2M PHY throughput/RTT, legacy + extended advertising sets (-NoHandover keeps the station up across the link: needed on a DUT in station-only mode; the PC legs need this PC''s Bluetooth radio on and no stale Windows pairing record for the DUT)'
     Write-Host '  blethru    - BLE throughput with the ECU simulator as the central (notify/write/read/tunnel vs the esp-idf reference); the DUT must arrive with BLE on, passkey 421337, phy auto on the Full profile, and on this rig sta_ble_handover off (2026-10-31)'
     Write-Host '  bleram     - the Bluetooth memory profile (ble_manager v5, 2026-10-31): one boot per profile (off, full, lean), the internal heap at a fixed uptime, the Pi scanning for the DUT as the on-air witness, /api/ble echoing the sizing, Lean refusing the BLE 5 words, the found settings put back (4 planned reboots, ~8 min; the knob rows: the bench --measure)'
@@ -1115,12 +1116,19 @@ function Show-Inventory {
     Write-Host '  profilee2e - a published vehicle profile end to end (2026-10-21): the Leaf ZE1 profile imported the way the web UI imports it (index shift, renames, passive filters) and polled against an ECU played FROM THE PROFILE on the PCAN (every reply and every filter frame with bytes the bench chose); the values the device publishes must be what the profile''s expressions mean, every request answered, the filters decoded, the rows re-read, restore (2 planned restarts, ~5 min; by hand --profiles <checkout>\vehicle_profiles.json tests a profile before it is pushed)'
     Write-Host '  slcan      - slcan over TCP 3333 (2026-10-16): first the trap (the server on with no connection row: client connected, nothing arrives, the W line and bridge:null say why), then the bridged path: python-can on the PC and on rpi001, slcand + SocketCAN, the /ws/can monitor beside the TCP client, exactly-N with PCAN as the generator, TX both ways, restore (2 to 3 planned restarts, ~3 min)'
     Write-Host '  canmax     - the most frames a CAN bus can carry (2026-11-18): the bus kept full (one frame after the other) at 500 and 1000 kbit/s with three frame shapes (8 data bytes, no data = the most frames, 29-bit), exactly N frames each; the CAN driver must count every one and a slcan client on TCP 3333 must get every one, once and in order; the most classic CAN can carry (20,833 frames a second at 1000 kbit/s) is above what the unit takes, and there every lost frame must be in a counter (needs: PCAN on the DUT bus (WICAN_PCAN_DUT) + ECU sim v2 + rpi001; prints CAN MAX RATE PASS; about 3 min, three planned restarts)'
+    Write-Host '  mqttbatch  - CAN over MQTT with a small batch on a busy bus (2026-11-18): every MQTT message is one JSON object, every frame once and in order, and a loss on this path is on /api/bridges (losses) (needs: the PCAN on the unit''s bus, rpi001 with mosquitto; prints MQTT CAN BATCH PASS; ~2 min, four planned restarts)'
+    Write-Host '  canbusoff  - the CAN transmitter after bus-off, again and again (2026-11-18): 18 real bus-offs made with the PCAN, every frame sent or counted lost after each, 20 frames on the bus after the last, no reset of the unit (needs: the PCAN on the unit''s bus; prints CAN BUSOFF SLOTS PASS; ~40 s; it logs one E line per bus-off on purpose)'
+    Write-Host '  logtail    - the TCP log tail and a client whose link stalls (2026-11-18): ACKs late by 2 s cost nothing, by 8 s cost lines that are counted, a client that keeps up is not held back, a client that takes nothing for 10 s is closed with a line in the log (needs: rpi001 with sudo, tc netem, nft; prints LOG TAIL STALL PASS; ~3.5 min, two planned restarts)'
+    Write-Host '  usbobd     - the usb_obd jack as a pipe (2026-11-18): a short write from the PC is on its way in 2 ms, every byte of a stream arrives, the bytes the UART loses during a flash write are counted (rx_overruns) (needs: the unit''s USB-C cabled to this PC; prints USB OBD PIPE PASS, or SKIP without the cable; ~50 s, two planned restarts)'
+    Write-Host '  httpauth   - the admin password (2026-11-18): the bench switches it on with a password of its own, then: a request without it is 401 with the Basic prompt, with Basic or the wican_auth cookie 200, a wrong one 401; a WebSocket handshake without it is refused; a WebSocket session opened with it stays a WebSocket (the data frames used to be answered with an HTTP 401 written into the stream); the password off again (needs: rpi001; prints HTTP AUTH PASS; about 1 min, two planned restarts; a run that died leaves the password on: python tools\testbench\wifi\http_auth_bench.py --restore-only)'
+    Write-Host '  uploadconfirm - a firmware file installed by upload is confirmed once it has settled (2026-11-18): the bench uploads build\wican-fw_obd_pro.bin to POST /api/ota/upload, checks that the new slot starts unconfirmed, leaves the unit alone for the 10 minutes its run needs to settle and checks that the image is confirmed then, with no restart (before, it stayed unconfirmed until the next planned restart and a reset made the bootloader fall back) (needs: rpi001, a unit whose bootloader can fall back; prints UPLOAD CONFIRM PASS; about 11 min)'
     Write-Host '  j2534auto  - a tester states the bit rate on a silent bus (2026-10-17): with Automatic and a bus that only answers when asked, a J2534 CONNECT at a rate the node does not know is refused and said so (tx_refused, the W lines), a CONNECT at 500k is taken (adopted, writes and the ISO15765 reply flow, frames then prove it), after a restart an slcan client''s S6 does the same through the bridge, restore (3 planned restarts, ~4 min)'
     Write-Host '  j2534std   - a standard J2534 tool through the PassThru server (2026-10-19): udsoncan''s byte stream through the DLL replayed byte-exact (the 4-byte id first, the pad flag per message, TxDone and START_OF_MESSAGE indications, a multi-frame VIN, two ECUs on one channel, functional 7DF through a PASS filter, the reflash gate behind the id), then the installed wican_j2534.dll driven by udsoncan under the 32-bit Python; restore (2 planned restarts, ~1 min)'
     Write-Host '  j2534vbat  - READ_VBATT on the wire and through the DLL at 13.5/14.5 V; fake-device error cases; restore. Optional component driver runs only the fake-device checks.'
     Write-Host '  j2534vpw   - J1850 VPW through the PassThru server (2026-11-11): ECU sim v2 on VPW alone, the J2534 server switched on for the run, CONNECT J1850VPW, a PASS filter on the functional reply target 6B, 01 00 and 01 0C each answered 48 6B 10 41 ..; the chip''s memory compared before and after (nothing written); the simulator and the settings restored (2 planned restarts, 2 simulator restarts, ~1 min). Until that day the channel''s init sent ATD behind ATTP2 and three ST pass filters, and never heard a VPW node'
     Write-Host '  j2534tp20  - TP2.0 as its own J2534 protocol (TP2_0_PS) against an ECU that follows SAE J2819, played by the PCAN (2026-11-16): the channel setup, data both ways (a 601-byte request in blocks), the connection test once a second answered with a connection acknowledge and the connection kept, the broadcast key 55 55 / AA AA, the re-triggered broadcast (five, then one per period), ERR_NO_CONNECTION_ESTABLISHED 0x10001, GET_DEVICE_INFO with a parameter list, a request nobody answers, the teardown; an exchange published from a real car byte for byte, four connections at once, 4092-byte messages at full speed with every byte and the CAN counters checked, an ISO15765 channel beside it, a lost telegram / receiver not ready / a break injected by the ECU; then the built driver DLL called like an application; restore (2 planned restarts, ~1 min)'
     Write-Host '  j2534fc    - ISO 15765 flow control as a J2534 tool sets it (2026-11-17): an ECU played by the PCAN the way ISO 15765-2 writes it, every flow control read off the bus; a channel opens with ISO15765_BS 0 / ISO15765_STMIN 0 (SAE J2534-1), SET_CONFIG changes an open session and GET_CONFIG reads the values back, each value alone, STMIN in microseconds, the scope (a later filter, a second channel, a channel opened again), BS 0 over 585 consecutive frames with one flow control, values out of range refused with nothing changed, a list with DATA_RATE and LOOPBACK beside them, the id alone as drivers up to 1.8 send it; 100 answers of 4095 bytes at the full line rate with every byte, the CAN loss counters and the ISO-TP provider''s counters checked (the unit''s flash at rest), then the same rate with three files written to the unit''s flash meanwhile and nothing lost; the device''s own UDS client still at BS 8 / STmin 1 ms; then the built driver DLL called like an application; restore (2 planned restarts, ~1.5 min)'
+    Write-Host '  j2534session - a J2534 session when something goes wrong beside it (2026-11-18): the PC vanishes without closing (keepalive and a send timeout free the one session: about 25 s idle, about 6 s while sending), a second connection is still not served while a session lives, a receive queue that runs over is reported (EVENT RX_LOST on the wire, ERR_BUFFER_OVERFLOW from the DLL), a 2 s ISO 15765 write beside 500 received frames and two periodic messages (nothing lost, nothing late, nothing piled up), a periodic message ends with its channel, the return codes by wire version (SAE J2534-1''s numbers for a client that asks for version 2), the driver DLL against fake devices and the unit; PCAN as the ECU and the traffic, a helper on the Pi as the client that vanishes; restore (2 planned restarts, ~2.5 min)'
     Write-Host '  multibus   - Automate rows on MS, single-wire and CH CAN beside the car''s OBD protocol (2026-11-11): the Test route on each bus and its refusals, a bus at another speed than its usual one, the words the chip stores (STP nn, VTP nnn, ATLNK) refused in a row that is on, in a test and in a car''s own init, a type init with one kept as typed, never sent and its rows on the car''s protocol not asked, seven rows polled over four buses (every row answered, about four changes of bus a round, the chip on the car''s protocol between the rounds), the rows of the other buses with the HS bus off, a bus that ends in CAN ERROR rested, nothing asked on any bus under the voltage pause, an ELM app in the middle of it; the chip''s memory compared before and after (nothing written); ECU sim v2 with its four CAN buses, which is the unit''s supply too (3 planned restarts, ~8 min)'
     Write-Host '  kline      - a K-line car through the firmware''s own paths (GitHub issue #1045, 2026-11-12): ECU sim v2 as an ISO 9141-2 car alone; the Test call with ATSP3 as its init on a unit whose own car is CAN (the bus started once for three calls, the protocol''s own request header behind the init, 800 rpm from the three byte header, a call behind 6.5 s of silence starts the bus again), std_protocol takes 3, three rows polled with it pinned and no restart of the bus between two requests, the ignition off and on under the poll, a ten second period kept alive by the poller''s one short request, the same rows with std_protocol 2 on a J1850 VPW car, and the same Test call on ISO 14230-4 (fast and 5 baud init) and SAE J1850 VPW and PWM; the chip''s memory compared before and after (nothing written). -Detect adds Detect my vehicle on the K-line car and the way back (the car''s protocol is saved in the OBD chip: one write there, one back, one more restart) (3 planned restarts, ~6 min)'
     Write-Host '  precan     - a pre-CAN car found without being asked for (2026-11-13): ECU sim v2 as an ISO 9141-2 car alone at start-up (the stored CAN protocol stays silent, the walk goes on behind CAN and finds the car on protocol 3, the rows are answered), a CAN vehicle that answers nothing standard (traffic on the CAN pins: SAE J1850 and the K-line are left alone), nobody there at all (the walk goes round with a growing gap), a J1850 VPW car that turns up in that boot (found on protocol 2), a CAN car on 250 kbit/s that says nothing until asked (ten requests of the Test route with Automate off, and found on protocol 8 when it wakes up behind a boot with nobody there: the chip''s own requests, which the unit''s own CAN node acknowledges, do not name the bus), and the unit''s own CAN car again; the chip''s memory compared before and after (nothing written). -Detect adds a car never seen (a J1850 VPW one, found and stored at start-up by a detection nobody asked for), Detect my vehicle on an ISO 14230-4 car and the way back (the car''s protocol is saved in the OBD chip: three writes, three more restarts) (7 planned restarts, ~8 min)'
@@ -1283,6 +1291,27 @@ try {
                 foreach ($m in ($out | Select-String '^METRIC (\S+)=(\S+) (\S+)')) { Add-Metric $m.Matches[0].Groups[1].Value ([double]$m.Matches[0].Groups[2].Value) $m.Matches[0].Groups[3].Value }
                 if (-not ($out | Select-String -Quiet '^BLE CAN RAW PASS')) { throw 'no BLE CAN RAW PASS (can_manager enabled? ECU sim on the bus? see the log)' }
                 $script:note = 'BLE CAN RAW PASS'
+            }
+        }
+        'bleoverload' {
+            # The Bluetooth data pipe under overload (2026-11-18): slcan over
+            # BLE with more frames on the bus than the link carries, then
+            # writes from the central while the unit cannot send. The PC owns
+            # the PCAN and makes the verdict, the central runs on the Pi.
+            # 2 planned reboots; ECU sim v2 is made quiet and put back.
+            Invoke-Stage 'bleoverload (the Bluetooth data pipe under overload)' {
+                $py = $script:BenchPy
+                # the console too: the Bluetooth host's glue reports a buffer
+                # it could not get there and nowhere else (esp_rom_printf)
+                $con = Start-ConsoleTail 'bleoverload'
+                try {
+                    $out = & $py -u "$repo\tools\testbench\ble\ble_overload_bench.py" --dut-ip $DutIp 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    Save-StageLog 'bleoverload' $out
+                    if (-not ($out | Select-String -Quiet '^BLE OVERLOAD PASS')) { throw 'no BLE OVERLOAD PASS (the PCAN on the unit''s bus? WICAN_PCAN_DUT; a run that died leaves the settings changed: ble_pi_run.py ble_overload_pi.py --stage restore)' }
+                    $script:note = 'BLE OVERLOAD PASS'
+                } finally {
+                    Stop-ConsoleTail $con
+                }
             }
         }
         'blephy' {
@@ -1515,6 +1544,137 @@ try {
                 }
             }
         }
+        'mqttbatch' {
+            # CAN over MQTT with a small batch on a busy bus (2026-11-18): the
+            # bridge gathers a translator's output into one send, so two batches
+            # of one pump pass left as ONE MQTT message with two JSON objects.
+            # The bench also puts a loss on /api/bridges (`losses`): a tx
+            # message the reassembler drops for its length. Four planned
+            # restarts; the broker is the Pi's, the one mqtt_manager points at.
+            Invoke-Stage 'CAN over MQTT, small batches' {
+                $py = $script:BenchPy
+                $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", $BenchHost)
+                $con = Start-ConsoleTail 'mqttbatch'
+                try {
+                    Start-Sleep -Seconds 3
+                    if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (port 18081 busy?)" }
+                    $out = & $py -u "$repo\tools\testbench\can\mqtt_can_batch_bench.py" --dut 'localhost:18081' --pi $BenchHost --pcan $PcanChannel 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    Save-StageLog 'mqttbatch' $out
+                    if (-not ($out | Select-String -Quiet '^MQTT CAN BATCH PASS')) { throw 'no MQTT CAN BATCH PASS (PCAN on the DUT bus? mqtt_manager enabled and pointed at the Pi''s broker? mosquitto clients on the Pi?)' }
+                } finally {
+                    if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
+                    Stop-ConsoleTail $con
+                }
+            }
+        }
+        'canbusoff' {
+            # The CAN transmitter after bus-off, again and again (2026-11-18): a
+            # frame inside the controller at a bus-off kept its transmit slot and
+            # was counted nowhere, and a node restarted right behind a
+            # transmission reset the unit (interrupt watchdog). 18 real
+            # bus-offs made with the PCAN; no settings changed, no restart.
+            Invoke-Stage 'CAN transmitter after bus-off' {
+                $py = $script:BenchPy
+                $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", $BenchHost)
+                $con = Start-ConsoleTail 'canbusoff'
+                try {
+                    Start-Sleep -Seconds 3
+                    if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (port 18081 busy?)" }
+                    $out = & $py -u "$repo\tools\testbench\can\can_busoff_slots_bench.py" --dut 'localhost:18081' --pcan $PcanChannel 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    Save-StageLog 'canbusoff' $out
+                    if (-not ($out | Select-String -Quiet '^CAN BUSOFF SLOTS PASS')) { throw 'no CAN BUSOFF SLOTS PASS (PCAN on the DUT bus? the CAN interface running at 500 kbit/s?)' }
+                } finally {
+                    if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
+                    Stop-ConsoleTail $con
+                }
+            }
+        }
+        'logtail' {
+            # The TCP log tail and a client whose link stalls (2026-11-18): the
+            # sink closed a client on a send that did not finish and stood in
+            # that send meanwhile. The stall client runs on the Pi (tc netem,
+            # nft). Two planned restarts. The tail port rides a second forward.
+            Invoke-Stage 'log tail over TCP, a client that stalls' {
+                $py = $script:BenchPy
+                $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", '-L', "18515:${DutIp}:5515", $BenchHost)
+                $con = Start-ConsoleTail 'logtail'
+                try {
+                    Start-Sleep -Seconds 3
+                    if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (ports 18081/18515 busy?)" }
+                    $out = & $py -u "$repo\tools\testbench\system\log_tail_stall_bench.py" --dut 'localhost:18081' --tail 'localhost:18515' --dut-ip $DutIp --pi $BenchHost 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    Save-StageLog 'logtail' $out
+                    if (-not ($out | Select-String -Quiet '^LOG TAIL STALL PASS')) { throw 'no LOG TAIL STALL PASS (sudo, tc and nft on the Pi?)' }
+                } finally {
+                    if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
+                    Stop-ConsoleTail $con
+                }
+            }
+        }
+        'usbobd' {
+            # The usb_obd jack as a pipe (2026-11-18): a short write from the PC
+            # left the jack 20 ms late, and the bytes the UART lost during a
+            # flash write were counted nowhere. Needs the DUT's USB-C cabled to
+            # this PC (CH342); only its usb_obd port is opened. Two planned
+            # restarts. Port 3333 rides a second forward.
+            Invoke-Stage 'usb_obd as a pipe' {
+                $py = $script:BenchPy
+                $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", '-L', "18333:${DutIp}:3333", $BenchHost)
+                try {
+                    Start-Sleep -Seconds 3
+                    if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (ports 18081/18333 busy?)" }
+                    $out = & $py -u "$repo\tools\testbench\usb\usb_obd_pipe_bench.py" --dut 'localhost:18081' --tcp 'localhost:18333' 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    Save-StageLog 'usbobd' $out
+                    if ($out | Select-String -Quiet '^SKIP: the usb_obd legs') { $script:note = 'SKIP (the DUT''s USB-C is not cabled to this PC)' }
+                    if (-not ($out | Select-String -Quiet '^USB OBD PIPE PASS')) { throw 'no USB OBD PIPE PASS' }
+                } finally {
+                    if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
+                }
+            }
+        }
+        'httpauth' {
+            # The admin password on the web server and on a WebSocket
+            # (2026-11-18, found by reading and reproduced here: the password
+            # check ran again for every data frame of an open WebSocket session
+            # and wrote an HTTP 401 into the stream). The bench switches the
+            # password on with one of its own and off again at the end.
+            Invoke-Stage 'admin password' {
+                $py = $script:BenchPy
+                $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", $BenchHost)
+                $con = Start-ConsoleTail 'httpauth'
+                try {
+                    Start-Sleep -Seconds 3
+                    if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (port 18081 busy?)" }
+                    $out = & $py -u "$repo\tools\testbench\wifi\http_auth_bench.py" --dut 'localhost:18081' 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    Save-StageLog 'httpauth' $out
+                    if (-not ($out | Select-String -Quiet '^HTTP AUTH PASS')) { throw 'no HTTP AUTH PASS (a run that died leaves the password on: http_auth_bench.py --restore-only)' }
+                } finally {
+                    if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
+                    Stop-ConsoleTail $con
+                }
+            }
+        }
+        'uploadconfirm' {
+            # A firmware file installed by upload (the web page's manual
+            # install) is confirmed once its run has settled (2026-11-18).
+            # Before, only an update from the release list was: an uploaded
+            # image stayed unconfirmed until the next planned restart, and a
+            # reset or a power cut before that made the bootloader fall back.
+            # No console capture here: opening the console port resets the
+            # unit, which is exactly what an unconfirmed image must not meet.
+            Invoke-Stage 'uploaded image confirmed' {
+                $py = $script:BenchPy
+                $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", $BenchHost)
+                try {
+                    Start-Sleep -Seconds 3
+                    if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (port 18081 busy?)" }
+                    $out = & $py -u "$repo\tools\testbench\system\upload_confirm_bench.py" --dut 'localhost:18081' --dut-ip $DutIp --pi $BenchHost --image "$repo\build\wican-fw_obd_pro.bin" 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    Save-StageLog 'uploadconfirm' $out
+                    if (-not ($out | Select-String -Quiet '^UPLOAD CONFIRM PASS')) { throw 'no UPLOAD CONFIRM PASS' }
+                } finally {
+                    if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
+                }
+            }
+        }
         'j2534auto' {
             # A tester states the bit rate on a silent bus (2026-10-17, the
             # second half of a Discord report: "J2534 driver works,
@@ -1673,6 +1833,43 @@ try {
                     if (-not ($out | Select-String -Quiet '^J2534 FLOW CONTROL PASS')) { throw 'no J2534 FLOW CONTROL PASS (PCAN on the DUT bus? the DUT on the bench AP? a firmware that takes ISO15765_BS and ISO15765_STMIN?)' }
                 } finally {
                     if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
+                    Stop-ConsoleTail $con
+                }
+            }
+        }
+        'j2534session' {
+            # A J2534 session when something goes wrong beside it
+            # (2026-11-18): the PC vanishes without closing (TCP keepalive
+            # and a send timeout free the one session), a channel's receive
+            # queue runs over (EVENT RX_LOST, ERR_BUFFER_OVERFLOW through
+            # the DLL), a long ISO 15765 write beside received messages and
+            # periodic messages, a periodic message ends with its channel,
+            # the return codes by wire version. The PCAN plays a slow ECU
+            # and makes the traffic; a helper copied to the Pi is the client
+            # that vanishes, stalls or stays silent (it drops the packets of
+            # its own connection in an nft table of its own, removed again
+            # below); then the driver DLL called like an application when
+            # the driver repo holds a build (or WICAN_J2534_DLL names one;
+            # WICAN_J2534_OLD_DLL names a driver before 1.10 for leg D3).
+            # The tunnel carries the web API and the J2534 port; two planned
+            # restarts.
+            Invoke-Stage 'A J2534 session when something goes wrong beside it' {
+                $py = $script:BenchPy
+                $dll = if ($env:WICAN_J2534_DLL) { $env:WICAN_J2534_DLL } else { Join-Path $repo '..\..\wican-j2534-driver\build\Release\wican_j2534.dll' }
+                $dllArgs = @()
+                if (Test-Path $dll) { $dllArgs = @('--dll', (Resolve-Path $dll).Path) }
+                if ($env:WICAN_J2534_OLD_DLL -and (Test-Path $env:WICAN_J2534_OLD_DLL)) { $dllArgs += @('--old-dll', (Resolve-Path $env:WICAN_J2534_OLD_DLL).Path) }
+                $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", '-L', "18534:${DutIp}:6809", $BenchHost)
+                $con = Start-ConsoleTail 'j2534_session'
+                try {
+                    Start-Sleep -Seconds 3
+                    if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (ports 18081/18534 busy?)" }
+                    $out = & $py -u "$repo\tools\testbench\usb\j2534_session_bench.py" --dut 'localhost:18081' --j2534 'localhost:18534' --pi $BenchHost --dut-ip $DutIp --pcan $PcanChannel @dllArgs 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    Save-StageLog 'j2534_session' $out
+                    if (-not ($out | Select-String -Quiet '^J2534 SESSION PASS')) { throw 'no J2534 SESSION PASS (PCAN on the DUT bus? the DUT on the bench AP? sudo -n nft on the Pi? a firmware with the session fixes of 2026-11-18?)' }
+                } finally {
+                    if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
+                    ssh -o BatchMode=yes $BenchHost 'sudo -n nft delete table inet j2534_session_bench 2>/dev/null; true' | Out-Null
                     Stop-ConsoleTail $con
                 }
             }
