@@ -863,7 +863,16 @@ function Invoke-TargetApp { param([string]$Comp)
     $script:note = 'TEST DONE, no crash signatures'
 }
 
+# The WiFi hardware suite predates the P4 bench access point (2026-10-02). Its
+# fixtures (tools\testbench\lib\bench.py) delete every wican-* NetworkManager
+# profile on the Pi except the two old hotspots, so wican-bench-usb, the DUT's
+# only network today, would go with four more; they start hotspots on the Pi's
+# parked radios and set those to autoconnect again at the end, and the suite
+# leaves the DUT's stored WiFi settings on its own test network. It refuses to
+# run until it has been reworked for the P4 rig (Ali, 2026-11-18).
+$script:HilRefusal = 'the WiFi hardware suite predates the P4 bench access point: run on this rig it would delete the bench network profiles on the Pi (wican-bench-usb among them) and switch the old hotspots back on. Not run until it has been reworked for the P4 rig (TESTING.md, the hil row)'
 function Invoke-HilSuite {
+    throw "hil: $script:HilRefusal"
     Use-IdfEnv
     $hilDir = Get-CompDir 'wifi_manager\test_apps_hil'
     if ($Flash) { Invoke-BuildFlash $hilDir }
@@ -1177,6 +1186,12 @@ function Show-Inventory {
 }
 
 # ---------------------------------------------------------------- dispatch
+if ($What -eq 'hil') {
+    # before the preflight and before anything is built or flashed
+    Write-Host "hil: NOT RUN. $script:HilRefusal." -ForegroundColor Red
+    Write-Host 'RESULT: FAIL' -ForegroundColor Red
+    exit 1
+}
 Use-IdfEnv
 try {
     $benchOk = $true
@@ -2974,11 +2989,9 @@ try {
             # with the last test app, not the composed main (TESTING.md).
             Invoke-Stage 'host suites' { Invoke-HostSuites $null }
             foreach ($c in $targets) { Invoke-Stage "target $c" { Invoke-TargetApp $c } }
-            # the target loop leaves the ble_manager TEST APP on the DUT -
-            # HIL must reflash its own app or it times out on HIL READY
-            # (the 2026-07-05 `all` HIL failure)
-            $script:Flash = $true
-            Invoke-Stage 'wifi HIL suite' { Invoke-HilSuite }
+            # the WiFi hardware suite closed this run until 2026-11-18; it is
+            # not run on the P4 rig (see Invoke-HilSuite) and says so here
+            Invoke-Stage 'wifi HIL suite' { $script:note = 'SKIP (not run: the suite predates the P4 bench access point, TESTING.md)' }
         }
     } }
 } finally {
