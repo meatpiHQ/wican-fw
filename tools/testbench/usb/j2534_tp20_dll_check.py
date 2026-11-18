@@ -165,7 +165,8 @@ d.PassThruDisconnect(ch)
 ch2 = ctypes.c_ulong(0)
 st = d.PassThruConnect(dev.value, CAN, 0, 250000, ctypes.byref(ch2))
 print("PassThruConnect(CAN, 0, 250000): 0x%X lasterr=%r" % (st, lasterr()), flush=True)
-print("LASTERR EXPLAINS" if st == 0x18 and "ERR_INVALID_BAUDRATE" in lasterr() else "LASTERR SILENT (driver before 1.5, or the bus runs at 250k)", flush=True)
+# ERR_INVALID_BAUDRATE: 0x19 since driver 1.10 (SAE J2534-1's number), 0x18 up to 1.9
+print("LASTERR EXPLAINS" if st in (0x18, 0x19) and "ERR_INVALID_BAUDRATE" in lasterr() else "LASTERR SILENT (driver before 1.5, or the bus runs at 250k)", flush=True)
 if st == 0:
     d.PassThruDisconnect(ch2.value)
 

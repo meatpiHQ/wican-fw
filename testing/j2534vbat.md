@@ -32,7 +32,7 @@ The driver repo's `.\build.ps1` builds it without changing the installed driver.
   document are restored in nested finally blocks, even on a failed leg.
   Only the two planned settings restarts may occur.
 
-Host half: `.\test.ps1 host j2534_server`, 41 Unity tests (2026-11-17). The voltage cases
+Host half: `.\test.ps1 host j2534_server`, 47 Unity tests (2026-11-18). The voltage cases
 run the production helper with a stubbed battery owner: rounding, valid zero,
 closed session, unavailable reading and invalid float values, and the
 byte-exact request and replies of the wire protocol's section 3.
@@ -93,6 +93,17 @@ byte-exact request and replies of the wire protocol's section 3.
   (`2026-11-17_1942_j2534vbat.md`). On the firmware with the flow control
   change: 13,583 and 14,602 mV (`2026-11-17_1938_j2534vbat.md`). The
   installer itself was not run.
+- 2026-11-18, driver 1.10 (the DLL of installer 1.10.0, `WiCAN J2534
+  1.10`, pointed at with `--dll`; 1.10 puts the numbers of seven return
+  codes right and reports lost messages, [j2534session.md](j2534session.md),
+  and touches READ_VBATT in nothing): the driver half alone
+  (`j2534_voltage_bench.py --driver-only`, PC only): PASS, the three fake
+  devices (millivolts, an old firmware without a result, an unavailable
+  ADC), each read as `03 00 00 00`. An invalid device id is refused with
+  `ERR_INVALID_DEVICE_ID` 0x1A now, SAE J2534-1's number, where every
+  driver up to 1.9 returned 0x19; the bench takes either. The legs at 13.5
+  and 14.5 V were not rerun for this driver, and the installer itself was
+  not run.
 
 ## Traps
 

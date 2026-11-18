@@ -66,7 +66,8 @@ def dll_read(args):
         check("DLL rejects a null output", st == 4, f"status={st}")
         value = word(0xDEADBEEF)
         st = dll.PassThruIoctl(word(99), READ_VBATT, None, ctypes.byref(value))
-        check("DLL rejects an invalid device id", st == 0x19 and
+        # ERR_INVALID_DEVICE_ID: 0x1A since driver 1.10 (SAE J2534-1's number), 0x19 up to 1.9
+        check("DLL rejects an invalid device id", st in (0x19, 0x1A) and
               value.value == 0xDEADBEEF, f"status={st}")
     finally:
         st = dll.PassThruClose(device)

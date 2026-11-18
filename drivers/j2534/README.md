@@ -1,14 +1,14 @@
 # WiCAN J2534 PassThru driver (Windows)
 
-`wican_j2534_setup_1.9.0.exe` installs the WiCAN SAE J2534-1 (04.04) PassThru
+`wican_j2534_setup_1.10.0.exe` installs the WiCAN SAE J2534-1 (04.04) PassThru
 driver: a 32-bit `wican_j2534.dll` that lets Windows diagnostic and reflash
 tools drive a vehicle's bus through a WiCAN PRO, over USB or WiFi.
 
 | | |
 |---|---|
-| Version | 1.9.0 (the DLL reports itself as `WiCAN J2534 1.9`; 2026-11-17: a tool's `ISO15765_BS` and `ISO15765_STMIN` reach the WiCAN and read back from it, see below; 1.8, the same day: VW TP 2.0 as its own protocol, `TP2_0_PS`, and `PassThruReadMsgs` no longer waits out its timeout once it holds a message, see below; 1.7, 2026-11-14: `READ_VBATT` returns the battery voltage the WiCAN measures instead of a fixed 12.0 V, the driver is under the GNU GPL version 3 and the installer opens with a disclaimer to accept, see below; 1.6, 2026-11-06: `PassThruWriteMsgs` sends every message of a call in one request and, with `Timeout` 0, returns as soon as it is on the link instead of waiting for the WiCAN's answer, see below; 1.5, 2026-10-27: `PassThruGetLastError` explains every device refusal in words; 1.4, the same day: `PassThruReadMsgs` waits on an event instead of a `Sleep(1)` poll, and the driver log is on by default at `C:\Users\Public\Documents\WiCAN\wican_j2534.log` with every message in full both ways; 1.3: accepts the J1850 VPW protocol; 1.2: event-driven ACK wait, GET_CONFIG answers, requests serialized across threads) |
-| SHA-256 | `0ee1262c4bdaada37f8c74b22ea42ee4315a3271e95e7b92c47908b1751be678` |
-| Requires | WiCAN PRO on firmware v6 (a build of 2026-10-20 or later for ISO15765 and J1850 VPW, 6.0.0-beta.10 or later for the measured battery voltage, a firmware after 6.0.0-beta.11 for TP 2.0 and for the ISO 15765 flow control values: see below), Windows 10 or 11 |
+| Version | 1.10.0 (the DLL reports itself as `WiCAN J2534 1.10`; 2026-11-18: the return codes carry SAE J2534-1's numbers and `PassThruReadMsgs` reports lost messages with `ERR_BUFFER_OVERFLOW`, see below; 1.9, 2026-11-17: a tool's `ISO15765_BS` and `ISO15765_STMIN` reach the WiCAN and read back from it, see below; 1.8, the same day: VW TP 2.0 as its own protocol, `TP2_0_PS`, and `PassThruReadMsgs` no longer waits out its timeout once it holds a message, see below; 1.7, 2026-11-14: `READ_VBATT` returns the battery voltage the WiCAN measures instead of a fixed 12.0 V, the driver is under the GNU GPL version 3 and the installer opens with a disclaimer to accept, see below; 1.6, 2026-11-06: `PassThruWriteMsgs` sends every message of a call in one request and, with `Timeout` 0, returns as soon as it is on the link instead of waiting for the WiCAN's answer, see below; 1.5, 2026-10-27: `PassThruGetLastError` explains every device refusal in words; 1.4, the same day: `PassThruReadMsgs` waits on an event instead of a `Sleep(1)` poll, and the driver log is on by default at `C:\Users\Public\Documents\WiCAN\wican_j2534.log` with every message in full both ways; 1.3: accepts the J1850 VPW protocol; 1.2: event-driven ACK wait, GET_CONFIG answers, requests serialized across threads) |
+| SHA-256 | `0d606eedefac64e9fa2b8f2ca596147ea6d101c68856accd5f75a2648f53c1b4` |
+| Requires | WiCAN PRO on firmware v6 (a build of 2026-10-20 or later for ISO15765 and J1850 VPW, 6.0.0-beta.10 or later for the measured battery voltage, a firmware after 6.0.0-beta.11 for TP 2.0, for the ISO 15765 flow control values and for the report of messages lost inside the WiCAN: see below), Windows 10 or 11 |
 | Licence | GNU General Public License, version 3. Used at your own risk: the installer shows the disclaimer and installs only when you accept it. |
 | Protocols | CAN, ISO15765 (ISO-TP) and VW TP 2.0 (`TP2_0_PS`, SAE J2534-2) on the CAN controller, and J1850 VPW (GM Class 2) on the device's OBD chip. J1850 PWM, ISO9141 and ISO14230 return `ERR_NOT_SUPPORTED`. |
 
@@ -43,8 +43,8 @@ device's timestamp on reads and every status, 16 MB then one rotation to
 `LogFile` move it, the value `off` disables it. Driver 1.5 (the same day)
 makes `PassThruGetLastError` say why the WiCAN refused a call ("the WiCAN
 refused: ERR_INVALID_BAUDRATE (0x18): the CAN bus runs at another bit
-rate ..."); until then a device status left "no error" behind and a tool's
-dialog said nothing useful.
+rate ..."; 0x19 since 1.10, see below); until then a device status left
+"no error" behind and a tool's dialog said nothing useful.
 
 Driver 1.6 (2026-11-06) changes the write path, after a field comparison
 with a Tactrix Openport 2.0 on a VW TP 2.0 flasher (a 2 MB read in 40 min
@@ -129,6 +129,47 @@ sends BS 8 / STmin 1 ms and `GET_CONFIG` reads 8 and 1. A tool that
 already sets them changes with this driver: udsoncan's J2534 connection
 sets BS 0x20 / STMIN 0 and now gets its long answers 32 frames at a time
 without a gap. Everything else behaves as in 1.8.
+
+Driver 1.10 (2026-11-18) puts two things right against SAE J2534-1. The
+first is the numbers of seven return codes, which were wrong in every
+version up to 1.9 and in the WiCAN firmware alike:
+
+| Return code | up to 1.9 | 1.10, SAE J2534-1 |
+|---|---|---|
+| `ERR_DEVICE_IN_USE` | 0x1A | 0x0E |
+| `ERR_MSG_PROTOCOL_ID` | 0x14 | 0x15 |
+| `ERR_INVALID_FILTER_ID` | 0x15 | 0x16 |
+| `ERR_NO_FLOW_CONTROL` | 0x16 | 0x17 |
+| `ERR_NOT_UNIQUE` | 0x17 | 0x18 |
+| `ERR_INVALID_BAUDRATE` | 0x18 | 0x19 |
+| `ERR_INVALID_DEVICE_ID` | 0x19 | 0x1A |
+
+A tool that follows the standard showed the wrong reason for a refusal
+(a wrong bit rate as "not unique", for one); the text of
+`PassThruGetLastError` was right all along. With 1.10 a tool gets the
+standard's numbers whatever firmware the WiCAN runs: on a firmware after
+6.0.0-beta.11 the WiCAN answers them itself to a driver that asks (wire
+version 2), and on an older firmware the driver turns the old numbers into
+the standard's. The other way round nothing changes either: a driver up
+to 1.9 on the new firmware gets the numbers it always got. So the driver
+and the firmware can be updated in any order; the one thing to follow is
+a program of your own that compares a return value with one of the old
+numbers.
+
+The second is lost messages. When the WiCAN receives messages faster than
+the PC takes them (the tool does not read for a while, or the link is
+slower than the vehicle bus), a queue runs over and the oldest messages
+go. Up to 1.9 that was silent. With 1.10 `PassThruReadMsgs` returns
+`ERR_BUFFER_OVERFLOW` (0x12) together with the first messages behind the
+gap, as the standard says: the messages of that call are valid, and the
+ones that are missing were in front of the first of them. A loss in the
+driver's own queue (255 messages a channel) is reported with any
+firmware; a loss inside the WiCAN (256 bus frames a channel) with a
+firmware after 6.0.0-beta.11, which tells the driver how many went. The
+driver log has a line for each. `PassThruOpen` on a WiCAN that another
+tool holds over USB serial or Bluetooth returns `ERR_DEVICE_IN_USE` with
+the reason as text, where it returned `ERR_FAILED`. Everything else
+behaves as in 1.9.
 
 The installer is not code-signed, so Windows SmartScreen may ask you to
 confirm before it runs. The same file is attached to each firmware release.
