@@ -7,7 +7,7 @@ J2534-1 (and every tool) puts the 4-byte CAN id first and the pad flag on each
 message. The Windows DLL copies PASSTHRU_MSGs verbatim, so a tool's bytes can be
 replayed byte-exact over the wire protocol; the real DLL + udsoncan run too when
 the 32-bit Python is present. PCAN_USBBUS1 is the witness on the bus; the ECU
-simulator answers 7E0 (and 7E1) with UDS and 7DF with OBD-II.
+simulator answers 7E0 (and 7E2) with UDS and 7DF with OBD-II.
 
 Legs (one planned restart to configure, one to restore):
   C  configure: j2534 on with allow_lan, autopid's groups paused
@@ -18,7 +18,7 @@ Legs (one planned restart to configure, one to restore):
   M  multi-frame: 22 F1 90 -> START_OF_MESSAGE (0x02, data 00 00 07 E8) then the
      17-byte VIN behind 62 F1 90, the id first
   P  padding per message: tx_flags 0 -> 7E0 dlc 3 [02 10 03], still answered
-  E  two ECUs on one channel: a second FLOW_CONTROL filter 7E1/7E9 answers too, a
+  E  two ECUs on one channel: a second FLOW_CONTROL filter 7E2/7EA answers too, a
      long request to an id without a session is ERR_NO_FLOW_CONTROL, STOP_FILTER
      closes the session (its long request refused after), the first ECU still works
   F  functional addressing (the filters cleared first: a flow-control session
@@ -179,21 +179,25 @@ def leg_p(c, ch, pcan):
 
 
 def leg_e(c, ch):
+    # The second ECU is 7E2 / 7EA, the one every profile of the simulator has
+    # (its `ecus` list). Until 2026-11-18 the leg asked 7E1 / 7E9, which only
+    # the shipped default profile answers: with the bench's MEB profile
+    # active, E2 was red from 2026-11-16 on.
     print("== E: two ECUs on one channel", flush=True)
-    st, fid2, _ = fc_filter(c, ch, 0x7E9, 0x7E1)
-    check("E1 a second FLOW_CONTROL filter 7E1/7E9 accepted", st == 0 and fid2, (hex(st), fid2))
-    ack, got = write_collect(c, ch, struct.pack(">I", 0x7E1) + b"\x10\x03", b.TX_PAD, 1.0)
-    check("E2 10 03 to 7E1 answered from 7E9", ack == 0 and any(d[:6] == b"\x00\x00\x07\xE9\x50\x03" for d in replies(got)),
+    st, fid2, _ = fc_filter(c, ch, 0x7EA, 0x7E2)
+    check("E1 a second FLOW_CONTROL filter 7E2/7EA accepted", st == 0 and fid2, (hex(st), fid2))
+    ack, got = write_collect(c, ch, struct.pack(">I", 0x7E2) + b"\x10\x03", b.TX_PAD, 1.0)
+    check("E2 10 03 to 7E2 answered from 7EA", ack == 0 and any(d[:6] == b"\x00\x00\x07\xEA\x50\x03" for d in replies(got)),
           [hexs(d) for d in replies(got)][:2])
     ack, got = write_collect(c, ch, struct.pack(">I", 0x7E0) + b"\x10\x03", b.TX_PAD, 1.0)
     check("E3 the first ECU still answers", ack == 0 and any(d[:6] == b"\x00\x00\x07\xE8\x50\x03" for d in replies(got)),
           [hexs(d) for d in replies(got)][:2])
-    long_req = struct.pack(">I", 0x7E2) + b"\x2E\xF1\x90" + VIN
+    long_req = struct.pack(">I", 0x7E3) + b"\x2E\xF1\x90" + VIN
     ack, got = write_collect(c, ch, long_req, b.TX_PAD, 0.5)
     check("E4 a 20-byte request to an id without a session is ERR_NO_FLOW_CONTROL", ack == ERR_NO_FLOW_CONTROL, ack)
     st, _, _ = c.call(STOP_FILTER, ch, struct.pack("<I", fid2))
-    ack, got = write_collect(c, ch, struct.pack(">I", 0x7E1) + b"\x2E\xF1\x90" + VIN, b.TX_PAD, 0.5)
-    check("E5 STOP_FILTER closes 7E1's session: its long request is refused", st == 0 and ack == ERR_NO_FLOW_CONTROL, (hex(st), ack))
+    ack, got = write_collect(c, ch, struct.pack(">I", 0x7E2) + b"\x2E\xF1\x90" + VIN, b.TX_PAD, 0.5)
+    check("E5 STOP_FILTER closes 7E2's session: its long request is refused", st == 0 and ack == ERR_NO_FLOW_CONTROL, (hex(st), ack))
 
 
 def leg_f(c, ch):
