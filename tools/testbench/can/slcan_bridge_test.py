@@ -430,6 +430,8 @@ def burst_leg(dut, pcan, sl_host, sl_port, n):
 
 STALL_CLIENT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "slcan_stall_client.py")
 STALL_FPS = 1100.0
+WS_CLIENT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ws_stall_client.py")
+WS_WRITE_ID = 0x100        # what ws_stall_client.py writes in its `write` mode
 
 
 class Stream(threading.Thread):
@@ -752,6 +754,10 @@ def main():
     planned = 0
 
     # ---- preflight --------------------------------------------------------------
+    # asked again for up to 40 s: a request through the tunnel to a unit that
+    # is just coming up fails at once (2026-11-18: a stage started 18 s after a
+    # restart of the unit ended with "no DUT" 7 s in; canmax had the same)
+    dut.wait_up(40)
     st = dut.get("/api/status")
     if not st:
         print("SLCAN BRIDGE FAIL: no DUT at", a.dut)
@@ -1035,6 +1041,151 @@ def legs_bridged(a, dut, pcan, found, br, submit, sl_host, sl_port, ws_host, ws_
                 check("L4 cansend from can0 reached the bus (0x325)", pcan.saw(0x325, "2525"), dict(pcan.seen))
 
     legs_stall(a, dut, pcan, sl_host, sl_port)
+    legs_ws_stall(a, dut, pcan)
+
+
+# ---- leg W: a WebSocket client that stalls ---------------------------------------------
+
+def ws_run(pi, dut_ip, secs, mode, arg=None):
+    """one run of ws_stall_client.py on the Pi against /ws/can: its RESULT, or None"""
+    cmd = "python3 /tmp/ws_stall_client.py %s /ws/can %g %s%s" % (
+        dut_ip, secs, mode, "" if arg is None else " %g" % arg)
+    p = subprocess.run(["ssh", "-o", "BatchMode=yes", pi, cmd],
+                       capture_output=True, text=True, timeout=secs + 60)
+    for line in p.stdout.splitlines():
+        if line.startswith("RESULT "):
+            return json.loads(line[7:])
+    print("   ws client (%s) gave no result: %s" % (mode, (p.stdout + p.stderr).strip()[-200:]), flush=True)
+    return None
+
+
+def ws_pair(pi, dut_ip, first, second, lead_s=2.0):
+    """`first` (a reader) and, lead_s later, `second` beside it on the same
+    channel: their two results. Each is (secs, mode[, arg])."""
+    out = [None, None]
+
+    def run(i, args):
+        out[i] = ws_run(pi, dut_ip, *args)
+
+    t1 = threading.Thread(target=run, args=(0, first), daemon=True)
+    t1.start()
+    time.sleep(lead_s)
+    t2 = threading.Thread(target=run, args=(1, second), daemon=True)
+    t2.start()
+    t1.join(first[0] + 90)
+    t2.join(second[0] + 90)
+    return out[0], out[1]
+
+
+def legs_ws_stall(a, dut, pcan):
+    """A WebSocket client that takes nothing, or takes slowly, costs the other
+    clients of its channel nothing and does not hold the other direction; it
+    is closed after 10 s of taking nothing and its slot is free again."""
+    print("== W: a WebSocket client that stalls (%d frames/s on the bus)" % STALL_FPS, flush=True)
+    if a.skip_pi:
+        skip("W the WebSocket stall legs", "--skip-pi")
+        return
+    subprocess.run(["scp", "-q", WS_CLIENT, a.pi + ":/tmp/ws_stall_client.py"], check=True, timeout=30)
+
+    def stats():
+        ws = dut.get("/api/ws") or {}
+        st = dict(next((c for c in ws.get("channels", []) if c["name"] == "ws_can"), {}).get("stats", {}))
+        can = dut.get("/api/can") or {}
+        st["bus_lost"] = can.get("dispatch_drops", 0) + can.get("rx_missed", 0)
+        return st
+
+    def whole(res, secs):
+        return (bool(res) and res["closed"] == "no" and res["lost_inside"] == 0
+                and res["frames"] > (secs - 3) * STALL_FPS and res["max_gap_ms"] < 500)
+
+    def brief(res):
+        return res and {k: res[k] for k in ("frames", "lost_inside", "max_gap_ms", "closed") if k in res}
+
+    stream = Stream(pcan, STALL_FPS)
+    try:
+        time.sleep(1.0)
+
+        # W1: the control, one client that reads all the time
+        res = ws_run(a.pi, a.dut_ip, 8, "read")
+        check("W1 one WebSocket client: every frame, no gap", whole(res, 8), brief(res))
+
+        # W2: a second client that takes nothing at all. Before 2026-11-18 its
+        # first send that did not fit held the bridge for the server's send
+        # timeout (5 s), and every other client of the channel with it.
+        s0 = stats()
+        gone0 = dut.ring_count("took no data for")
+        res, bad = ws_pair(a.pi, a.dut_ip, (24, "read"), (20, "stall"))
+        s1 = stats()
+        check("W2 beside a client that takes nothing: the reader loses no frame and sees no gap",
+              whole(res, 24) and s1["bus_lost"] == s0["bus_lost"],
+              {"reader": brief(res), "bus_lost": s1["bus_lost"] - s0["bus_lost"]})
+        check("W2 what the silent client did not take is counted (tx_drops), and it is closed after 10 s with the reason in the log",
+              bool(bad) and bad["closed"] != "no" and s1.get("tx_drops", 0) > s0.get("tx_drops", 0)
+              and dut.ring_count("took no data for") == gone0 + 1,
+              {"silent": bad and bad["closed"], "tx_drops": s1.get("tx_drops", 0) - s0.get("tx_drops", 0),
+               "log": dut.ring_count("took no data for") - gone0})
+
+        # W3: a client that takes 2 KB a second (the bus makes 24): slow, not gone
+        res, slow = ws_pair(a.pi, a.dut_ip, (18, "read"), (14, "slow", 2000))
+        check("W3 beside a client that takes 2 KB a second: the reader loses no frame and sees no gap",
+              whole(res, 18), {"reader": brief(res), "slow": slow and {"took": slow.get("took"), "closed": slow["closed"]}})
+
+        # W4: the other direction while a client takes nothing: 50 lines a
+        # second written by the reader must all reach the bus
+        pcan.clear_seen()
+        s0 = stats()
+        res, _ = ws_pair(a.pi, a.dut_ip, (16, "write", 50), (12, "stall"))
+        time.sleep(1.0)
+        s1 = stats()
+        with pcan._lock:
+            got = [int(h[:8], 16) for h in pcan.seen.get(WS_WRITE_ID, [])]
+        check("W4 lines written to the bus while another client takes nothing: every one on the bus, in order",
+              bool(res) and res["written"] > 500 and got == list(range(res["written"]))
+              and s1.get("rx_drops", 0) == s0.get("rx_drops", 0),
+              {"written": res and res["written"], "on_the_bus": len(got),
+               "rx_drops": s1.get("rx_drops", 0) - s0.get("rx_drops", 0), "reader": brief(res)})
+
+        # W6: 6000 lines written over the WebSocket as fast as it takes them,
+        # a hundred a message (what a replay from a browser tool is). In
+        # messages of ten the unit kept up before the fix (4000 of 4000): the
+        # server's task was the brake, not the bus.
+        pcan.clear_seen()
+        s0 = stats()
+        res = ws_run(a.pi, a.dut_ip, 14, "burst", 6000)
+        time.sleep(1.0)
+        s1 = stats()
+        with pcan._lock:
+            got = [int(h[:8], 16) for h in pcan.seen.get(BURST_ID, [])]
+        check("W6 a burst of 6000 lines written over the WebSocket: every frame on the bus once, in order",
+              bool(res) and got == list(range(6000)) and s1.get("rx_drops", 0) == s0.get("rx_drops", 0),
+              {"on_the_bus": len(got), "in_order": got == sorted(got), "rx_drops": s1.get("rx_drops", 0) - s0.get("rx_drops", 0),
+               "burst_s": res and res.get("burst_s")})
+
+        # W7: a message above what the channel takes (4096 bytes) is answered
+        # with the close code for it (1009), not with a bare end of the connection
+        res = ws_run(a.pi, a.dut_ip, 6, "oversize", 5000)
+        check("W7 a message of 5000 bytes is refused with close code 1009",
+              bool(res) and res["closed"].startswith("close frame 1009"), res and res["closed"])
+
+        # W8: a client that only listens is not the connection the web server
+        # gives up when more arrive than it has places for (seven). It makes
+        # room by closing the one that was used longest ago, and it counts a
+        # use only when a connection SENDS: the reader's last one was its
+        # handshake, so every plain request after it made the reader the oldest
+        reader, crowd = ws_pair(a.pi, a.dut_ip, (14, "read"), (8, "crowd", 8), lead_s=3.0)
+        check("W8 a client that only listens stays when eight more connections arrive",
+              whole(reader, 14) and bool(crowd) and crowd.get("answered") == 8,
+              {"reader": brief(reader), "crowd": crowd})
+
+        # W5: afterwards the channel is as it was: no client left, a new one reads
+        time.sleep(11.0)        # the silent client of W4 is closed 10 s after its last byte
+        res = ws_run(a.pi, a.dut_ip, 6, "read")
+        time.sleep(1.0)
+        s2 = stats()
+        check("W5 the next client receives again and no slot is left taken",
+              whole(res, 6) and s2.get("clients", 1) == 0, {"reader": brief(res), "clients_after": s2.get("clients")})
+    finally:
+        stream.close()
 
 
 if __name__ == "__main__":

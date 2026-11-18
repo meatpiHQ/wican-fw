@@ -472,6 +472,9 @@ def main():
                     help="kbit/s:shape, comma separated; a ! after a shape marks a tier above what the unit takes")
     ap.add_argument("--secs", type=float, default=10.0, help="how long each tier keeps the bus full")
     ap.add_argument("--keep-sim", action="store_true", help="leave ECU sim v2 alone (a bus without it)")
+    ap.add_argument("--log-level", default="",
+                    help="the unit's log levels during the tiers, tag=level[,tag=level] ('*' = every tag), "
+                         "to see what the console costs: '*=none'")
     a = ap.parse_args()
 
     dut = Dut(a.dut)
@@ -483,7 +486,10 @@ def main():
     t_start = time.time()
     planned = 0
 
-    st = dut.get("/api/status")
+    # asked again for up to 40 s: the stage's console capture opens the console
+    # port just before this, which can reset the unit, and a request through
+    # the tunnel to a unit that is restarting fails at once (2026-11-18)
+    st, _ = api_wait(dut, "/api/status", 40.0)
     if not st:
         print("CAN MAX RATE FAIL: no DUT at", a.dut)
         sys.exit(1)
@@ -513,6 +519,16 @@ def main():
             if not dut.wait_up():
                 raise RuntimeError("the DUT did not come back after the restart (%s)" % why)
             time.sleep(3)
+        set_log_levels()
+
+    def set_log_levels():
+        # --log-level: a log level lasts until the unit's next restart, so it
+        # is set again after each one (the last restart, back to the settings
+        # as found, also ends it)
+        for item in [x for x in a.log_level.split(",") if x]:
+            tag, _, level = item.partition("=")
+            dut.api("/api/logs/level", "PUT", {"tag": tag, "level": level})
+            print("log level for the run: %s = %s" % (tag, level), flush=True)
 
     try:
         for kbit, shapes in tiers.items():
