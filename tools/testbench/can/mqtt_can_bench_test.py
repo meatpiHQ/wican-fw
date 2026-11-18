@@ -17,7 +17,7 @@ Legs (gates FIRST: nothing may move before explicit consent):
      byte-exact; rx keeps flowing on the custom topic.
   3. restore settings verbatim.
 
-    python mqtt_can_bench_test.py [pcan]
+    python mqtt_can_bench_test.py [pcan [the unit's address on the Pi]]
 Expected final line: MQTT CAN BENCH PASS
 """
 import json
@@ -30,6 +30,10 @@ import time
 import can
 
 PCAN = sys.argv[1] if len(sys.argv) > 1 else "PCAN_USBBUS1"
+# the unit's address as the Pi sees it; without it the newest lease of the
+# Pi's own hotspot is taken, which is another device when the unit sits on
+# the bench access point (2026-11-18)
+DUT = sys.argv[2] if len(sys.argv) > 2 else ""
 
 fails = []
 
@@ -49,6 +53,8 @@ def pi(cmd, stdin=None, timeout=180):
 
 
 def dut_ip():
+    if DUT:
+        return DUT
     return pi("sudo cat /var/lib/NetworkManager/dnsmasq-wint0.leases "
               "/var/lib/NetworkManager/dnsmasq-wtest0.leases 2>/dev/null"
               " | sort -n | tail -1 | awk '{print $3}'").strip()
@@ -151,7 +157,8 @@ def main():
     mc_before = api(ip, "/api/settings/mqtt_can")
     bm_before = api(ip, "/api/settings/bridge_manager")
     mq_before = api(ip, "/api/settings/mqtt_manager")
-    for c in (mc_before, bm_before, mq_before):
+    ap_before = api(ip, "/api/settings/autopid")
+    for c in (mc_before, bm_before, mq_before, ap_before):
         c.pop("degraded", None)
         c.pop("pending_reboot", None)
         c.pop("broker_password", None)  # GET redacts it, never PUT back
@@ -186,6 +193,14 @@ def main():
                     "translator": "canmqtt", "enabled": True})
     bm["bridges"] = bridges
     api(ip, "/api/settings/bridge_manager", "PUT", bm)
+    # the counts below are of the bench's own frames: AutoPID's requests and
+    # their answers would be on the bus beside them (1085 frames counted for a
+    # storm of 1000, 2026-11-18), so it is off for the run
+    if ap_before.get("enabled"):
+        ap = dict(ap_before)
+        ap["enabled"] = False
+        api(ip, "/api/settings/autopid", "PUT", ap)
+        print("  (AutoPID off for the run)")
     if parked:
         print(f"  (parked can-jack bridges for the run: {parked})")
     print("configured (gates CLOSED); rebooting…")
@@ -334,6 +349,8 @@ def main():
     api(ip, "/api/settings/mqtt_can", "PUT", mc_before)
     api(ip, "/api/settings/bridge_manager", "PUT", bm_before)
     api(ip, "/api/settings/mqtt_manager", "PUT", mq_before)
+    if ap_before.get("enabled"):
+        api(ip, "/api/settings/autopid", "PUT", ap_before)
     print("restoring; rebooting…")
     ip = submit_and_wait(ip)
     f = api(ip, "/api/faults")
