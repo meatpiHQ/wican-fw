@@ -496,7 +496,10 @@ def main():
         check("[b0] an access token through the owner login", bool(ha.token))
 
         entries = ha.entries()
-        mine = [e for e in entries if e.get("title") == args.dut_ip]
+        # an entry added by address is titled with the address, one taken from
+        # the discovery card (the first-time path) with the unit's host name
+        titles = (args.dut_ip, f"wican_{device_id}.local")
+        mine = [e for e in entries if e.get("title") in titles]
         if not mine:
             log(f"no entry for {args.dut_ip}: adding it through the config flow")
             entry_id = ha.add_entry(args.dut_ip)
