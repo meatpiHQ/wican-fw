@@ -45,7 +45,7 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, "..", "lib"))
-from wican_fresh_bench import (Console, esptool, psu_cycle, restart_stats,   # noqa: E402
+from wican_fresh_bench import (Console, esptool, restart_stats,   # noqa: E402
                                ssh_run, check, note, fails, WICAN_AP_IP,
                                WICAN_AP_PSK, USER_IF, HOME_CON, HOME_IF, CURL)
 import bench_ports  # noqa: E402
@@ -68,7 +68,9 @@ _fresh.E_WHITELIST = _fresh.E_WHITELIST + (
 USER_CON = "wican-qs"              # temp Pi profile = the user's phone
 NEW_AP_PSK = "quick-setup-2026"    # the wizard's new access point password
 TWIN_CON = "wican-bench-w0"        # the internal-radio twin hotspot: parked
-BROKER_HOST = "10.42.1.1"          # the Pi on its hotspot = the user's broker
+P4_CON = "wican-bench-usb"         # the bench access point the P4 serves,
+P4_IF = "usb0"                     # behind the Pi's usb0 (since 2026-10-02)
+BROKER_HOST = "10.42.1.1"          # the Pi on the home network = the user's broker
 SIM_VIN = "1WCAN0FW0P0000001"      # the ECU simulator's VIN (0902 / 22F190)
 HOME_CURL = "curl -s -m 10 --retry 2 --retry-delay 2"
 
@@ -225,6 +227,19 @@ def battery_leg(ip, psu_port):
     return charging, resting, sleep_v, wake_v
 
 
+def supply_cycle(spec, off_s=8):
+    """The DUT's supply off and on again through bench_psu (ECU sim v2's OBD
+    pin 16; the OWON left the bench on 2026-11-09). True when the output is
+    on again."""
+    from bench_psu import open_psu   # noqa: E402 (lib on sys.path)
+    with open_psu(spec) as ps:
+        ps.output(False)
+        time.sleep(off_s)
+        ps.output(True)
+        time.sleep(0.5)
+        return bool(ps.output_on())
+
+
 def wait_home_ip(con, timeout=150):
     """The STA address on the HOME network, once the device answers there.
     With a dongle on the connector the STA can land on the dongle's AP
@@ -256,18 +271,27 @@ def main():
     psu = a.psu                      # auto = ECU sim v2's supply (bench_psu)
     note(f"ports: wican={wican} psu={psu}")
 
-    # ---- the rig: ONE home hotspot (the twin roams the DUT), broker up ----
+    # ---- the rig: ONE home network (a twin roams the DUT), broker up ------
+    # Since 2026-10-02 the home network is the bench access point the P4
+    # serves behind the Pi's usb0. The Pi's own hotspot profile (HOME_CON)
+    # carries the same SSID and password: it is read for them and stays DOWN
+    # beside the P4. Without the P4 the Pi's hotspot plays home, as before.
+    r = ssh_run(f"nmcli -t -f NAME,DEVICE con show --active | grep -c -x '{P4_CON}:{P4_IF}'")
+    on_p4 = r.stdout.strip() == "1"
+    home_up = (f"nmcli -t dev status | grep '^{P4_IF}:ethernet:connected'" if on_p4 else
+               f"sudo -n nmcli con up {HOME_CON} >/dev/null 2>&1; "
+               f"nmcli -t dev status | grep '^{HOME_IF}:wifi:connected'")
     r = ssh_run(f"sudo -n nmcli con modify {TWIN_CON} connection.autoconnect no; "
                 f"sudo -n nmcli con down {TWIN_CON} >/dev/null 2>&1; "
                 f"nmcli -g 802-11-wireless.ssid con show {HOME_CON}; "
                 f"sudo -n nmcli -s -g 802-11-wireless-security.psk con show {HOME_CON}; "
-                f"sudo -n nmcli con up {HOME_CON} >/dev/null 2>&1; "
-                f"nmcli -t dev status | grep '^{HOME_IF}:wifi:connected'; "
+                f"{home_up}; "
                 f"systemctl is-active mosquitto")
     parts = r.stdout.split("\n")
     home_ssid = parts[0].strip() if parts else ""
     home_psk = parts[1].strip() if len(parts) > 1 else ""
-    check("setup: home hotspot up on the Pi, twin parked, mosquitto active",
+    check("setup: home network up (" + ("the P4's access point behind usb0" if on_p4 else "the Pi's hotspot")
+          + "), twin parked, mosquitto active",
           bool(home_ssid) and bool(home_psk) and "connected" in r.stdout
           and "\nactive" in "\n" + r.stdout, home_ssid)
     if fails:
@@ -286,10 +310,22 @@ def main():
             return finish()
 
     con = Console(wican, 2000000)
-    check("boot: PSU cold cycle", psu_cycle(psu))
+    t_cycle = time.time() - con.t0
+    check("boot: supply cold cycle", supply_cycle(psu))
     ssh_run(f"sudo -n nmcli con delete {USER_CON} >/dev/null 2>&1; true")
     try:
-        hit = con.wait_for(r"config applied: mode=(\d+) sta_networks=(\d+) ap_ssid=(WiCAN_\w+)", 60)
+        boot_rx = r"config applied: mode=(\d+) sta_networks=(\d+) ap_ssid=(WiCAN_\w+)"
+        hit = con.wait_for(boot_rx, 30, since=t_cycle)
+        if not hit:
+            # a unit whose USB-C is on the PC stays up through the supply
+            # cycle: start it through the console port's EN line instead
+            note("RIG: no boot behind the supply cycle (the unit's USB-C on the PC feeds it): "
+                 "reset through the console port")
+            t_cycle = time.time() - con.t0
+            con.s.rts = True
+            time.sleep(0.2)
+            con.s.rts = False
+            hit = con.wait_for(boot_rx, 60, since=t_cycle)
         m = re.search(r"ap_ssid=(WiCAN_\w+)", hit[1]) if hit else None
         ap_ssid = m.group(1) if m else ""
         check("boot: fresh device is an access point", m is not None, ap_ssid)
@@ -414,7 +450,7 @@ def main():
         boots_expected = b0 + 1
         # ---- the vehicle screen ----------------------------------------------
         if not a.no_vehicle:
-            saves0 = ((home_api(ip, "GET", "/api/obd_chip") or {}).get("eeprom_guard") or {}).get("protocol_saves", 0)
+            g0 = (home_api(ip, "GET", "/api/obd_chip") or {}).get("eeprom_guard") or {}
             s0 = home_api(ip, "POST", "/api/autopid/vehicles/detect", {}) or {}
             phases, last = [], None
             t0 = time.time()
@@ -457,10 +493,18 @@ def main():
             check("vehicle: the job wrote the standard rows into the active config by itself",
                   len([p for p in (back.get("pids") or []) if p.get("type") == "std"]) >= len(sup),
                   f"{len(back.get('pids') or [])} pids")
-            saves1 = ((home_api(ip, "GET", "/api/obd_chip") or {}).get("eeprom_guard") or {}).get("protocol_saves", 0)
-            check("vehicle: the chip learned the base protocol ONCE (one real ATSP this boot)",
-                  saves1 == saves0 + 1 and str(ent.get("chip_protocol", "")) == "6" if ent else False,
-                  f"protocol_saves {saves0}->{saves1}, chip_protocol={ent.get('chip_protocol') if ent else None}")
+            # An erase of the unit does not reach the OBD chip's own store. A chip that
+            # holds another protocol gets the ONE real ATSP; a chip that already holds
+            # the car's is sent nothing and the call is counted as kept (2026-11-10).
+            g1 = (home_api(ip, "GET", "/api/obd_chip") or {}).get("eeprom_guard") or {}
+            held = str(g0.get("stored_protocol", ""))
+            wrote = g1.get("protocol_saves", 0) - g0.get("protocol_saves", 0)
+            kept = g1.get("protocol_kept", 0) - g0.get("protocol_kept", 0)
+            learned = (wrote == 0 and kept >= 1) if held == "6" else (wrote == 1 and kept == 0)
+            check("vehicle: the chip learned the base protocol ONCE (one real ATSP this boot, none when it held it)",
+                  bool(ent) and learned and str(ent.get("chip_protocol", "")) == "6",
+                  f"the chip held '{held}' before: protocol_saves +{wrote}, protocol_kept +{kept}, "
+                  f"chip_protocol={ent.get('chip_protocol') if ent else None}")
             # the wizard's Finish: name + "standard PIDs only" (empty profile clears pending)
             put = home_api(ip, "PUT", "/api/autopid/vehicles/" + key, {"name": "Bench car", "profile": ""}) or {}
             check("vehicle: PUT name + empty profile clears pending_profile",
@@ -538,9 +582,10 @@ def main():
                   ent2 is not None and ent2.get("current") is True and ent2.get("name") == "Bench car"
                   and ent2.get("pending_profile") is False and str(ent2.get("protocol", "")) == "6"
                   and (not vin or ent2.get("vin") == vin), json.dumps(ent2 or vs2)[:160])
-            saves2 = ((home_api(ip2, "GET", "/api/obd_chip") or {}).get("eeprom_guard") or {}).get("protocol_saves", -1)
-            check("vehicle: no second ATSP after the restart (the chip already holds the protocol)",
-                  saves2 == 0, f"protocol_saves this boot = {saves2}")
+            g2 = (home_api(ip2, "GET", "/api/obd_chip") or {}).get("eeprom_guard") or {}
+            check("vehicle: no second ATSP after the restart (the chip's own store reads 6 at the bring-up)",
+                  g2.get("protocol_saves", -1) == 0 and str(g2.get("stored_protocol", "")) == "6",
+                  f"protocol_saves this boot = {g2.get('protocol_saves')}, stored_protocol = {g2.get('stored_protocol')}")
             r = ssh_run(f"mosquitto_sub -h 127.0.0.1 -t 'wican/{dev_id}/autopid' -C 1 -W 25 2>&1", timeout=50)
             check("vehicle: the broker receives the autopid payload", r.stdout.strip().startswith("{"),
                   r.stdout.strip()[:80])
