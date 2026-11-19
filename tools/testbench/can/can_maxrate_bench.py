@@ -26,7 +26,21 @@ asserts:
     `rx_bad`, `dispatch_drops` and the error counters +0;
   - the TCP client got every frame, once and in order, and the server's
     `tx_drops` did not move;
-  - the web API answered all through it (the slowest answer is printed).
+  - the web API answered all through it (the slowest answer is printed);
+  - the unit's flash was at rest all through it (see below).
+
+The flash at rest: a flash erase holds every task of the unit for 23 ms and
+more, and only the CAN receive interrupt runs meanwhile. The receive queue
+holds 256 frames, which is 61 ms of a full 500 kbit/s bus of 8-byte frames
+and 30 ms at 1000 kbit/s, so an erase at the line rate can cost frames. And
+the unit does erase: about 25 s after a restart that changed a setting it
+refreshes its configuration backup (28 writes, 4 erases), which is where
+this bench's first tier ran until 2026-11-19. Nothing was lost in the six
+runs of 2026-11-18; on 2026-11-19 three runs of eight lost 1 to 18 frames
+in that tier. So the bench now waits, after each of its restarts, until the
+unit has been up 40 s and its flash counters have stood still for 3 s, and
+it reads the counters before and after every tier. --no-flash-wait runs the
+tiers at once, as before, to see what a refresh inside a tier costs.
 
 A tier marked with ! (std0 at 1000 kbit/s, 20,833 frames a second) is above
 what the unit takes: frames are lost there, and the bench asserts instead
@@ -46,7 +60,7 @@ Run on the PC (IDF venv python, python-can, the PCAN on the DUT's bus); the
 stage `.\\test.ps1 canmax` opens the tunnel and passes the arguments:
   python can_maxrate_bench.py --dut localhost:18081 --slcan localhost:18333
          [--pcan PCAN_USBBUS2] [--tiers 500:std8,500:std0,1000:std0!]
-         [--secs 10] [--keep-sim]
+         [--secs 10] [--keep-sim] [--no-flash-wait]
 Expected final line: CAN MAX RATE PASS
 """
 import argparse
@@ -232,6 +246,33 @@ class Dut:
             time.sleep(2)
         return False
 
+    def flash(self):
+        """The unit's flash counters since boot ({writes, erases, ..}) and its uptime in seconds."""
+        st = self.get("/api/status") or {}
+        up = 0
+        for part in str(st.get("uptime") or "0").split(":"):
+            up = up * 60 + (int(part) if part.isdigit() else 0)
+        return dict((st.get("health") or {}).get("flash") or {}), up
+
+    def wait_flash_at_rest(self, since_boot=40, still=3.0, limit=90.0):
+        """A restart that changed a setting is followed by the configuration
+        backup's refresh about 25 s after boot (28 writes, 4 erases of 4 KB).
+        A flash erase holds every task of the unit for 23 ms and more, and at
+        the line rate that is longer than its CAN receive queue lasts (256
+        frames: 30 ms at 8,400 frames a second). Wait until the unit has been
+        up `since_boot` seconds and its flash counters have stood still for
+        `still` seconds: (counters, uptime, seconds waited)."""
+        t0 = time.time()
+        last, last_t, up = None, time.time(), 0
+        while time.time() - t0 < limit:
+            ops, up = self.flash()
+            if ops != last:
+                last, last_t = ops, time.time()
+            if up >= since_boot and time.time() - last_t >= still:
+                break
+            time.sleep(1.0)
+        return last or {}, up, time.time() - t0
+
     def settings(self, comp):
         s = self.api("/api/settings/" + comp)
         s.pop("degraded", None)
@@ -389,6 +430,7 @@ def run_tier(a, dut, bus, kbit, shape, overload, sl_host, sl_port):
     time.sleep(1.0)
     c0 = dut.api("/api/can")
     s0, _ = dut.slcan_stats()
+    f0, _ = dut.flash()
     poll = Poller(dut)
     t0 = time.time()
     send_exactly(bus, shape, n)
@@ -408,7 +450,9 @@ def run_tier(a, dut, bus, kbit, shape, overload, sl_host, sl_port):
         check("%s the web API answers again after it" % tag, False, "nothing for %.0f s" % back_s)
         return {"tier": tag, "line_rate": round(theory), "frames": n, "client": cl.got, "api": "silent"}
     s1, _ = dut.slcan_stats()
+    f1, _ = dut.flash()
     cl.close()
+    flash = {k: f1.get(k, 0) - f0.get(k, 0) for k in ("writes", "erases") if f1.get(k, 0) != f0.get(k, 0)}
 
     rate = poll.wire_rate(c0.get("rx", 0) + c0.get("rx_missed", 0), n)
     took = (cl.last_at - cl.first_at) if cl.got > 1 else 0.0
@@ -416,17 +460,23 @@ def run_tier(a, dut, bus, kbit, shape, overload, sl_host, sl_port):
     moved = {k: c1.get(k, 0) - c0.get(k, 0) for k in CAN_COUNTERS if c1.get(k, 0) != c0.get(k, 0)}
     d_drop = s1.get("tx_drops", 0) - s0.get("tx_drops", 0)
     print("   handed over in %.1f s; on the wire %s; the client's %d lines came in %.1f s (%.0f a second); "
-          "the API: %d answers, %d unanswered, slowest %.2f s"
+          "the API: %d answers, %d unanswered, slowest %.2f s; the flash: %s"
           % (handed, ("%.0f frames/s (%.1f %% of the line rate)" % (rate, 100.0 * rate / theory)) if rate
              else "not measured (too few answers of the API)",
-             cl.got, took, cl.got / took if took else 0.0, len(poll.samples), poll.unanswered, poll.slowest),
+             cl.got, took, cl.got / took if took else 0.0, len(poll.samples), poll.unanswered, poll.slowest,
+             ("WRITTEN during the tier, " + ", ".join("%s +%d" % kv for kv in sorted(flash.items()))) if flash
+             else "at rest"),
           flush=True)
     res = {"tier": tag, "line_rate": round(theory), "wire_rate": round(rate), "frames": n, "rx": d_rx,
-           "client": cl.got, "missing": cl.missing, "tx_drops": d_drop, "moved": moved,
+           "client": cl.got, "missing": cl.missing, "tx_drops": d_drop, "moved": moved, "flash": flash,
            "api_answers": len(poll.samples), "api_unanswered": poll.unanswered,
            "api_slowest_s": round(poll.slowest, 2)}
 
     if not overload:
+        # what the tier asserts holds with the flash at rest: a write inside it
+        # is the bench's own trouble (it did not wait) or a write nobody knew of
+        check("%s the unit's flash was at rest all through it" % tag, not flash,
+              ", ".join("%s +%d" % kv for kv in sorted(flash.items())) if flash else "no write, no erase")
         check("%s the bus was full" % tag, rate >= theory * 0.95, "%.0f of %.0f frames/s" % (rate, theory))
         check("%s the CAN driver took every frame" % tag, d_rx == n and not moved,
               "rx +%d of %d%s" % (d_rx, n, (", " + str(moved)) if moved else ""))
@@ -472,6 +522,9 @@ def main():
                     help="kbit/s:shape, comma separated; a ! after a shape marks a tier above what the unit takes")
     ap.add_argument("--secs", type=float, default=10.0, help="how long each tier keeps the bus full")
     ap.add_argument("--keep-sim", action="store_true", help="leave ECU sim v2 alone (a bus without it)")
+    ap.add_argument("--no-flash-wait", action="store_true",
+                    help="start the tiers as soon as the unit is up, as the bench did until 2026-11-19: the first "
+                         "tier then runs through the configuration backup's refresh (to see what that costs)")
     ap.add_argument("--log-level", default="",
                     help="the unit's log levels during the tiers, tag=level[,tag=level] ('*' = every tag), "
                          "to see what the console costs: '*=none'")
@@ -567,6 +620,13 @@ def main():
                          c.get("baud_kbps") == kbit and c.get("state") == "running" and up.get("br_slcan") is True,
                          {"baud_kbps": c.get("baud_kbps"), "state": c.get("state"), "br_slcan": up.get("br_slcan")}):
                 continue
+            if a.no_flash_wait:
+                ops, up = dut.flash()
+                print("the unit's flash: NOT waited for (--no-flash-wait), up %d s, %s" % (up, ops), flush=True)
+            else:
+                ops, up, waited = dut.wait_flash_at_rest()
+                print("the unit's flash at rest after %.0f s (up %d s): writes %s, erases %s since boot"
+                      % (waited, up, ops.get("writes"), ops.get("erases")), flush=True)
             bus = can.Bus(interface="pcan", channel=a.pcan, bitrate=kbit * 1000)
             try:
                 # a quiet bus, or the counts mean nothing

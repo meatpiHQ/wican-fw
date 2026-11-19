@@ -1,8 +1,8 @@
 # The most frames a CAN bus can carry
 
-Command: `.\test.ps1 canmax` (= `python tools\testbench\can\can_maxrate_bench.py --dut localhost:18081 --slcan localhost:18333 --pcan <the PCAN channel on the DUT's bus> [--tiers 500:std8,500:std0,1000:std0!] [--secs 10] [--keep-sim]`; the stage opens the tunnel through rpi001 for the web API and for TCP 3333).
+Command: `.\test.ps1 canmax` (= `python tools\testbench\can\can_maxrate_bench.py --dut localhost:18081 --slcan localhost:18333 --pcan <the PCAN channel on the DUT's bus> [--tiers 500:std8,500:std0,1000:std0!] [--secs 10] [--keep-sim] [--no-flash-wait]`; the stage opens the tunnel through rpi001 for the web API and for TCP 3333).
 
-Needs: PCAN on the DUT's bus (`WICAN_PCAN_DUT`, the adapter's plugs may be swapped) + rpi001 + ECU sim v2 reachable (the bench moves its HS CAN to the tier's bit rate and switches its answers off). Prints `CAN MAX RATE PASS`, 33 checks, about 3 min, three planned restarts of the DUT (the settings for 500 kbit/s, for 1000 kbit/s, and back as found).
+Needs: PCAN on the DUT's bus (`WICAN_PCAN_DUT`, the adapter's plugs may be swapped) + rpi001 + ECU sim v2 reachable (the bench moves its HS CAN to the tier's bit rate and switches its answers off). Prints `CAN MAX RATE PASS`, 38 checks, about 4 min, three planned restarts of the DUT (the settings for 500 kbit/s, for 1000 kbit/s, and back as found).
 
 The index row and the other stages: [../TESTING.md](../TESTING.md). The same rule at one rate with exact counters only: [conserve.md](conserve.md). The slcan path with a stream and a burst together: [slcan.md](slcan.md), legs B13 to B15.
 
@@ -33,6 +33,9 @@ Five tiers the unit must take whole (500 kbit/s with `std8`, `std0`, `ext8`; 100
 | `the CAN driver took every frame` | `rx` up by exactly N, and `rx_missed`, `rx_overrun`, `rx_bad`, `dispatch_drops`, `rx_errors`, `bus_errors`, `bus_off`, `rx_storms`, `rx_deaf` did not move |
 | `the TCP client got every frame, once and in order` | one slcan client on TCP 3333 (through the tunnel and the WiFi) counted N lines of the tier's shape, each carrying the number after the last one, the server's `tx_drops` unchanged, the connection not closed by the unit |
 | `the web API answered all through it` | every poll of `/api/can` during the tier was answered within 8 s; the slowest answer is printed |
+| `the unit's flash was at rest all through it` | `health.flash` of `/api/status` (writes, erases) did not move between the start and the end of the tier |
+
+**The flash at rest (since 2026-11-19).** A flash erase holds every task of the unit for 23 ms and more; only the CAN receive interrupt runs meanwhile, and the frames of that time wait in the receive queue. The queue holds 256 frames: 61 ms of a full 500 kbit/s bus of 8-byte frames, 30 ms at 1000 kbit/s. And the unit does erase after each of the bench's restarts: about 25 s after a restart that changed a setting it refreshes its configuration backup (28 to 32 writes, 4 to 7 erases of 4 KB), which is exactly where the first tier of each bit rate ran. So the five tiers above hold with the flash at rest, and the bench makes sure of it: after each restart it waits until the unit has been up 40 s and its flash counters have stood still for 3 s (about 30 s more per bit rate), and it reads the counters before and after every tier. `--no-flash-wait` runs the tiers at once, as the bench did before, to see what a refresh inside a tier costs (the record of 2026-11-19).
 
 One tier above what the unit takes (1000 kbit/s with `std0`, written `1000:std0!`): frames are lost there, and what is asserted is the accounting:
 
@@ -86,7 +89,22 @@ The three changes, each measured with a run of its own: (1) a stream's units lea
 
 **The `std0` tier at 500 kbit/s is at the edge (2026-11-18 afternoon).** 10,417 frames a second lost nothing in the five runs up to 13:01. In three of the next four on the same image it lost 3, 2 and 4 of 104,166 frames, each counted in `rx_overrun` (the controller's FIFO ran over before the driver's task emptied it). With the pace as it is now (the runs of 15:43, 16:07 and 16:32): none lost in three of three. The WiFi task's share of core 0 was higher in those afternoon runs (45 to 67 % against 37 %), which is the radio's weather and not something the stage controls. So: every bus at 500 kbit/s is carried, and a full bus of frames with no data bytes can cost a few frames in 100,000, counted.
 
+**2026-11-19: the first tier after a restart lost frames in three runs of eight; the cause was the bench (image `f444c3eb...`, ELF `eb50e90bb22b268f`).** Six runs in a row had passed up to 11:06. From 12:07 on the `std8` tier, the first after each restart, lost 1 to 18 frames in three of six runs (500 kbit/s once: 1 of 42,025, `rx_overrun`; 1000 kbit/s three times: 3, 18 and 3 of 84,050, `rx_overrun` or `rx_missed`), with two images of ECU sim v2 alike. With the flash counters read around every tier the picture was the same in every run: the first tier of each bit rate had the configuration backup's refresh inside it.
+
+| Run of `--tiers 1000:std8,500:std8` | The flash during the 1000 kbit/s tier | Lost of 84,050 | The flash during the 500 kbit/s tier | Lost of 42,025 |
+|---|---|---|---|---|
+| `--no-flash-wait`, 1 | erases +4, writes +29 | 2 (`rx_overrun`) | erases +7, writes +32 | 0 |
+| `--no-flash-wait`, 2 | erases +4, writes +29 | 13 (`rx_missed`) | erases +4, writes +29 | 0 |
+| `--no-flash-wait`, 3 | erases +4, writes +29 | 0 | erases +7, writes +32 | 0 |
+| with the wait, 1 to 3 | at rest | 0, 0, 0 | at rest | 0, 0, 0 |
+
+Then the whole stage: `CAN MAX RATE PASS`, 38 checks, 238 s, the flash at rest 31 s after each restart was up (40 s of uptime). Report `test-reports/2026-11-19_1314_canmax.md`.
+
+What it says about the unit, apart from the bench: a refresh of the configuration backup inside a 1000 kbit/s bus full of 8-byte frames (8,400 a second) cost 2 to 18 frames in five of the eleven runs of that day that had it there, and inside a full 500 kbit/s bus of 8-byte frames one frame in one run of eleven (the refresh inside the tier read from the flash counters in the three runs of the table; in the eight runs of the stage before them it follows from the bench's timing, which was the same). Each lost frame is counted. The queue of 256 frames was sized for 500 kbit/s (2026-11-17, [conserve.md](conserve.md)); twice the queue would cover the `rx_missed` part at 1000 kbit/s for another 3.8 KB of internal memory, and not the `rx_overrun` part, which is the controller's own FIFO.
+
 ## Traps
+
+- The first tier after a restart is not the place for a line-rate measurement: the unit refreshes its configuration backup about 25 s after a restart that changed a setting, and a flash erase at the line rate can cost frames (the record of 2026-11-19). The bench waits for the flash to rest and fails a tier that had a write inside it; a new line-rate bench must do the same (`Dut.wait_flash_at_rest()` here, `wait_flash_at_rest()` in the flow control bench).
 
 - `WICAN_PCAN_DUT` must name the PCAN channel on the DUT's bus. With the other channel the adapter sits on the simulator's 125 kbit/s bus, gets nothing out and its driver refuses every frame once its queue is full; a first version of the bench retried for ever. It now stops when the adapter took no frame for 5 s, and the 20-frame check fails first.
 - `bus.send()` of python-can returns when the adapter's driver has the frame, not when the frame is on the wire: 42,000 frames are handed over in two seconds and take ten to leave. The bench waits out the time the line rate needs, then reads the counters.
