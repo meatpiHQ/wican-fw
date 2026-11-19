@@ -1276,6 +1276,36 @@ void parse_elm327_response(char *buffer, response_t *response) {
                     continue;
             }
 
+            // Skip negative responses (service byte 0x7F, e.g. 7F 22 78
+            // response-pending) that can precede the real response.
+            // Concatenating them into the response buffer shifts the byte
+            // indices and makes expressions evaluate garbage. NRC 0x78 means
+            // the request is still being processed and the real response will
+            // follow; any other NRC means the request was rejected.
+            {
+                char *nrc_data = data_start;
+                int nrc_bytes[4] = {0, 0, 0, 0};
+                int nrc_count = 0;
+                while (*nrc_data != '\0' && nrc_count < 4)
+                {
+                    if (*nrc_data == ' ')
+                    {
+                        nrc_data++;
+                        continue;
+                    }
+                    if (strlen(nrc_data) < 2) break;
+                    char byte_str[3] = {nrc_data[0], nrc_data[1], 0};
+                    nrc_bytes[nrc_count++] = (int)strtol(byte_str, NULL, 16);
+                    nrc_data += 2;
+                }
+                if (nrc_count >= 2 && nrc_bytes[0] >= 1 && nrc_bytes[0] <= 7 &&
+                    nrc_bytes[1] == 0x7F)
+                {
+                    frame = strtok(NULL, "\r\n");
+                    continue;
+                }
+            }
+
             // Store start position for copying data
             char *current_data_start = data_start;
             int current_length = 0;
@@ -1345,7 +1375,30 @@ void parse_elm327_response(char *buffer, response_t *response) {
         frame = strtok(NULL, "\r\n");
     }
 
-    response->length = k;
+    if (k == 0)
+    {
+        // No usable data: every frame was a negative response (or malformed).
+        // Report an error so the parameter is marked as failed instead of
+        // evaluating garbage.
+        sprintf((char*)response->data, "error");
+        response->length = strlen((char*)response->data);
+        // The caller short-circuits on the "error" string and never frees
+        // priority_data, so any per-frame buffer collected so far would
+        // leak. Drop it and force the priority_data assignment below to
+        // produce NULL.
+        if (lowest_header_data != NULL)
+        {
+            free(lowest_header_data);
+            lowest_header_data = NULL;
+            lowest_header_length = 0;
+        }
+        frame_count = 0;
+        all_headers_same = true;
+    }
+    else
+    {
+        response->length = k;
+    }
     
     // Set priority data based on frame count and header comparison
     if (frame_count <= 2 || all_headers_same) {
