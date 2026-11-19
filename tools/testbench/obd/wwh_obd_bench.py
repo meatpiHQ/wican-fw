@@ -39,7 +39,11 @@ Legs:
   w10 back on the OBD-II simulator with no user action; then the same car
       on 29-bit ids: its ECU is told apart and a DTC scan reads it
   restore: the bench's vehicles forgotten, the store, the tables, every
-  setting and the simulator as found.
+  setting and the simulator as found; the chip's own protocol store too
+  (since 2026-11-19: a WWH truck's detection saves 9 in the chip and
+  nothing of the unit puts the car's 6 back, because the car's record still
+  says the chip holds 6; one ATSP through the wire probe, read back by the
+  bring-up of the restore's last restart, `restored_chip_store`).
   across the run (read after every job, before every restart, after every
   leg): no E line of the feature's tags; the stack headroom of the detection
   job, the vehicle writer, the DTC job and the poller, and the internal
@@ -65,7 +69,7 @@ import urllib.request
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "lib"))
 import bench_bus  # noqa: E402
-from pcbench import unplanned_boots  # noqa: E402
+from pcbench import Dut, unplanned_boots  # noqa: E402
 
 ACTOR = os.path.join(HERE, "..", "actors", "pcan_wwh_ecu.py")
 PY = sys.executable
@@ -934,13 +938,15 @@ def main():
     found_car = found_store["current"]
     found_proto = current_car().get("protocol")
     found_cfg = get("/api/autopid/config")
+    chip = Dut(DUT)
+    found_chip = chip.chip_store()
     code, f0 = api("/api/faults")
     print(f"DUT {DUT}: boot_count {st0.get('boot_count')}, unexpected_resets "
           f"{st0.get('unexpected_resets')}, version {st0.get('version')}")
     print(f"as found: autopid enabled={found['autopid'].get('enabled')} "
           f"dtc_enabled={found['autopid'].get('dtc_enabled')}, store "
           f"{json.dumps(found_store)}")
-    print(f"as found: simulator {json.dumps(found_sim)}")
+    print(f"as found: simulator {json.dumps(found_sim)}, the chip's stored protocol {found_chip}")
     if not found_car:
         print("the bench needs the OBD-II car in the store as found "
               "(leg w10 returns to it)")
@@ -989,12 +995,19 @@ def main():
                 code, r = api("/api/autopid/config", "PUT", found_cfg)
                 if code != 200:
                     raise Bench(f"PUT config back: {code} {r}")
+            chip_moved = found_chip is not None and chip.chip_store() != found_chip
+            chip_written = chip_moved and chip.chip_store_write(found_chip)
             back = {n: found[n] for n in found if settings(n) != found[n]}
-            if back:
-                restart(back)
+            if back or chip_moved:
+                restart(back)       # a plain restart when no setting differs
             now = {n: settings(n) for n in found}
             check("restored_settings", now == found,
                   "" if now == found else json.dumps(now))
+            chip_now = chip.chip_store()
+            check("restored_chip_store", chip_now == found_chip,
+                  f"{found_chip} as found, {chip_now} now"
+                  + ("; put back with one ATSP through the wire probe" if chip_written else "")
+                  + ("; the wire probe's ATSP was not answered OK" if chip_moved and not chip_written else ""))
             sv = store_view(vehicles())
             check("restored_vehicle_store", sv == found_store,
                   "" if sv == found_store else json.dumps(sv))

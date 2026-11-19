@@ -48,7 +48,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "lib"))
 import bench_bus  # noqa: E402
 import j1939_ref as J  # noqa: E402
-from pcbench import Actor, Bench, Dut, Run  # noqa: E402
+from pcbench import Actor, Bench, Dut, Run, restore_bus_and_store  # noqa: E402
 
 DUT_HOST = "localhost:8081"
 PCAN = os.environ.get("WICAN_PCAN_DUT", "PCAN_USBBUS1")
@@ -85,11 +85,11 @@ bus_kbps = [0]                  # where the simulator acknowledges right now
 def sim_ack_only(kbps):
     """The simulator as the ACK source at `kbps`, its own ECU off. Its CAN
     controller keeps the bitrate it LAST ran at, so: on at that bitrate
-    first, then off."""
+    first, then off. Its K-line and J1850 ECUs go off with it until the
+    restore (bench_bus.sim_ack_only)."""
     if bus_kbps[0] == kbps:
         return
-    bench_bus.sim_set(bitrate=kbps, enabled=True)
-    bench_bus.sim_set(enabled=False)
+    bench_bus.sim_ack_only(kbps)
     bus_kbps[0] = kbps
 
 
@@ -509,12 +509,17 @@ def main():
     st0 = dut.get("/api/status")
     found = {n: dut.settings(n) for n in ("can_manager", "j1939", "autopid")}
     found_sim = bench_bus.sim_get("ecu_sim")
+    found_precan = bench_bus.sim_precan()
+    found_view = dut.store_view()
+    found_chip = dut.chip_store()
     code, faults0 = dut.api("/api/faults")
     print(f"DUT {DUT_HOST}: boot_count {st0.get('boot_count')}, "
           f"unexpected_resets {st0.get('unexpected_resets')}, version "
           f"{st0.get('version')}")
     print(f"as found: {json.dumps(found)}")
     print(f"as found: simulator {json.dumps(found_sim)}")
+    print(f"as found: the simulator's K-line and J1850 ECUs {json.dumps(found_precan)}, "
+          f"the vehicle store {json.dumps(found_view)}, the chip's stored protocol {found_chip}")
     dut.as_found()
 
     done = 0
@@ -550,22 +555,15 @@ def main():
         print("--- restore", flush=True)
         try:
             truck.stop()
-            now = {n: dut.settings(n) for n in found}
-            if now != found:
-                dut.restart(found)
-            if bench_bus.sim_get("ecu_sim") != found_sim:
-                # on at its bitrate first: the controller keeps the bitrate
-                # it last RAN at
-                bench_bus.sim_set(bitrate=found_sim["bitrate"],
-                                  id_format=found_sim["id_format"],
-                                  enabled=True)
-                bench_bus.sim_set(enabled=found_sim["enabled"])
-            now = {n: dut.settings(n) for n in found}
-            run.check("restored_settings", now == found,
-                      "" if now == found else json.dumps(now))
+            # the simulator first, the unit's last restart behind it
+            # (pcbench.restore_bus_and_store: until 2026-11-19 the unit was
+            # restarted first and could store protocol 2 for the bench car)
+            restore_bus_and_store(dut, run, found, found_sim, found_precan, found_view, found_chip)
             sim_now = bench_bus.sim_get("ecu_sim")
-            run.check("restored_simulator", sim_now == found_sim,
-                      "" if sim_now == found_sim else json.dumps(sim_now))
+            precan_now = bench_bus.sim_precan()
+            run.check("restored_simulator", sim_now == found_sim and precan_now == found_precan,
+                      "" if sim_now == found_sim and precan_now == found_precan
+                      else json.dumps([sim_now, precan_now])[:400])
             code, f1 = dut.api("/api/faults")
             run.check("no_new_fault", f1 == faults0, json.dumps(f1)[:300])
             dut.reset_check(run, st0)

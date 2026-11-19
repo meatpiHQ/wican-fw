@@ -403,6 +403,55 @@ def sim_only(bus, base=SIM_URL):
     return previous, running
 
 
+#: ECU sim v2's ECUs on the pins that are not CAN (K-line, J1850), each with
+#: the key that takes it off the bus: sim_patch(SIM_PRECAN_OFF). With its
+#: defaults the simulator plays the car on every bus at once, which no car
+#: does: a bench that leaves it on the CAN bus as an ACK source only
+#: (sim_set(enabled=False)) still has the car answering on these pins, and a
+#: unit whose chip then runs its protocol search finds the car on J1850 VPW
+#: and stores that protocol for it (2026-11-19).
+SIM_PRECAN_OFF = {"kline": {"enabled": False}, "j1850": {"mode": "off"}}
+
+
+def sim_precan(base=SIM_URL):
+    """The K-line and J1850 ECUs as they are set (the keys of
+    SIM_PRECAN_OFF): hand it to sim_patch() to put them back. {} on the
+    first-generation box, which has none."""
+    if not _is_v2(_http(f"{base}/api/settings/ecu_sim")):
+        return {}
+    return {name: {k: sim_get(name, base).get(k) for k in keys}
+            for name, keys in SIM_PRECAN_OFF.items()}
+
+
+def sim_ack_only(kbps, base=SIM_URL):
+    """The simulator as the ACK source of ANOTHER vehicle's bus (a truck
+    played by an adapter): on HS CAN at `kbps` and answering nothing (on at
+    that bit rate first: its controller keeps the one it last ran at), and
+    off the K-line and J1850 pins. Three reboots at most. Keep
+    sim_get("ecu_sim") and sim_precan() from before and hand them to
+    sim_as_found() in the restore."""
+    if _is_v2(_http(f"{base}/api/settings/ecu_sim")):
+        sim_patch(SIM_PRECAN_OFF, base)
+    sim_set(bitrate=kbps, enabled=True, base=base)
+    sim_set(enabled=False, base=base)
+
+
+def sim_as_found(found_sim, found_precan, base=SIM_URL):
+    """Undo sim_ack_only(): the HS CAN as `found_sim` (a sim_get("ecu_sim")
+    of before) and the K-line and J1850 ECUs as `found_precan` (a
+    sim_precan() of before). Call it BEFORE the unit's last restart, with
+    nothing of the unit on the bus when the bit rate changes: a unit that
+    boots with Automate on beside a simulator that still only acknowledges
+    runs its chip's protocol search, and the first bus the search finds is
+    stored as the car's (2026-11-19)."""
+    if sim_get("ecu_sim", base) != found_sim:
+        sim_set(bitrate=found_sim["bitrate"], id_format=found_sim["id_format"],
+                enabled=True, base=base)
+        sim_set(enabled=found_sim["enabled"], base=base)
+    if found_precan and sim_precan(base) != found_precan:
+        sim_patch(found_precan, base)
+
+
 def sim_bus_live(status):
     """Which buses answer in a /api/ecu/status, as SIM_BUSES-style words
     ('hs11_500', 'iso9141 or kwp', 'vpw', ...): what a bench prints and

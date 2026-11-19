@@ -62,7 +62,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "lib"))
 import bench_bus  # noqa: E402
 import j1939_ref as J  # noqa: E402
-from pcbench import Actor, Bench, Dut, Run  # noqa: E402
+from pcbench import Actor, Bench, Dut, Run, restore_bus_and_store  # noqa: E402
 
 DUT_HOST = "localhost:8081"
 PCAN = os.environ.get("WICAN_PCAN_DUT", "PCAN_USBBUS1")
@@ -109,10 +109,11 @@ ACTIVE_CFG = {"can_manager": {"enabled": True, "baud": "auto", "silent": False},
 # ---- the rig ---------------------------------------------------------------------
 
 def sim_ack_only(kbps):
+    """ECU sim v2 on the bus at `kbps` answering nothing, and off its K-line
+    and J1850 pins until the restore (bench_bus.sim_ack_only)."""
     if bus_kbps[0] == kbps:
         return
-    bench_bus.sim_set(bitrate=kbps, enabled=True)
-    bench_bus.sim_set(enabled=False)
+    bench_bus.sim_ack_only(kbps)
     bus_kbps[0] = kbps
 
 
@@ -665,10 +666,19 @@ def main():
                                           "pause_mode", "dtc_enabled") if k in found[n]}
                                      for n in found}))
     print(f"as found: simulator {json.dumps(found_sim)}, current car {found_car}")
+    found_precan = bench_bus.sim_precan()
+    found_view = dut.store_view()
+    found_chip = dut.chip_store()
+    print(f"as found: the simulator's K-line and J1850 ECUs {json.dumps(found_precan)}, "
+          f"the vehicle store {json.dumps(found_view)}, the chip's stored protocol {found_chip}")
     dut.as_found()
 
     done = 0
     try:
+        # the unit off the bus before the bus becomes the truck's (shown on
+        # the EU truck stage, 2026-11-19: Dut.off_the_bus)
+        if dut.off_the_bus():
+            print("the unit polled or drove the bus as found: taken off it while it becomes the truck's")
         sim_ack_only(250)
         start_truck("pre")              # on the bus before the DUT boots
         cfg = dict(ACTIVE_CFG)
@@ -711,24 +721,18 @@ def main():
                 code, r = dut.api("/api/autopid/config", "PUT", found_cfg)
                 if code != 200:
                     raise Bench(f"PUT config back: {code} {r}")
-            now = {n: dut.settings(n) for n in found}
-            if now != found:
-                dut.restart(found)
-            if bench_bus.sim_get("ecu_sim") != found_sim:
-                bench_bus.sim_set(bitrate=found_sim["bitrate"], id_format=found_sim["id_format"],
-                                  enabled=True)
-                bench_bus.sim_set(enabled=found_sim["enabled"])
-            now = {n: dut.settings(n) for n in found}
-            run.check("restored_settings", now == found, "" if now == found else json.dumps(now)[:300])
-            sv = vehicles()
-            same_store = sorted(e["key"] for e in sv.get("vehicles", [])) == \
-                sorted(e["key"] for e in found_store.get("vehicles", [])) and sv.get("current") == found_car
-            run.check("restored_vehicle_store", same_store, "" if same_store else json.dumps(sv)[:300])
+            # the simulator first, the unit's last restart behind it
+            # (pcbench.restore_bus_and_store: until 2026-11-19 the unit was
+            # restarted first and could store protocol 2 for the bench car)
+            restore_bus_and_store(dut, run, found, found_sim, found_precan, found_view, found_chip)
             cfg = dut.get("/api/autopid/config")
             run.check("restored_tables", cfg == found_cfg,
                       "" if cfg == found_cfg else f"{len(cfg.get('pids', []))} pids now")
             sim_now = bench_bus.sim_get("ecu_sim")
-            run.check("restored_simulator", sim_now == found_sim, "" if sim_now == found_sim else json.dumps(sim_now))
+            precan_now = bench_bus.sim_precan()
+            run.check("restored_simulator", sim_now == found_sim and precan_now == found_precan,
+                      "" if sim_now == found_sim and precan_now == found_precan
+                      else json.dumps([sim_now, precan_now])[:400])
             code, f1 = dut.api("/api/faults")
             run.check("no_new_fault", f1 == faults0, json.dumps(f1)[:300])
             dut.reset_check(run, st0)

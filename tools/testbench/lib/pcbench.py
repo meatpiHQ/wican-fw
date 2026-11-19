@@ -16,6 +16,12 @@ module holds the parts every one of them repeats:
   Actor   one run of an actor script: started, asked to stop through its
           `--stop-file` (never killed while it transmits: the PEAK driver
           wedges), its log read back
+  restore_bus_and_store()
+          (2026-11-19) the restore of a bench that made the bench bus
+          another vehicle's: ECU sim v2 as found first, the chip's protocol
+          store, the unit's settings and one restart, then the vehicle store
+          judged car by car with each car's protocol (Dut.off_the_bus,
+          Dut.store_view, Dut.chip_store, Dut.chip_store_write)
 
 Benches written before this module (can_autobaud_bench.py, wwh_obd_bench.py)
 carry their own copies of these helpers.
@@ -72,6 +78,45 @@ def reset_text(rec):
         return text
     except Exception:  # noqa: BLE001  (a report must not die on its footnote)
         return f"boot {rec.get('seq')}: reset reason '{rec.get('reason')}'"
+
+
+def restore_bus_and_store(dut, run, found, found_sim, found_precan, found_view, found_chip, settle_s=25):
+    """The restore of a bench that made the bench bus another vehicle's
+    (bench_bus.sim_ack_only): ECU sim v2 as found FIRST, with nothing of the
+    unit on the bus while the bit rate changes; then the chip's protocol
+    store as found (one ATSP through the wire probe, when a detection of the
+    bench's vehicle saved another); then the unit's settings `found` and ONE
+    restart, and `settle_s` seconds for that boot's first contact. Judged:
+    `restored_settings`, `restored_vehicle_store` (each car with its
+    protocol, Dut.store_view(); `found_view` from before the run) and
+    `restored_chip_store` (`found_chip`, Dut.chip_store() from before).
+
+    Why this order (2026-11-19): restarted first with Automate on, beside a
+    simulator that still only acknowledged on CAN and played the car on its
+    K-line and J1850 pins, the unit's first contact ran the chip's protocol
+    search, met the simulator's J1850 VPW ECU and stored protocol 2 for the
+    bench car; a restore that compared the store by its keys passed that."""
+    import bench_bus
+    if bench_bus.sim_get("ecu_sim") != found_sim:
+        dut.off_the_bus()
+    bench_bus.sim_as_found(found_sim, found_precan)
+    chip_moved = found_chip is not None and dut.chip_store() != found_chip
+    chip_written = chip_moved and dut.chip_store_write(found_chip)
+    now = {n: dut.settings(n) for n in found}
+    if now != found or chip_moved:
+        dut.restart(found)
+        time.sleep(settle_s)
+    now = {n: dut.settings(n) for n in found}
+    run.check("restored_settings", now == found, "" if now == found else json.dumps(now)[:300])
+    sv = dut.store_view()
+    run.check("restored_vehicle_store", sv is not None and sv == found_view,
+              json.dumps(sv)[:300] if sv != found_view
+              else f"{len(sv['cars'])} cars, each on the protocol it had")
+    chip_now = dut.chip_store()
+    run.check("restored_chip_store", chip_now == found_chip,
+              f"{found_chip} as found, {chip_now} now"
+              + ("; put back with one ATSP through the wire probe" if chip_written else "")
+              + ("; the wire probe's ATSP was not answered OK" if chip_moved and not chip_written else ""))
 
 
 class Run:
@@ -204,6 +249,73 @@ class Dut:
             time.sleep(0.5)
         raise Bench("the DUT did not come back within 150 s of a restart"
                     + GONE_HINT)
+
+    # ---- the vehicle bus and what the unit holds about its cars ---------------------
+
+    #: nothing of the unit on the vehicle bus
+    OFF_THE_BUS = {"can_manager": {"enabled": False}, "j1939": {"enabled": False},
+                   "autopid": {"enabled": False}}
+
+    def off_the_bus(self):
+        """Take the unit off the vehicle bus (Automate, its own CAN node and
+        the J1939 listener off, one restart) when it polls or drives the bus.
+        For the moment a bench turns the bench bus into another vehicle's
+        bus at another bit rate: a unit left polling its car as found goes on
+        transmitting meanwhile, and the adapter that plays the other vehicle
+        can go bus-off in it before the unit ever restarts (2026-11-19, the
+        EU truck bench: 3 of 3 runs with the unit as found, 0 of 2 with it
+        off the bus first). Returns True when the unit was restarted."""
+        if not (self.settings("autopid").get("enabled") or self.settings("can_manager").get("enabled")):
+            return False
+        self.restart(self.OFF_THE_BUS)
+        return True
+
+    def store_view(self):
+        """The vehicle store as a bench compares it before and after: who is
+        current, and every car with its name, its protocol and the protocol
+        the unit believes the chip holds for it. The protocol belongs in it:
+        a car's key and name stay when first contact re-learns its protocol
+        from another bus (2026-11-19: two stages left the bench car on
+        protocol 2 and compared keys only)."""
+        code, v = self.api("/api/autopid/vehicles")
+        if code != 200 or not isinstance(v, dict):
+            return None
+        return {"current": v.get("current"),
+                "cars": sorted([e.get("key"), e.get("name"), e.get("protocol"), e.get("chip_protocol")]
+                               for e in v.get("vehicles", []))}
+
+    def chip_store(self):
+        """The protocol the OBD chip itself has stored, as its driver read it
+        back at the bring-up (None when the unit does not say)."""
+        code, oc = self.api("/api/obd_chip")
+        return (oc.get("eeprom_guard") or {}).get("stored_protocol") \
+            if code == 200 and isinstance(oc, dict) else None
+
+    def chip_store_write(self, proto):
+        """Put `proto` into the chip's protocol store: ONE real `ATSP<proto>`
+        through the wire probe (POST /api/obd_chip/probe), the way the store
+        was put back by hand on 2026-11-16. The caller restarts the unit
+        afterwards: the bring-up reads the store back (chip_store()) and
+        sends ATE0 again, which the probe's raw word leaves off. For a bench
+        whose own detection made the unit save another protocol: a truck's
+        detection stores its protocol in the chip, and nothing of the unit
+        puts the car's back, because the car's record still says the chip
+        holds it (a firmware matter, told to Ali 2026-11-19). True when the
+        chip answered OK."""
+        code, r = self.api("/api/obd_chip/probe", "POST",
+                           {"kind": "probe", "baud": 2000000, "seconds": 0, "cmd": f"ATSP{proto}"})
+        if code != 202:
+            return False
+        pr = {}
+        t0 = time.time()
+        while time.time() - t0 < 30:
+            time.sleep(0.5)
+            code, pr = self.api("/api/obd_chip/probe")
+            if code == 200 and isinstance(pr, dict) and pr.get("done") and not pr.get("running"):
+                break
+        said = " ".join(str(x.get("text") or "") for x in (pr or {}).get("lines", [])
+                        if x.get("cmd") == f"ATSP{proto}")
+        return "OK" in said.upper()
 
     # ---- what the device only says in passing ------------------------------------
 

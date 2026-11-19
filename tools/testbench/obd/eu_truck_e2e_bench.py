@@ -13,6 +13,19 @@ with ONE VIN. The ECU simulator only acknowledges (its own ECU off). The
 actor runs before the DUT boots (a live bus at the first look; a car's rows
 polled on a silent bus collide with a bus waking up at the other bitrate).
 
+ECU sim v2's K-line and J1850 ECUs are off for the whole run and go back on
+in the restore, before the unit's last restart. With them on the simulator
+is the car on those pins even while it only acknowledges on CAN, and a unit
+that boots onto the car's bus still holding the truck's protocol runs the
+chip's protocol search, which finds the simulator's J1850 VPW ECU first: the
+car's record then says protocol 2 (found 2026-11-16, reproduced 2026-11-19:
+the record 6 before the stage and 2 after it, and leg x5 found the
+simulator's car where it looks for the truck).
+
+The broker check of e2 needs a destination row that publishes the snapshot:
+the bench adds one (`bench_mqtt`, the topic ~/autopid every 2 s) for the run
+when the unit has none, and the restore takes it out again.
+
 Legs:
   e1  the wizard's detection on a device that knows an OBD-II car, the
       native bus off: `dialect uds`, the J1939 network as well (from a bus
@@ -32,7 +45,14 @@ Legs:
       (polling and the native bus off while the bus becomes the car's), then
       plugged into the simulator's car with the native bus off; the car is
       the current vehicle again and is polled (the stored truck stays known)
-  restore: settings, store, tables and the simulator as found.
+  restore: settings, store, tables and the simulator as found; the store is
+      compared car by car with each car's protocol, 25 s into the unit's
+      last boot (its first contact is over then). The chip's own stored
+      protocol is put back and judged: the truck's detection saves 9 there
+      (the unit's learn-once rule) and nothing of the unit puts the car's 6
+      back, because the car's record still says the chip holds 6. The bench
+      writes it with one ATSP through the wire probe, and the last boot's
+      bring-up reads it back (until 2026-11-19 every run left the chip on 9).
   x1  (only with --only, e.g. `--only e1,x1 --detections 60`) the detection
       repeated on the truck: no reset, the truck stays the car
   x2  (only with --only) the truck forgotten before each detection, so
@@ -60,7 +80,7 @@ sys.path.insert(0, os.path.join(HERE, "..", "lib"))
 import bench_bus  # noqa: E402
 import benchlib as bl  # noqa: E402
 import j1939_ref as J  # noqa: E402
-from pcbench import Actor, Bench, Dut, Run  # noqa: E402
+from pcbench import Actor, Bench, Dut, Run, restore_bus_and_store  # noqa: E402
 
 DUT_HOST = "localhost:8081"
 PCAN = os.environ.get("WICAN_PCAN_DUT", "PCAN_USBBUS1")
@@ -111,11 +131,26 @@ bus_kbps = [0]
 # ---- the rig ---------------------------------------------------------------------
 
 def sim_ack_only(kbps):
+    """ECU sim v2 as the ACK source of the truck's bus: on CAN at `kbps`
+    answering nothing, and off the K-line and J1850 pins (they stay off until
+    the restore: the car of leg e5 is a car on ONE bus)."""
     if bus_kbps[0] == kbps:
         return
-    bench_bus.sim_set(bitrate=kbps, enabled=True)
-    bench_bus.sim_set(enabled=False)
+    bench_bus.sim_ack_only(kbps)
     bus_kbps[0] = kbps
+
+
+# the destination row of leg e2's broker check, added when the unit has none
+BROKER_ROW = {"name": "bench_mqtt", "type": "mqtt", "url": "~/autopid", "period_s": 2}
+
+
+def snapshot_row(dd):
+    """True when a row of the unit's destinations publishes the snapshot to
+    the broker's ~/autopid topic."""
+    return bool(dd.get("enabled", True)) and any(
+        r.get("type", "mqtt") == "mqtt" and r.get("enabled", True)
+        and r.get("url", "") in ("", "~/autopid") for r in dd.get("destinations", []))
+
 
 
 def wait_for(what, secs, fn):
@@ -888,9 +923,11 @@ def main():
         return 2
 
     st0 = dut.get("/api/status")
-    comps = ("can_manager", "j1939", "autopid")
+    comps = ("can_manager", "j1939", "autopid", "data_destinations")
     found = {n: dut.settings(n) for n in comps}
     found_sim = bench_bus.sim_get("ecu_sim")
+    found_precan = bench_bus.sim_precan()
+    found_chip = dut.chip_store()
     for e in list(vehicles().get("vehicles", [])):
         if e.get("vin") == VIN:
             print(f"forgetting a truck left behind: {e.get('key')}")
@@ -906,13 +943,40 @@ def main():
                                          ("enabled", "baud", "silent", "mode", "std_protocol",
                                           "dtc_enabled") if k in found[n]} for n in found}))
     print(f"as found: simulator {json.dumps(found_sim)}, current car {found_car}")
+    found_view = dut.store_view()
+    print(f"as found: the simulator's K-line and J1850 ECUs {json.dumps(found_precan)}, the vehicle store "
+          f"{json.dumps(found_view)}, the chip's stored protocol {found_chip}")
     if not found_car:
         print("no current car in the store: the e2e needs a known OBD-II car as found")
         return 2
     dut.as_found()
 
+    # leg e2 reads the snapshot on the broker: a row that publishes it, for the
+    # run. The table goes back whole from the GET above: its secrets read ""
+    # there, and an empty secret in a PUT keeps the stored one (rows are
+    # matched by name, data_destinations/README.md), so a row with a token
+    # keeps it across the round trip.
+    first_boot = {}
+    if "e2" in legs and not snapshot_row(found["data_destinations"]):
+        rows = list(found["data_destinations"].get("destinations", []))
+        if len(rows) < 8:
+            first_boot["data_destinations"] = {"enabled": True, "destinations": rows + [BROKER_ROW]}
+            print("no destination row publishes the snapshot as found: bench_mqtt added for the run")
+
     done = 0
     try:
+        # The unit goes off the bus before the bus becomes the truck's
+        # (Dut.off_the_bus). Measured 2026-11-19 with the simulator off its
+        # K-line and J1850 pins: the unit left polling as found (Automate on,
+        # its CAN node on at 500 kbit/s) put the truck's adapter bus-off
+        # within 51 ms of its first error in 3 runs of 3, before the unit's
+        # first restart, and the detection found nothing; taken off the bus
+        # first, 2 of 2 whole with 0 bus errors at the truck. Which of the
+        # unit's transmitters does it was not shown (a guess: the chip's
+        # protocol search walking the 500 kbit/s protocols, which with the
+        # simulator's J1850 ECU on had settled on VPW and left CAN alone).
+        if dut.off_the_bus():
+            print("the unit polled or drove the bus as found: taken off it while it becomes the truck's")
         sim_ack_only(250)
         # on the bus before the DUT boots, and for as long as the legs take (a
         # soak of 2026-10-05 outlived the actor's 15 minutes: the truck left
@@ -921,9 +985,10 @@ def main():
         actor.start("e2e", ["--pcan", PCAN] + ACTOR_ARGS, secs=life)
         # a device that knows a car: the native bus off, polling on, the chip's
         # protocol follows the car
-        dut.restart({"can_manager": {"enabled": False}, "j1939": {"enabled": False},
-                     "autopid": {"enabled": True, "std_protocol": "0", "pause_mode": "requests_only",
-                                 "dtc_enabled": False, "dtc_allow_clear": False}})
+        dut.restart(dict(first_boot, **{
+            "can_manager": {"enabled": False}, "j1939": {"enabled": False},
+            "autopid": {"enabled": True, "std_protocol": "0", "pause_mode": "requests_only",
+                        "dtc_enabled": False, "dtc_allow_clear": False}}))
         time.sleep(6)           # the car's rows fail, the chip probes
         for leg in legs:
             print(f"--- {leg}", flush=True)
@@ -962,24 +1027,18 @@ def main():
                 code, r = dut.api("/api/autopid/config", "PUT", found_cfg)
                 if code != 200:
                     raise Bench(f"PUT config back: {code} {r}")
-            now = {n: dut.settings(n) for n in found}
-            if now != found:
-                dut.restart(found)
-            if bench_bus.sim_get("ecu_sim") != found_sim:
-                bench_bus.sim_set(bitrate=found_sim["bitrate"], id_format=found_sim["id_format"],
-                                  enabled=True)
-                bench_bus.sim_set(enabled=found_sim["enabled"])
-            now = {n: dut.settings(n) for n in found}
-            run.check("restored_settings", now == found, "" if now == found else json.dumps(now)[:300])
-            sv = vehicles()
-            same_store = sorted(e["key"] for e in sv.get("vehicles", [])) == \
-                sorted(e["key"] for e in found_store.get("vehicles", [])) and sv.get("current") == found_car
-            run.check("restored_vehicle_store", same_store, "" if same_store else json.dumps(sv)[:300])
+            # the simulator first, the unit's last restart behind it; the truck's
+            # detection saved the truck's protocol (9) in the chip, and nothing
+            # of the unit puts the car's back (the stage's page)
+            restore_bus_and_store(dut, run, found, found_sim, found_precan, found_view, found_chip)
             cfg = dut.get("/api/autopid/config")
             run.check("restored_tables", cfg == found_cfg,
                       "" if cfg == found_cfg else f"{len(cfg.get('pids', []))} pids now")
             sim_now = bench_bus.sim_get("ecu_sim")
-            run.check("restored_simulator", sim_now == found_sim, "" if sim_now == found_sim else json.dumps(sim_now))
+            precan_now = bench_bus.sim_precan()
+            run.check("restored_simulator", sim_now == found_sim and precan_now == found_precan,
+                      "" if sim_now == found_sim and precan_now == found_precan
+                      else json.dumps([sim_now, precan_now])[:400])
             code, f1 = dut.api("/api/faults")
             churn = isinstance(f1, dict) and \
                 [x.get("code") for x in f1.get("faults", [])] == ["flash_churn"]
