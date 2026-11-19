@@ -2,7 +2,7 @@
 
 Command: `.\test.ps1 j2534vpw` = `python tools\testbench\usb\j2534_vpw_bench.py localhost --port 18534 --rig localhost:18081` (PC; two ssh forwards through rpi001: 18081 to the DUT's port 80, 18534 to its J2534 port 6809; ECU sim v2 at its own address)
 
-Needs: main fw on DUT + rpi001 + ECU sim v2. Prints `J2534 VPW PASS`. About 1.5 min: two planned restarts of the unit when its J2534 server is off as found, two simulator restarts, no write of the OBD chip.
+Needs: main fw on DUT + rpi001 + ECU sim v2. Prints `J2534 VPW PASS`. About 2.5 min: two planned restarts of the unit (its J2534 server on and its Automate off for the run, and back as found), two simulator restarts, no write of the OBD chip, the unit's vehicle store as found.
 
 Without the rig: `python tools/testbench/usb/j2534_vpw_bench.py <dut_ip> [--port 6809]` (on rpi001, or through a tunnel) runs the same exchange against whatever is on the bus, with `j2534_server` enabled and `allow_lan` set by hand: `J2534 VPW PASS` when a J1850 node answers, `J2534 VPW SKIP (...)` when connect, init and write worked and nothing answered, `J2534 VPW FAIL` only on a real defect.
 
@@ -15,9 +15,11 @@ VPW rides the OBD chip, not the native CAN controller (2026-10-19, modelled on t
 | Step | What is done | Must read |
 |---|---|---|
 | as found | the unit's `j2534_server` settings, `GET /api/obd_chip`, the chip memory snapshot (`chip_nvm`), the restart history | the unit answers, the chip ready |
-| the rig | ECU sim v2 on VPW alone (`bench_bus.sim_only("vpw")`, one simulator restart); `j2534_server` enabled with `allow_lan` when it is not (a planned restart) | the simulator's status lists `vpw` and nothing else |
+| the unit for the run | `j2534_server` enabled with `allow_lan` when it is not, and Automate (`autopid.enabled`) off when it is on: one planned restart for both, BEFORE the simulator changes | the unit back with the chip ready |
+| the rig | ECU sim v2 on VPW alone (`bench_bus.sim_only("vpw")`, one simulator restart) | the simulator's status lists `vpw` and nothing else |
 | the session | HELLO, OPEN, CONNECT J1850VPW, a PASS filter with mask `00 FF 00` and pattern `00 6B 00` (the functional reply target); WRITE `68 6A F1` + `01 00`, then `01 0C` (the cached header); DISCONNECT, CLOSE | every call NOERROR; each request answered by one message `48 6B 10 41 00 ..` and `48 6B 10 41 0C ..`. No reply is a FAIL with the rig |
-| restore | `j2534_server` as found (a planned restart), the simulator's settings back (one restart) | the settings equal; the simulator on its buses again |
+| restore | the simulator's settings back first (one restart), then `j2534_server` and Automate as found (a planned restart) | the simulator on its buses again; the settings equal |
+| the vehicle store | `GET /api/autopid/vehicles` 25 s after that restart (first contact of the boot is over) | the current car and every car's key, name and protocol as found |
 | the chip | the snapshot again, `eeprom_guard` | no cell changed, `protocol_saves` 0, the stored protocol as found |
 | the unit | the restart history | the boot count up by the planned restarts only, no unexpected reset |
 
@@ -29,6 +31,9 @@ VPW rides the OBD chip, not the native CAN controller (2026-10-19, modelled on t
   - This bench's own PASS filter asked for replies to F0 while its request is functional (`68 6A F1`, answered `48 6B 10 ..`): it would have dropped the reply it was waiting for. It passes 6B now.
 - Red with the rig on the image before the change (sha256 `d8755bc1`): `J2534 VPW FAIL (2 failed)`, both requests accepted and unanswered. Green with it (sha256 `c8efdc03`): **`J2534 VPW PASS`**, 15 checks, `01 00` answered `48 6B 10 41 00 18 3F 80 03 0F` and `01 0C` answered `48 6B 10 41 0C 0C 80 02` (800 rpm), the chip's 40 cells the same, `protocol_saves` 0, two planned restarts; the same through `.\test.ps1 j2534vpw` (103 s). Regression on that image: `J2534 STD TOOL PASS` 28 checks (the CAN side of the server, the installed DLL driven by udsoncan), the host suite `j2534_server` 28, `RELEASE TEST PASS` 59.
 
+- **2026-11-19: a run of the stage left the bench car on protocol 2.** The simulator plays one VIN on every protocol; the stage put it on VPW alone and then restarted the unit with Automate on (to switch the J2534 server on), so first contact found the car on VPW and stored that, as it should for a car that answers there. Back on all its buses the simulator still answers on VPW and the unit pins the stored protocol, so the record does not go back by itself. Shown twice: the unit's console in the stage's logs of 2026-11-17 (00:59 and 01:24) has `autopid: vehicle 1WCAN0FW0P0000001: protocol 2 (was 6)`, and on 2026-11-19 the bench as committed did it on demand (record 6 before, 2 after, `J2534 VPW PASS` printed). A unit with such a record reads its standard PIDs over J1850, and the K-line stage's Test call, which needs a CAN car, failed one check on it that day (`ATTP2`, `ATSH686AF1` in front of the init's `ATTP3`). Now Automate is off for the run, it goes off before the simulator becomes a VPW car and comes back after the simulator is on its buses again, and the stage asserts the vehicle store as found: `J2534 VPW PASS`, the record 6 before and after. The record itself was put back with the unit's detection job (`POST /api/autopid/vehicles/detect`, 6 s, the tables and the chip's store untouched).
+  Not established: which run had flipped the record before the K-line run of 2026-11-19 (it was last written 2026-11-18 12:37 UTC), and what took it back to 6 between earlier flips. The same line `protocol 2 (was 6)` is in the console logs of other stages (`eutruck` and `j1939` on 2026-11-16, both with `detection done: .. protocol 2`; `autobaud` once on 2026-11-13, from 8), and the record read 6 again at the start of later stages. Whether those stages leave the record as they find it was not checked.
+
 ## Not covered
 
 - **Physical addressing.** The simulator answered no `6C 10 F1` request on the app path, with or without filters, so only the functional exchange is proven. The channel's receive is the chip's auto receive (`ATAR`): replies to the address in the request header's source byte, and functional replies.
@@ -39,4 +44,5 @@ VPW rides the OBD chip, not the native CAN controller (2026-10-19, modelled on t
 
 - The simulator boots with every bus live, and a chip left to search would settle on CAN: the rig puts it on VPW alone and restores its settings in the `finally`. A run killed in between leaves it on one bus (the bench's restore, or the simulator's own page, puts it back).
 - `j2534_server` is off in the bench unit's settings as found; the bench switches it on and off around the session, which is where its two planned restarts come from.
+- A unit that restarts with Automate on beside a simulator whose CAN side gives it no OBD answer while its VPW side does stores protocol 2 for the bench car (the simulator's VIN is the same on every bus), and the record does not go back by itself: a bench that does that must switch Automate off first or put the record back (the detection job does: `POST /api/autopid/vehicles/detect` with the simulator on all its buses), and must assert the vehicle store as found. A stage that reads `ATTP2` where it expects `ATTP6` is looking at such a record.
 - With `exclusive` set (the default) AutoPID is paused while a tester is attached; the log reads `autopid: paused: a diagnostic tool holds the bus`.

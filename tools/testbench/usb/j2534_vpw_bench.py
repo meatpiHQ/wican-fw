@@ -11,12 +11,16 @@ Two ways to run it:
 
   with the rig (--rig <dut http>, the stage `.\\test.ps1 j2534vpw`)
       ECU sim v2 is put on VPW alone (every other bus off, the way one car
-      is), the unit's J2534 server is switched on for the run when it is off
-      (one planned restart, and one more to put it back), and a reply is
-      REQUIRED: no reply is a FAIL. Two functional requests (01 00, then
-      01 0C over the cached header), each answered `48 6B 10 41 ..`; the
-      chip's memory compared before and after (chip_nvm: nothing written);
-      the simulator and the unit's settings as found at the end.
+      is), the unit's J2534 server is switched on and its Automate off for
+      the run (one planned restart, and one more to put them back), and a
+      reply is REQUIRED: no reply is a FAIL. Two functional requests (01 00,
+      then 01 0C over the cached header), each answered `48 6B 10 41 ..`;
+      the chip's memory compared before and after (chip_nvm: nothing
+      written); the simulator, the unit's settings and its vehicle store as
+      found at the end. Automate goes off before the simulator becomes a VPW
+      car and comes back after it is on its buses again: a unit that
+      restarts with Automate on beside a VPW-only simulator stores protocol
+      2 for the bench car, and nothing takes that back (2026-11-19).
   bare (<dut_ip> [--port 6809], on rpi001 or through a tunnel)
       against whatever is on the bus: `J2534 VPW PASS` when a J1850 node
       answers, `J2534 VPW SKIP (...)` when connect, init and write worked and
@@ -234,11 +238,19 @@ def rig_run(args):
         st, oc = http("/api/obd_chip")
         return oc.get("eeprom_guard", {}) if isinstance(oc, dict) else {}
 
-    def apply_j2534(body):
-        """staged and submitted: one planned restart; True = back with the chip ready"""
-        st, r = http("/api/settings/j2534_server", "PUT", body)
-        if st != 200:
-            return False
+    def store_view():
+        """the unit's vehicle store: (the current car, every car's key, name and protocol)"""
+        st, v = http("/api/autopid/vehicles")
+        if st != 200 or not isinstance(v, dict):
+            return None
+        return (v.get("current"), sorted((c.get("key"), c.get("name"), c.get("protocol")) for c in v.get("vehicles", [])))
+
+    def apply(groups):
+        """settings objects staged and submitted together: one planned restart; True = back with the chip ready"""
+        for name, body in groups.items():
+            st, r = http("/api/settings/" + name, "PUT", body)
+            if st != 200:
+                return False
         st, h = http("/api/restart/history")
         b0 = h.get("boot_count") if isinstance(h, dict) else None
         http("/api/settings/submit", "POST", {})
@@ -255,35 +267,59 @@ def rig_run(args):
         return False
 
     j0 = settings("j2534_server")
-    if not check("the unit answers and its chip is ready", j0 is not None and
+    a0 = settings("autopid")
+    if not check("the unit answers and its chip is ready", j0 is not None and a0 is not None and
                  bool((http("/api/obd_chip")[1] or {}).get("ready")), args.rig):
         return "fail"
     st, h0 = http("/api/restart/history")
     g0 = guard()
+    veh0 = store_view()
     snap0 = chip_nvm.snapshot(args.rig)
-    print("as found: j2534_server %s, chip store %s, %d memory cells read" % (
-        json.dumps(j0), snap0[chip_nvm.STORED_PROTOCOL], len(snap0)), flush=True)
+    print("as found: j2534_server %s, Automate %s, chip store %s, %d memory cells read, the vehicle store %s" % (
+        json.dumps(j0), "on" if a0.get("enabled") else "off", snap0[chip_nvm.STORED_PROTOCOL], len(snap0), veh0),
+        flush=True)
 
+    # Automate is off for the run, and it goes off BEFORE the simulator becomes
+    # a VPW car and comes back on AFTER the simulator is on its buses again. A
+    # unit that restarts with Automate on beside a simulator on VPW alone finds
+    # its car there (the simulator plays the same VIN on every protocol) and
+    # stores protocol 2 for it; back on all its buses the simulator still
+    # answers on VPW, so the record does not go back by itself. Until
+    # 2026-11-19 a run of this bench left the bench car on protocol 2 that way
+    # (its console logs of 2026-11-17 show it, and it did it on demand on
+    # 2026-11-19); the K-line stage's Test call needs a CAN car and fails one
+    # check on such a record.
     previous = None
     result = "fail"
     try:
+        want = {}
+        if not (j0.get("enabled") and j0.get("allow_lan")):
+            want["j2534_server"] = dict(j0, enabled=True, allow_lan=True)
+        if a0.get("enabled"):
+            want["autopid"] = dict(a0, enabled=False)
+        if want:
+            check("the J2534 server on and Automate off for the run (one planned restart)", apply(want),
+                  ", ".join(sorted(want)))
+            time.sleep(3)
         previous, running = bench_bus.sim_only("vpw")
         live = bench_bus.sim_bus_live(running)
         check("ECU sim v2 answers on VPW alone", live == ["vpw"], " ".join(live))
-        if not (j0.get("enabled") and j0.get("allow_lan")):
-            j1 = dict(j0)
-            j1.update({"enabled": True, "allow_lan": True})
-            check("the J2534 server switched on for the run", apply_j2534(j1))
-            time.sleep(3)
         result = exchange(args.dut, args.port, need_reply=True)
     finally:
-        if settings("j2534_server") != j0:
-            apply_j2534(j0)
-        check("the unit's J2534 settings as found", settings("j2534_server") == j0)
         if previous is not None:
             bench_bus.sim_patch(previous)
         back = bench_bus.sim_bus_live(bench_bus.sim_status())
         check("the simulator back on its buses", len(back) > 1, " ".join(back))
+        found = {"j2534_server": j0, "autopid": a0}
+        changed = {k: v for k, v in found.items() if settings(k) != v}
+        if changed:
+            apply(changed)
+        check("the unit's J2534 and Automate settings as found",
+              settings("j2534_server") == j0 and settings("autopid") == a0)
+        time.sleep(25)                  # first contact of the boot (about 20 s in): what it stores is judged next
+        veh1 = store_view()
+        check("the unit's vehicle store as found (the car's protocol is not re-learned from the VPW run)",
+              veh0 is not None and veh1 == veh0, veh1)
 
     snap1 = chip_nvm.snapshot(args.rig)
     changes = chip_nvm.diff(snap0, snap1)
