@@ -81,21 +81,27 @@ const polledNames = (live) => ((live && live.params) || []).filter((p) => !p.ext
 const waitBack = async (label, tries = 150) => { let inf = null; for (let i = 0; i < tries && !inf; i++) { inf = await info(); if (!inf) await sleep(1000); } check(`${label}: the device answers`, !!inf, inf && inf.fw_version); return inf; };
 const restartAndWait = async (label) => { await send("POST", "/api/restart", {}).catch(() => { }); await sleep(12000); return waitBack(label); };
 /* the first contact of a boot: wait for the identity line, then for a detection to end */
-const firstContact = async (label) => {
-  let ring = "";
-  for (let i = 0; i < 24; i++) {
-    await sleep(5000); ring = plain(await getT("/api/logs/ring"));
-    if (/detection done/.test(ring)) break;
-    if (/vehicle identity/.test(ring) && !/detecting/.test(ring)) break;   /* the same car: no job follows */
-  }
+const firstContact = async (label, fromForget = false) => {
   /* the ring survives a warm restart: only this boot's lines count (from the
-     store's boot line on) */
-  const all = ring.split("\n").filter((l) => /autopid: (vehicle|detection|new vehicle|config)/.test(l)).map((l) => l.trim());
-  let bootAt = -1;
-  all.forEach((l, i) => { if (/autopid: vehicle store: \d+ cars/.test(l)) bootAt = i; });
-  const lines = bootAt >= 0 ? all.slice(bootAt) : all;
+     store's boot line on), while waiting too (an earlier boot's "detection
+     done" ended the wait before this boot's contact, 2026-11-19) */
+  const thisBoot = (ring) => {
+    const all = ring.split("\n").filter((l) => /autopid: (vehicle|detection|new vehicle|config)/.test(l)).map((l) => l.trim());
+    let bootAt = -1, forgotAt = -1;
+    all.forEach((l, i) => { if (/autopid: vehicle store: \d+ cars/.test(l)) bootAt = i; if (/autopid: vehicle \S+ forgotten/.test(l)) forgotAt = i; });
+    return { boot: bootAt >= 0 ? all.slice(bootAt) : all, forgot: forgotAt >= 0 ? all.slice(forgotAt) : null };
+  };
+  let ring = "", cur = { boot: [], forgot: null };
+  for (let i = 0; i < 24; i++) {
+    await sleep(5000); ring = plain(await getT("/api/logs/ring")); cur = thisBoot(ring);
+    const txt = cur.boot.join("\n");
+    if (/detection done/.test(txt)) break;
+    if (/vehicle identity/.test(txt) && !/detecting/.test(txt)) break;   /* the same car: no job follows */
+  }
   writeFileSync(`${out}/${label}_ring.log`, ring);
-  return lines;
+  /* for the leg that forgets the car: the lines from the forget on, should
+     the device meet the car again before the restart */
+  return fromForget && cur.forgot ? cur.forgot : cur.boot;
 };
 /* the standard set as a leg needs it; a change restarts */
 const ensureStd = async (on, label) => {
@@ -225,11 +231,12 @@ if (LEGS.includes("redetect")) {
 if (LEGS.includes("skip")) {
   const L = "skip";
   await ensureStd(true, L);               /* a fresh device: the switch is on by default */
+  await firstContact(L + "_before");      /* this boot's own first contact first: forgotten ahead of it, the car is met again before the restart */
   await forgetCar(L);
   await openVehicle(L);
   await skipForNow(L);
   await restartAndWait(`${L}: after the restart`);
-  const lines = await firstContact(L);
+  const lines = await firstContact(L, true);
   say(L, "first contact:\n   " + lines.slice(-8).join("\n   "));
   const cfg1 = stdRows(await getJ("/api/autopid/config"));
   check(`${L}: the device met the car by itself and stored its rows OFF, saying so`, cfg1.length >= 10 && cfg1.every((r) => !r.on) && lines.some((l) => /new vehicle/.test(l)) && lines.some((l) => /stored off/.test(l)), brief(cfg1));
