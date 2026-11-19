@@ -487,7 +487,13 @@ def sim_restart_state(base=SIM_URL):
     crash-loop brake left the ECU engines off), 'coredump' (a crash dump sits
     in its flash), 'crash' (one line about the crash this boot follows, or
     '')}, or None when it does not answer or its firmware predates the
-    tracker (404)."""
+    tracker (404).
+
+    'unexpected_resets' is every reset nobody asked for since its power-on:
+    its counter plus what an acknowledge took off it (POST
+    /api/restart/acknowledge, its firmware of 2026-11-19 on;
+    'acknowledged' says how many). The sum never goes down, so
+    sim_restart_delta() cannot lose a crash behind an acknowledge."""
     try:
         h = _http(f"{base}/api/restart/history", timeout=8)
     except (urllib.error.URLError, OSError, ValueError):
@@ -497,8 +503,10 @@ def sim_restart_state(base=SIM_URL):
     recs = h.get("records") or []
     top = recs[0] if recs else {}
     crash = top.get("crash") if isinstance(top.get("crash"), dict) else None
+    ack = h.get("unexpected_acknowledged") or 0
     return {"boot_count": h.get("boot_count"),
-            "unexpected_resets": h.get("unexpected_resets"),
+            "unexpected_resets": (h.get("unexpected_resets") or 0) + ack,
+            "acknowledged": ack,
             "reason": top.get("reason"), "planned": bool(top.get("planned")),
             "parked": (h.get("brake") or {}).get("verdict") not in (None, "normal"),
             "coredump": bool((h.get("coredump") or {}).get("present")),

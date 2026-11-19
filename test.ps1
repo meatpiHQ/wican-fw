@@ -296,7 +296,15 @@ function Get-SimRestartState { param([string]$Url)
     if (-not $lastCrash -and $r.report -and $r.report.crash -and $r.report.crash.summary) {
         $lastCrash = "its stored report, $($r.report.crash.summary)"
     }
-    return [pscustomobject]@{ BootCount = [int]$r.boot_count; Unexpected = [int]$r.unexpected_resets;
+    # Unexpected = every reset nobody asked for since its power-on: its
+    # counter plus what an acknowledge took off it (POST
+    # /api/restart/acknowledge, its firmware of 2026-11-19 on). The sum never
+    # goes down, so a difference of two readings cannot hide a crash behind
+    # an acknowledge. Counter is what a person sees on it now.
+    $ack = 0
+    if ($null -ne $r.unexpected_acknowledged) { $ack = [int]$r.unexpected_acknowledged }
+    return [pscustomobject]@{ BootCount = [int]$r.boot_count; Unexpected = [int]$r.unexpected_resets + $ack;
+        Counter = [int]$r.unexpected_resets; Acknowledged = $ack;
         Reason = $reason; Parked = $parked; Coredump = $dump; Crash = $crash; LastCrash = $lastCrash }
 }
 
@@ -402,7 +410,8 @@ function Invoke-BenchCheck {
         Supply   = ''        # the DUT's supply as the simulator reads it at pin 16
         SimTracker = $false  # the simulator's firmware has the restart tracker (2026-11-09 on)
         SimBoots = 0         # its boot count since its power-on
-        SimUnexpected = 0    # its resets nobody asked for, since its power-on
+        SimUnexpected = 0    # its resets nobody asked for, since its power-on (acknowledged ones included)
+        SimAcknowledged = 0  # how many of those were acknowledged off its counter
         SimNew = 0           # how many of those are new since the bench last looked
         SimSeen = ''         # when the bench last looked (Update-SimSeen)
         SimLastCrash = ''    # the newest crash it still has on record
@@ -472,6 +481,7 @@ function Invoke-BenchCheck {
         $sr = Get-SimRestartState $b.SimUrl
         if ($sr) {
             $b.SimTracker = $true; $b.SimBoots = $sr.BootCount; $b.SimUnexpected = $sr.Unexpected
+            $b.SimAcknowledged = $sr.Acknowledged
             $b.SimParked = $sr.Parked; $b.SimCoredump = $sr.Coredump; $b.SimLastCrash = $sr.LastCrash
             $seen = Update-SimSeen $b.SimUrl $sr
             $b.SimNew = $seen.New; $b.SimSeen = $seen.Since
@@ -540,6 +550,7 @@ function Invoke-BenchCheck {
     $simTxt = if ($b.SimUrl) { $b.SimUrl } else { 'NO ANSWER' }
     if ($b.SimTracker) {
         $simTxt += "; boots $($b.SimBoots), unexpected $($b.SimUnexpected) since its power-on"
+        if ($b.SimAcknowledged -gt 0) { $simTxt += " ($($b.SimAcknowledged) of them acknowledged)" }
         if ($b.SimNew -gt 0) { $simTxt += " ($($b.SimNew) NEW)" }
         if ($b.SimParked) { $simTxt += ', PARKED' }
         if ($b.SimCoredump) { $simTxt += ', CRASH DUMP STORED' }
