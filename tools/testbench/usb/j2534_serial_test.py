@@ -1,27 +1,39 @@
 #!/usr/bin/env python3
-"""Exercise the J2534 server over the CDC-ACM SERIAL transport
-(device_class=cdc). Same framed wire protocol as the TCP path, just over a
-virtual COM port.
+"""J2534 over the USB cable: the server on the CDC-ACM serial transport  ->  J2534 SERIAL TEST PASS
 
-  python j2534_serial_test.py COM<N>            # gate + basic ops
-  python j2534_serial_test.py COM<N> --rx       # also 10 02 -> 50 02 (needs ECU)
+The same framed wire protocol as the TCP path, over the virtual COM port the WiCAN PRO
+is to a PC when its USB connector is in the Device role with the CDC serial class.
+No J2534 DLL is involved: this is the transport and the server.
 
-Proves HELLO/OPEN/CONNECT/StartFilter-equiv/WRITE dispatch + the safety
-gate over serial, so the CDC transport is validated without a J2534 DLL.
+  python j2534_serial_test.py auto            # find the port by its USB ids (16D0:1263)
+  python j2534_serial_test.py COM<N> [--rx]   # --rx: also 10 02 -> 50 02 (an ECU answering 7E0)
+
+The unit needs, on its web page (a restart applies them):
+  USB page:    Connector role = Device, USB device class = CDC serial
+  J2534 page:  enabled
+As shipped the connector is in the Host role. The PC then sees only the two COM ports of
+the board's USB bridge (the console and the OBD chip), which do not speak J2534, and
+"auto" finds nothing and says so.
+
+What it checks: HELLO, OPEN, CONNECT ISO15765 with the ids, a 10 02 written, and a
+34 RequestDownload written. Until 2026-10-27 a content gate refused the 34
+(ERR_NOT_SUPPORTED) and this test expected that; the gate is gone, the server forwards
+what the tool sends and counts the reprogramming services (`reflash_seen` on /api/j2534).
 Needs pyserial.
 """
 import struct
 import sys
 
 import serial  # pyserial
+from serial.tools import list_ports
 
 MAGIC = 0x4A35
 HDR = struct.Struct("<HBBHHI")  # magic, ver, type, seq, channel, length
 (HELLO, OPEN, CLOSE, CONNECT, DISCONNECT, WRITE_MSGS, ACK, RX_MSG) = (
     0x01, 0x02, 0x03, 0x04, 0x05, 0x10, 0x80, 0x81)
 NOERROR = 0x00
-ERR_NOT_SUPPORTED = 0x01
 PROT_ISO15765 = 6
+USB_VID, USB_PID = 0x16D0, 0x1263       # the WiCAN PRO as a CDC serial device
 
 fails = []
 
@@ -30,6 +42,14 @@ def check(name, ok, detail=""):
     print(("PASS" if ok else "FAIL") + f": {name}" + (f" ({detail})" if detail else ""))
     if not ok:
         fails.append(name)
+
+
+def find_port():
+    """The COM port of a WiCAN PRO in the Device role with the CDC serial class, or None."""
+    for p in list_ports.comports():
+        if p.vid == USB_VID and p.pid == USB_PID:
+            return p.device
+    return None
 
 
 class SerialClient:
@@ -93,10 +113,19 @@ class SerialClient:
 
 def main():
     if len(sys.argv) < 2:
-        print("usage: j2534_serial_test.py COM<N> [--rx]")
+        print("usage: j2534_serial_test.py COM<N>|auto [--rx]")
         sys.exit(2)
     port = sys.argv[1]
     do_rx = "--rx" in sys.argv
+
+    if port.lower() == "auto":
+        port = find_port()
+        if port is None:
+            print("J2534 SERIAL TEST FAIL: no WiCAN PRO serial port (USB %04X:%04X) on this PC. On the unit's web page: "
+                  "USB page, Connector role = Device and USB device class = CDC serial; J2534 enabled; submit and let it "
+                  "restart. In the Host role the PC sees only the board's console ports." % (USB_VID, USB_PID))
+            sys.exit(1)
+        print("port: %s (USB %04X:%04X)" % (port, USB_VID, USB_PID))
 
     c = SerialClient(port)
     st, ver, _ = c.call(HELLO)
@@ -109,10 +138,10 @@ def main():
     check("CONNECT ISO15765", st == NOERROR, f"channel {ch}")
 
     st, _ = c.write_uds(ch, bytes([0x10, 0x02]), collect_ms=200)
-    check("10 02 not gated", st == NOERROR, f"0x{st:02X}")
+    check("10 02 written (ACK NOERROR)", st == NOERROR, f"0x{st:02X}")
     st, _ = c.write_uds(ch, bytes([0x34, 0x00, 0x44, 0, 0, 0x04, 0x00]),
                         collect_ms=200)
-    check("34 RequestDownload BLOCKED", st == ERR_NOT_SUPPORTED, f"0x{st:02X}")
+    check("34 RequestDownload forwarded (no content gate since 2026-10-27)", st == NOERROR, f"0x{st:02X}")
 
     if do_rx:
         st, rx = c.write_uds(ch, bytes([0x10, 0x02]))

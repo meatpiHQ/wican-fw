@@ -5274,7 +5274,8 @@ const HELP={
   cut_retries:"How many times to retry cutting the dongle's USB data lines before giving up.",
   "espnetlink.apn":"Your SIM provider gives it (the SIM's packaging, your account or their APN settings page); the dongle needs it to get online, and its own default suits only some SIMs. WiCAN sends it to the dongle the next time the dongle is on the cable; the dongle restarts once to apply it. Blank keeps the dongle's own.",
   "espnetlink.sim_pin":"Only when the dongle reports the SIM as PIN locked. Sent to the dongle once per start while the SIM asks; a PIN the SIM refuses is never retried by itself (three wrong tries lock the SIM). Blank = none.",
-  role:"Host: an adapter or dongle plugs into the WiCAN. Device: the WiCAN appears as a network adapter on a PC.",
+  role:"Host: an adapter or dongle plugs into the WiCAN. Device: the WiCAN plugs into a PC and appears as what USB device class says, a network adapter or a serial port.",
+  device_class:"What the WiCAN is to the PC in the Device role. CDC-NCM or RNDIS: a network adapter (this web page, and J2534 over TCP). CDC serial: a COM port for a J2534 tool on the cable; the Windows driver's USB mode finds it by itself.",
   prefer_usb_route:"Use the USB-Ethernet uplink even when WiFi is connected.",
   device_ip:"The WiCAN's address on the USB cable in device mode; the PC leases the next one. Change it only when the PC's own network already uses this subnet (the link would not route). Reboot to apply.",
   "vpn_manager.type":"WireGuard: point-to-point tunnel to your own server. Tailscale: zero-config mesh (needs an auth key).",
@@ -5327,7 +5328,7 @@ const ENUMS={
   wifi_ram_profile:{full:"Full",lean:"Lean (recommended with Bluetooth)",custom:"Custom"},
   ip_mode:{dhcp:"Automatic (DHCP)",static:"Static IP"},sta_ip_mode:{dhcp:"Automatic (DHCP)",static:"Static IP"},
   "espnetlink.mode":{wifi_modem:"WiFi modem (USB cut after pairing)",usb_ncm:"USB Ethernet (NCM)",usb_rndis:"USB Ethernet (RNDIS, default)"},
-  role:{host:"Host: adapter or dongle plugs in",device:"Device: network over the cable to a PC"},
+  role:{host:"Host: adapter or dongle plugs in",device:"Device: network or serial port to a PC"},
   device_class:{ncm:"CDC-NCM (Linux / macOS / Windows 11)",rndis:"RNDIS (older Windows)",cdc:"CDC serial"},
   conn_profile:{ios:"iOS",android_fast:"Android (fast)"},pause_mode:{all:"Pause everything",requests_only:"Pause requests only"},
   ble_ram_profile:{full:"Full (BLE 5 options)",lean:"Lean (recommended)",custom:"Custom"},
@@ -9936,7 +9937,9 @@ PAGES.uds=async(view)=>{
 
 /* ---- J2534 ---- */
 PAGES.j2534=async(view)=>{
-  const p=page(view,null,"J2534 Pass-through","SAE J2534 PassThru device for PC diagnostic and reflash tools");
+  /* the USB cable hint sits in the header: the status block below repaints every 4 s, and a repaint would take the button from under an open bubble */
+  const p=page(view,null,"J2534 Pass-through","SAE J2534 PassThru device for PC diagnostic and reflash tools",[
+    infoBtn("J2534 over the USB cable","J2534 over the USB cable","A tool on a PC reaches the WiCAN over WiFi (the TCP port) or over the USB cable. For the cable: on the USB page set Connector role to Device and USB device class to CDC serial, submit and let it restart. The PC then shows a USB serial port, and the Windows driver's USB mode finds it by itself. In the Host role the PC sees only the board's console ports, which do not speak J2534.")]);
   const statusEl=h("div",{});const formEl=h("div",{});p.append(statusEl,formEl);
   async function status(){const j=await tryGet("/api/j2534");if(!j)return;
     statusEl.replaceChildren(
