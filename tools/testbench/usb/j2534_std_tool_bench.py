@@ -26,8 +26,10 @@ Legs (one planned restart to configure, one to restore):
      nothing is delivered; with a PASS filter on 7E8 the answer 41 00 comes back
      as an ISO15765 message with the id
   G  no content gate (2026-10-27): 34 .. behind the id is forwarded (ACK
-     NOERROR) and /api/j2534 reflash_seen counts it; ISO15765_ADDR_TYPE ->
-     ERR_INVALID_MSG
+     NOERROR) and /api/j2534 reflash_seen counts it; ISO15765_ADDR_TYPE with no
+     filter for it goes out as one frame led by the address extension (it was
+     ERR_INVALID_MSG until 2026-11-19; the stage for extended addressing is
+     j2534ext), and with the id alone it is ERR_INVALID_MSG
   D  the installed wican_j2534.dll driven by udsoncan under the 32-bit Python
      (--py32; skipped with a note when that interpreter is absent)
   X  restore: settings as found, only the planned restarts, no new E lines
@@ -216,8 +218,8 @@ def leg_f(c, ch):
     c.call(STOP_FILTER, ch, struct.pack("<I", pid))
 
 
-def leg_g(c, ch, dut=None):
-    print("== G: no content gate (2026-10-27) and the unsupported flag", flush=True)
+def leg_g(c, ch, pcan, dut=None):
+    print("== G: no content gate (2026-10-27), extended addressing without a filter, the id alone", flush=True)
     # leg F cleared the filters: the 8-byte request is multi-frame and needs
     # its ISO-TP session again (the old gate answered before that check)
     st, _, _ = fc_filter(c, ch, 0x7E8, 0x7E0)
@@ -227,8 +229,15 @@ def leg_g(c, ch, dut=None):
     seen1 = ((dut.get("/api/j2534") or {}).get("reflash_seen") if dut else None)
     check("G1 34 RequestDownload behind the id is forwarded (ACK NOERROR; the reflash gate refused it until 2026-10-27)", ack == 0, ack)
     check("G1b /api/j2534 reflash_seen counted it", seen0 is not None and seen1 == seen0 + 1, (seen0, seen1))
+    # ISO15765_ADDR_TYPE was ERR_INVALID_MSG until 2026-11-19. With no extended-addressing filter for this id and
+    # address extension the message goes out as one frame, like a functional request (.\test.ps1 j2534ext is the
+    # stage for the rest); the flag with the id alone has no room for the address extension.
+    pcan.clear()
     ack, got = write_collect(c, ch, struct.pack(">I", 0x7E0) + b"\xF1\x10\x03", b.TX_PAD | TX_ADDR_TYPE, 0.3)
-    check("G2 ISO15765_ADDR_TYPE -> ERR_INVALID_MSG", ack == ERR_INVALID_MSG, ack)
+    check("G2 ISO15765_ADDR_TYPE: [00 00 07 E0][F1][10 03] goes out as ONE frame led by the address extension, F1 02 10 03 AA AA AA AA",
+          ack == 0 and pcan.saw(0x7E0, "f1021003aaaaaaaa", 1.0), (ack, pcan.seen.get(0x7E0, [])[:2]))
+    ack, got = write_collect(c, ch, struct.pack(">I", 0x7E0), b.TX_PAD | TX_ADDR_TYPE, 0.3)
+    check("G2b ISO15765_ADDR_TYPE with the id alone -> ERR_INVALID_MSG", ack == ERR_INVALID_MSG, ack)
     ack, got = write_collect(c, ch, struct.pack(">I", 0x7E0), b.TX_PAD, 0.3)
     check("G3 the id alone -> ERR_INVALID_MSG", ack == ERR_INVALID_MSG, ack)
 
@@ -322,7 +331,7 @@ def main():
         leg_p(c, ch, pcan)
         leg_e(c, ch)
         leg_f(c, ch)
-        leg_g(c, ch, dut)
+        leg_g(c, ch, pcan, dut)
         c.call(b.DISCONNECT, channel=ch)
         c.call(b.CLOSE)
         c.s.close()

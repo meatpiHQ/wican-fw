@@ -80,6 +80,8 @@ What passed on that firmware, as it must: leg A (a second connection is not serv
 
 **Legs A, N, L and P in that order, eight times in one run on that image (14:39, `--legs ANLP --repeat 8`): `J2534 SESSION PASS`, 174 checks, 0 failed, 164 s.** Run for the failure above, which came in the whole stage and never in leg L alone: the write 2.14 to 2.18 s, the slowest frame 0.05 s behind the bus in every round, the periodic messages silent for 0.052 s and 0.022 s at most, 5 and 12 or 13 frames behind the transfer, and no frame of leg P's message on the second channel in any round. With the three whole runs on the later images that is eleven times through the sequence without it.
 
+**2026-11-20 21:46, `J2534 SESSION PASS`, 39 checks, 134 s** (report `test-reports/2026-11-20_2146_j2534session.md`; D3 skipped, no older driver named): the shared channel, server and ISO-TP code changed with ISO 15765 extended addressing (meatpi-components pull request 5 with our changes on top, uncommitted; image `79e8935135bf4e05`, the built driver 1.10): the stage of that change and the other stages of the evening are in [j2534ext.md](j2534ext.md). The loss report of 2026-11-18 is unchanged: the pull request had narrowed it to raw CAN channels and that part was not kept. What it held of an ISO15765 channel's own losses, the indications a ring of three dropped (told as lost, rightly), is gone with the ring of 63.
+
 ## Traps
 
 - `WICAN_PCAN_DUT` must name the PCAN channel on the DUT's bus in the same PowerShell command (`$env:WICAN_PCAN_DUT = 'PCAN_USBBUS2'` on this bench). On the wrong channel no ECU hears the long request and legs L and O fail from their first check.
