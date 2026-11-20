@@ -2880,6 +2880,7 @@
       { name: "led.clear", params_schema: { type: "object", properties: {} }, undoable: false },
       { name: "script.run", params_schema: { type: "object", properties: { name: { type: "string" } } }, undoable: false },
       { name: "obd.request", params_schema: { type: "object", properties: { cmd: { type: "string" } } }, undoable: false },
+      { name: "can.send", params_schema: { type: "object", properties: { bus: { type: "string", enum: ["obd", "can", "ms", "sw", "ch"] }, id: { type: "string" }, data: { type: "string" }, ext: { type: "boolean" }, wake: { type: "boolean" }, bus_kbps: { type: "number" } }, required: ["bus"] }, undoable: false },
       { name: "autopid.dtc_scan", params_schema: { type: "object", properties: {} }, undoable: false },
       { name: "logger.gate", params_schema: { type: "object", properties: { enabled: { type: "boolean" }, reason: { type: "string" } } }, undoable: false },
     ]),
@@ -9520,6 +9521,7 @@ PAGES.events=async(view,sub)=>{
       {id:"timer",on:"timer.tick",label:"Every N seconds",fields:[{key:"timer",label:"Every",kind:"period_s"}]},
     ].filter(t=>srcOpts.includes(t.on));
     srcOpts.forEach(on=>{if(!TRIG.some(t=>t.on===on))TRIG.push({id:"g:"+on,on,label:on,generic:true});});
+    const CAN_SEND_BUSES=[["obd","The car's OBD protocol"],["ms","MS CAN"],["sw","Single-wire CAN"],["ch","CH CAN"],["can","WiCAN's CAN controller"]];
     const ACT=[
       {id:"rate",do:"autopid.group",label:"Set a group's polling rate",fields:[{key:"group",label:"Group",kind:"group"},{key:"period_ms",label:"Poll every",kind:"period_ms"}],fixed:{enabled:true}},
       {id:"enable",do:"autopid.group",label:"Enable a PID group",fields:[{key:"group",label:"Group",kind:"group"}],fixed:{enabled:true}},
@@ -9531,6 +9533,9 @@ PAGES.events=async(view,sub)=>{
       {id:"note",do:"log.note",label:"Note in the log",fields:[{key:"message",label:"Message",kind:"text",def:"${source}.${name}"}]},
       {id:"obd",do:"obd.request",label:"Send an OBD command",fields:[{key:"cmd",label:"Command",kind:"text",def:"010C"}]},
       {id:"uds",do:"uds.request",label:"Send a UDS request",fields:[{key:"tx",label:"TX ID",kind:"text",def:"7E0"},{key:"rx",label:"RX ID",kind:"text",def:"7E8"},{key:"req",label:"Request",kind:"text",def:"22F190"}]},
+      /* can.send (2026-11-21, issue #1072): one raw frame on a bus of the OBD connector.
+         A sequence or a wake-up frame is a script's job (can_send), not a rule's field */
+      {id:"can_send",do:"can.send",label:"Send a CAN frame",fields:[{key:"bus",label:"Bus",kind:"enum",def:"obd",opts:CAN_SEND_BUSES},{key:"id",label:"ID (hex)",kind:"text",def:"7DF"},{key:"data",label:"Data (hex)",kind:"text",def:"02 01 0C"}]},
       {id:"script",do:"script.run",label:"Run a script",fields:[{key:"name",label:"Script",kind:"script"}]},
       {id:"dtc_scan",do:"autopid.dtc_scan",label:"Scan trouble codes"},
       {id:"dtc_clear",do:"autopid.dtc_clear",label:"Clear trouble codes"},
@@ -9600,6 +9605,7 @@ PAGES.events=async(view,sub)=>{
         case"note":head.push("note in the log");break;
         case"obd":head.push("send OBD ",B(w.cmd||"?"));break;
         case"uds":head.push("send UDS ",B(w.req||"?")," to ",B(w.tx||"?"));break;
+        case"can_send":head.push("send CAN frame ",B((w.id||"?")+(w.data?" "+w.data:""))," on ",B((CAN_SEND_BUSES.find(b=>b[0]===w.bus)||[0,w.bus||"?"])[1]));break;
         case"script":head.push("run script ",B(w.name||"?"));break;
         case"dtc_scan":head.push("scan trouble codes");break;
         case"dtc_clear":head.push("clear trouble codes");break;

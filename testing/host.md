@@ -10,6 +10,27 @@ Host **unit** suites (`components/*/host_test`, 526 tests across 44 components a
 
 **Pi offline:** `bash tools/testbench/host_gcc_wsl.sh <vpn_manager|config_backup>` from WSL compiles that PURE suite with the system gcc + Unity under ASan/UBSan (no IDF build; 2026-10-16, issues #985 to #989: `vpn_manager` 11, `config_backup` 24; add a case per IDF-free suite)
 
+**2026-11-21:** can.send (GitHub issue #1072, the device half and its records are in
+[cansend.md](cansend.md)). `autopid` 194 PASS through `.\test.ps1 host autopid` on the Pi
+(`test-reports/2026-11-21_0151_host_autopid.md`, on the final sources), 8 new in `test_send.c`:
+`test_send_hex` (hex text with spaces, commas and a prefix; half a byte, a ninth byte refused),
+`test_send_parse_one_frame` (the issue's 29-bit frame on single-wire CAN, the wake frame, the id as a
+number, a frame without data for WiCAN's own controller, a bus speed),
+`test_send_parse_refusals` (every sentence the route answers 400 with),
+`test_send_parse_sequence` (the issue's whole remote start as one request, one form or the other,
+1 to 8 frames, the gaps),
+`test_send_the_car_decides_obd` (no car known, a CAN car, a car before CAN: three header bytes and 1
+to 7 data bytes),
+`test_send_where_the_chip_goes` (the slot definitions: `VTSET_CAN B,01,04,MS_CAN` for 29 bits,
+`VTSET_CAN F,81,0F,SW_CAN,2` for the wake mode, `VTSET_CAN D,81,02,HS_CAN` for `obd` on a 250 kbit/s
+car; no row may name the HS slot, and a row's chain reads as before),
+`test_send_words_are_ram_and_undone` (every word of the send is one `ap_chain_sets()` knows and
+`ap_chain_restore()` undoes, none is a word the chip stores),
+`test_send_what_the_chip_said` (`NO DATA` and an answer = sent, `CAN ERROR` = nobody acknowledged,
+an error word, `?` or nothing = refused). The bus tests of 2026-11-11 (`test_bus.c`) pass unchanged:
+the two new bits of a bus key and the HS slot change nothing for a row. `script_engine` 36 PASS
+(the reference table's consistency test covers the new `can_send` entry).
+
 **2026-11-14:** the logger on a unit short of internal RAM (a field report on
 6.0.0-beta.5: `logger_storage_error` detail `params`, no file name, the
 newest log not downloadable, `abort()` in task `dl_writer`; the device half

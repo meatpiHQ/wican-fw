@@ -96,6 +96,23 @@ w.fetch = (u, o) => origFetch(u, o);
   rows()[0].querySelector(".rl-acts button[title='Duplicate']").click(); await sleep(120);
   check("duplicate opens a copy with a new name", /Add rule/.test(mtext()) && /_2$/.test(sel("Name").value));
   btn(/^Cancel$/, modalEl()).click(); await sleep(80);
+  /* can.send (2026-11-21, issue #1072): "Send a CAN frame", its three fields, the sentence */
+  btn(/Add Rule/).click(); await sleep(120);
+  const actSel = sel("Action");
+  check("the action list offers Send a CAN frame", [...actSel.options].some((o) => o.value === "can_send" && o.textContent === "Send a CAN frame"));
+  setSel(actSel, "can_send"); await sleep(80);
+  check("its fields: Bus (the car's OBD protocol first), ID and Data with their defaults",
+    !!sel("Bus") && sel("Bus").value === "obd" && sel("Bus").options.length === 5 && sel("ID (hex)").value === "7DF" && sel("Data (hex)").value === "02 01 0C");
+  check("the preview reads as a sentence", /send CAN frame 7DF 02 01 0C on The car's OBD protocol/.test(preview()), preview());
+  setSel(sel("Bus"), "sw"); await sleep(50);
+  const idIn = sel("ID (hex)"); idIn.value = "1024E097"; idIn.dispatchEvent(new w.Event("change")); await sleep(30);
+  const dataIn = sel("Data (hex)"); dataIn.value = "80 01 FF"; dataIn.dispatchEvent(new w.Event("change")); await sleep(50);
+  check("bus and frame edits reach the preview", /send CAN frame 1024E097 80 01 FF on Single-wire CAN/.test(preview()), preview());
+  btn(/Edit as JSON/, modalEl()).click(); await sleep(80);
+  const taSend = modalEl().querySelector("textarea");
+  check("Edit as JSON shows the engine shape (do can.send, with bus, id, data)", !!taSend && /"do": "can\.send"/.test(taSend.value) &&
+    /"bus": "sw"/.test(taSend.value) && /"id": "1024E097"/.test(taSend.value) && /"data": "80 01 FF"/.test(taSend.value), taSend && taSend.value.replace(/\s+/g, " ").slice(0, 200));
+  btn(/^Cancel$/, modalEl()).click(); await sleep(80);
   /* validation: a bad name is refused */
   btn(/Add Rule/).click(); await sleep(120);
   const nm = sel("Name"); nm.value = "bad name!"; nm.dispatchEvent(new w.Event("change")); await sleep(30);

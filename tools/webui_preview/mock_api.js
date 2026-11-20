@@ -747,6 +747,7 @@
       { name: "led.clear", params_schema: { type: "object", properties: {} }, undoable: false },
       { name: "script.run", params_schema: { type: "object", properties: { name: { type: "string" } } }, undoable: false },
       { name: "obd.request", params_schema: { type: "object", properties: { cmd: { type: "string" } } }, undoable: false },
+      { name: "can.send", params_schema: { type: "object", properties: { bus: { type: "string", enum: ["obd", "can", "ms", "sw", "ch"] }, id: { type: "string" }, data: { type: "string" }, ext: { type: "boolean" }, wake: { type: "boolean" }, bus_kbps: { type: "number" } }, required: ["bus"] }, undoable: false },
       { name: "autopid.dtc_scan", params_schema: { type: "object", properties: {} }, undoable: false },
       { name: "logger.gate", params_schema: { type: "object", properties: { enabled: { type: "boolean" }, reason: { type: "string" } } }, undoable: false },
     ]),
