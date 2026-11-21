@@ -355,8 +355,17 @@ def rotation(found):
 
 
 def main():
-    st, ap = http("/api/settings/autopid")
-    st2, oc = http("/api/obd_chip")
+    # The stage's tunnel may not stand yet: test.ps1 gives it 3 s, and an ssh
+    # to the Pi takes 3 to 7 s here whenever the PC has to look the name up
+    # (2026-11-22: three starts of this bench lost to that). Up to 40 s for
+    # the unit's first answer.
+    t_end = time.time() + 40
+    while True:
+        st, ap = http("/api/settings/autopid", timeout=5)
+        st2, oc = http("/api/obd_chip", timeout=5)
+        if (isinstance(ap, dict) and isinstance(oc, dict) and oc.get("ready")) or time.time() >= t_end:
+            break
+        time.sleep(2)
     if not (isinstance(ap, dict) and isinstance(oc, dict) and oc.get("ready")):
         print("CHIP CAN SLOTS FAIL (the unit does not answer at %s, or its chip is not ready)" % DUT_HP)
         return 1
