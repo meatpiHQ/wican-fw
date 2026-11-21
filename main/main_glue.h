@@ -46,3 +46,9 @@ void main_glue_wire_fw_update(void);
  *  (main_factory.c), not the settings partition alone (2026-10-26).
  *  After api_http_init. */
 void main_glue_wire_factory_reset(void);
+
+/** No restart while the OBD chip's firmware is being written (Ali,
+ *  2026-11-21, issue #1075): restart_tracker asks obd_chip through this
+ *  hold. The restart route answers 409 meanwhile, every restart the
+ *  firmware plans itself waits for the write to end. */
+void main_glue_wire_restart_hold(void);

@@ -10,6 +10,13 @@ image's version is its file's name (the firmware's contract), which is how
 this bench puts the chip on an older firmware at all: the V2.3.22 image
 uploaded as V2.3.99.txt counts as newer and is written.
 
+Since 2026-11-21 (GitHub issue #1075, Ali) the user's update is accepted only
+in a start that began with the power coming on (`fw.power_on`). This bench
+restarts the unit by request between its legs, so its own updates carry the
+bench's word (`"any_start": true` on the route, `--any-start` on the
+console); the power-rule leg proves the refusal without it. The way through
+a real power cut is the chipguard stage's (chip_guard_bench.py).
+
   status        GET /api/obd_chip carries fw.builtin (the packaged image),
                 fw.current (the versions the start-up leaves alone) and
                 fw.chip (the chip's VTVERS answer); the `obd_chip` console
@@ -28,7 +35,11 @@ uploaded as V2.3.99.txt counts as newer and is written.
   boot-keeps-22 POST /api/restart: the boot's automatic update leaves a
                 .22 chip alone (ESP_OK, 0 records), the bring-up's warning
                 line is in the log ring, fw.outdated stays true
-  lift          POST {} (the Maintenance card's button): every record goes
+  power-rule    behind that planned restart `fw.power_on` is false: POST {}
+                is 409 with `power_cycle`, `obd_chip update` prints the way
+                out, the console's warning line names it, no job ran
+  lift          POST {any_start} (the Maintenance card's button, with the
+                bench's word): every record goes
                 out, a second POST meanwhile is 409, the chip comes back
                 through a fresh bring-up at 2 Mbaud on the packaged version,
                 fw.outdated false
@@ -62,6 +73,7 @@ import urllib.request
 import websocket  # websocket-client
 
 CHECKS = []
+ANY_START = {"any_start": True}   # the bench's word: this start need not be one from power-on
 FW_DIR_DEFAULT = os.path.join("components", "obd_chip_manager", "obd_fw")
 
 
@@ -184,10 +196,15 @@ def wait_job(ip, budget_s, min_age_s=3):
 
 
 def wait_ready(ip, budget_s):
+    """Ready and unclaimed on two reads a second apart: the update job's own
+    bring-up begins a moment after its last record, and one read in that
+    moment still says ready, with the version of before (2026-11-21)."""
     t0 = time.time()
+    seen = 0
     while time.time() - t0 < budget_s:
         d, _ = fw_update(ip)
-        if d is not None and d["ready"] and d["claim"] == "none":
+        seen = seen + 1 if (d is not None and d["ready"] and d["claim"] == "none") else 0
+        if seen >= 2:
             return d
         time.sleep(1)
     return None
@@ -260,8 +277,8 @@ def leg_no_force(ip):
 
 def leg_current_skip(ip):
     print("== current-skip ==")
-    st, r = http(ip, "/api/obd_chip/update", "POST", {})
-    check("POST {} -> 202", st == 202, "%s %s" % (st, str(r)[:80]))
+    st, r = http(ip, "/api/obd_chip/update", "POST", ANY_START)
+    check("POST {any_start} -> 202", st == 202, "%s %s" % (st, str(r)[:80]))
     u = wait_job(ip, 60)
     check("job ends ESP_OK with 0 records (chip at the packaged version)",
           u is not None and u["last"] == "ESP_OK" and u["lines"] == 0, json.dumps(u))
@@ -272,8 +289,8 @@ def file_update(ip, name, data, expect_write, label):
     st, r = upload(ip, name, data)
     check("%s: %s uploaded to /data (%d bytes)" % (label, name, len(data)), st in (200, 201),
           "%s %s" % (st, r))
-    st, r = http(ip, "/api/obd_chip/update", "POST", {"path": "/data/" + name})
-    check("%s: POST {path} -> 202" % label, st == 202, "%s %s" % (st, str(r)[:80]))
+    st, r = http(ip, "/api/obd_chip/update", "POST", dict(ANY_START, path="/data/" + name))
+    check("%s: POST {path, any_start} -> 202" % label, st == 202, "%s %s" % (st, str(r)[:80]))
     u = wait_job(ip, 120 if expect_write else 60)
     if expect_write:
         check("%s: every record went out (ESP_OK)" % label,
@@ -331,12 +348,39 @@ def leg_boot_keeps_22(ip):
     check("`obd_chip` prints V2.3.22 and the warning line", "V2.3.22" in ver and "warning:" in out, ver)
 
 
+def leg_power_rule(ip):
+    """Behind leg_boot_keeps_22: the chip on V2.3.22, the start a planned restart."""
+    print("== power-rule ==")
+    d0, u0 = fw_update(ip)
+    fw = fw_of(ip)
+    check("fw.power_on is false behind a planned restart", fw.get("power_on") is False, json.dumps(fw.get("power_on")))
+    st, r = http(ip, "/api/obd_chip/update", "POST", {})
+    try:
+        body = r if isinstance(r, dict) else json.loads(r)     # an error's body comes back as text
+    except ValueError:
+        body = {}
+    check("POST {} -> 409 with power_cycle and the way out in words",
+          st == 409 and body.get("power_cycle") is True and "unplug" in str(body.get("error")),
+          "%s %s" % (st, str(r)[:140]))
+    out = cli(ip, "obd_chip update", 2.0)
+    check("`obd_chip update` is refused with the way out",
+          "did not begin with the power coming on" in out and "--any-start" in out,
+          out.strip().splitlines()[-1][:120] if out.strip() else "")
+    out = cli(ip, "obd_chip", 5)
+    check("`obd_chip`'s warning line names the unplug", "warning:" in out and "unplug the adapter" in out,
+          [l for l in out.splitlines() if "warning:" in l][-1:])
+    d, u = fw_update(ip)
+    check("no job ran (the update state is as before) and the chip is still on V2.3.22",
+          u is not None and not u["running"] and u == u0 and "V2.3.22" in str(fw_of(ip).get("chip")),
+          "%s -> %s" % (json.dumps(u0), json.dumps(u)))
+
+
 def leg_lift(ip, builtin):
     print("== lift (the card's button) ==")
-    st, r = http(ip, "/api/obd_chip/update", "POST", {})
-    check("POST {} -> 202", st == 202, "%s %s" % (st, str(r)[:80]))
-    st, r = http(ip, "/api/obd_chip/update", "POST", {})
-    check("a second POST while running -> 409", st == 409, "%s" % st)
+    st, r = http(ip, "/api/obd_chip/update", "POST", ANY_START)
+    check("POST {any_start} -> 202", st == 202, "%s %s" % (st, str(r)[:80]))
+    st, r = http(ip, "/api/obd_chip/update", "POST", ANY_START)
+    check("a second POST while running -> 409 (already running)", st == 409 and "running" in str(r), "%s %s" % (st, str(r)[:60]))
     seen_running = False
     t0 = time.time()
     while time.time() - t0 < 60:
@@ -360,23 +404,28 @@ def leg_lift(ip, builtin):
 
 
 def leg_interrupted(ip, builtin, fw24, at):
-    print("== interrupted (restart at %d records) ==" % at)
+    print("== interrupted (a forced restart at %d records) ==" % at)
     st, r = upload(ip, "V2.3.99.txt", fw24)
     check("the packaged image uploaded as V2.3.99.txt (%d bytes)" % len(fw24), st in (200, 201),
           "%s %s" % (st, r))
-    out = cli(ip, "obd_chip update --file /data/V2.3.99.txt", 1.0)
+    out = cli(ip, "obd_chip update --file /data/V2.3.99.txt --any-start", 1.0)
     check("console update started", "update started" in out, out.splitlines()[0] if out else "")
     sent = False
     t0 = time.time()
     while time.time() - t0 < 60:
         d, u = fw_update(ip)
         if u and u["running"] and u["lines"] >= at:
+            # the device keeps itself up while the chip is written
+            # (2026-11-21): a restart is refused and says why. `force` is
+            # the support word, and the bench's way to cut a write on purpose
             st, r = http(ip, "/api/restart", "POST", {}, timeout=4)
+            check("a restart asked for mid-stream is refused: 409 and why", st == 409 and "chip" in str(r), "%s %s" % (st, str(r)[:120]))
+            st, r = http(ip, "/api/restart", "POST", {"force": True}, timeout=4)
             sent = st == 200
-            print("%s restart at %d/%d -> %s" % (now(), u["lines"], u["total"], st))
+            print("%s forced restart at %d/%d -> %s" % (now(), u["lines"], u["total"], st))
             break
         time.sleep(0.1)
-    if not check("restart sent mid-stream", sent):
+    if not check("forced restart sent mid-stream", sent):
         return
     gone = wait_down(ip, 20)
     came = wait_up(ip, 150)
@@ -396,7 +445,7 @@ def leg_interrupted(ip, builtin, fw24, at):
 
 def leg_sleep_waits(ip, builtin):
     print("== sleep-waits ==")
-    out = cli(ip, "obd_chip update --file /data/V2.3.99.txt", 1.0)
+    out = cli(ip, "obd_chip update --file /data/V2.3.99.txt --any-start", 1.0)
     check("console update started (sleep leg)", "update started" in out)
     armed = False
     t0 = time.time()
@@ -474,6 +523,7 @@ def main():
         leg_same_and_older(ip, builtin, fw24, fw22)
         leg_to_22(ip, fw22)
         leg_boot_keeps_22(ip)
+        leg_power_rule(ip)
         leg_lift(ip, builtin)
         leg_interrupted(ip, builtin, fw24, at)
         if not skip_sleep:

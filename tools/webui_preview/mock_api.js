@@ -667,7 +667,10 @@
          stream of 3557 records over diag.updateMs (3000 by default), then the
          chip is away for a second (its fresh bring-up) and reads the packaged
          version; diag.updateFail = "ESP_ERR_TIMEOUT" ends the stream at record
-         1248 with that error and the chip stays on V2.3.22 */
+         1248 with that error and the chip stays on V2.3.22. Since
+         2026-11-21 `fw.power_on` (this start began with the power coming
+         on: true unless diag.noPowerOn), and the update route refuses with
+         409 + power_cycle in any other start */
       const job = state.diagJob; const el = job ? Date.now() - job.t0 : -1; const ms = typeof d.updateMs === "number" ? d.updateMs : 3000;
       const streaming = !!job && el < ms; const restarting = !!job && !d.updateFail && el >= ms && el < ms + 1000; const lifted = !!job && !d.updateFail && el >= ms;
       const chip22 = !!d.chip22 && !lifted;
@@ -675,8 +678,11 @@
         eeprom_guard: { rewrites: 0, blocked: 0, protocol_saves: 0, memory_off: 1, app_resets: 0, hidden_bytes: 0, pp_restores: 0, memory_refused: 0, requests_held: 0, switch_owed: false, protocol_kept: 0, stored_protocol: "6" },
         uart: { rx_bytes: 18, rx_chunks: 1, rx_max_chunk: 18, rx_overflows: 0, rx_buffered: down ? 34 : 0, tx_bytes: 212 },
         fw: { builtin: "V2.3.24", current: "V2.3.22, V2.3.24", chip: down ? "" : d.damaged ? "ERR (stored identity damaged)" : (chip22 ? "MIC3624 V2.3.22" : "MIC3624 V2.3.24"),
-          outdated: !down && chip22 && !d.damaged, damaged: !down && !!d.damaged,
-          update: streaming ? { running: true, lines: Math.round(3557 * el / ms), total: 3557, source: "builtin V2.3.24", done: false, last: "" }
+          outdated: !down && chip22 && !d.damaged, damaged: !down && !!d.damaged, power_on: !d.noPowerOn,
+          /* a chip that is down never answered the start-up's version
+             question: nothing written, `no_answer` (2026-11-21) */
+          update: down ? { running: false, lines: 0, total: 3557, source: "builtin V2.3.24", done: true, last: "ESP_ERR_TIMEOUT", no_answer: true }
+                : streaming ? { running: true, lines: Math.round(3557 * el / ms), total: 3557, source: "builtin V2.3.24", done: false, last: "" }
                 : (job && d.updateFail) ? { running: false, lines: 1248, total: 3557, source: "builtin V2.3.24", done: true, last: d.updateFail }
                 : d.updating ? { running: true, lines: 1500, total: 3557, source: "builtin V2.3.24", done: false, last: "" }
                              : { running: false, lines: 3557, total: 3557, source: "builtin V2.3.24", done: true, last: "ESP_OK" } },
@@ -976,6 +982,8 @@
       /* no force since 2026-11-01 (Ali): the device refuses it, and the
          probe proves the page never sends it */
       if (body && body.force) { state.diagForced = (state.diagForced || 0) + 1; return J({ error: "force is not supported: the chip is written only when the image is newer than its firmware" }, 400); }
+      /* 2026-11-21: only in a start that began with the power coming on */
+      if (((window.__mockPreset && window.__mockPreset.diag) || {}).noPowerOn && !(body && body.any_start)) { state.diagRefused = (state.diagRefused || 0) + 1; return J({ error: "the chip is updated only in a start that began with the power coming on: unplug the adapter, wait one minute and plug it back in", power_cycle: true }, 409); }
       state.diagUpdates = (state.diagUpdates || 0) + 1;
       /* the job (2026-11-08): one at a time, animated by GET /api/obd_chip */
       { const d = (window.__mockPreset && window.__mockPreset.diag) || {}; const ms = typeof d.updateMs === "number" ? d.updateMs : 3000;
@@ -997,13 +1005,14 @@
     }
     if (method === "POST" && path === "/api/can/selftest") {
       const d = (window.__mockPreset && window.__mockPreset.diag) || {};
+      state.diagSelftests = (state.diagSelftests || 0) + 1;
       state.diagSelftest = d.selftestRefusal
         ? { running: false, done: true, pass: false, verdict: d.selftestRefusal, refusal: d.selftestRefusal, bus: { baud_kbps: 0, live: false }, esp_heard: false, reply: "none", rpm: -1, took_ms: 3, steps: [], lines: [] }
         : { running: false, done: true, pass: true, verdict: "PASS: both transceivers see each other", refusal: "", bus: { baud_kbps: 500, live: !!d.live }, esp_heard: true, reply: "ours", rpm: 1726, took_ms: 1880,
             steps: [{ name: "The chip asked, the ESP32 heard", ok: true, ms: 6, detail: "the chip sent 7DF 02 01 0C at 500 kbit/s; the ESP32 received it and acknowledged it" },
                     { name: "The ESP32 answered, the chip read it", ok: true, ms: 9, detail: "the ESP32 sent 7EF 04 41 0C 1A F8; the chip printed it: engine speed 1726 rpm, from the ESP32" },
                     { name: "Bus health and clean-up", ok: true, ms: 120, detail: "0 bus error(s), 0 tx error(s); chip restored, AutoPID resumes" }],
-            lines: ["can    listened 412 ms at 500 kbit/s: silent", "chip   ATTP6     OK", "chip   ATH1      OK", "chip   ATSH 7DF  OK", "chip   ATCAF1    OK", "chip   010C  (sent)", "can    rx 7DF [02 01 0C] after 6 ms", "can    tx 7EF [04 41 0C 1A F8]: queued", "chip   printed: 7EF 04 41 0C 1A F8", "chip   ATPC      OK", "chip   ATD       OK"] };
+            lines: ["can    listened 412 ms at 500 kbit/s: silent", "apid   off the chip for the test (40 ms)", "chip   ATD       OK", "chip   ATE0      OK", "chip   ATTP6     OK", "chip   ATH1      OK", "chip   ATSH 7DF  OK", "chip   ATCAF1    OK", "chip   010C  (sent)", "can    rx 7DF [02 01 0C] after 6 ms", "can    tx 7EF [04 41 0C 1A F8]: queued", "chip   printed: 7EF 04 41 0C 1A F8", "chip   ATPC      OK", "chip   ATD       OK"] };
       return J({ started: true }, 202);
     }
 
@@ -1224,7 +1233,11 @@
     }
     if (method === "POST" && path === "/api/autopid/group") { if (body && typeof body.enabled === "boolean") state.groupOn = body.enabled; return J({ ok: true }); }
     if (method === "POST" && path === "/api/settings/submit") return J({ reboot: false });
-    if (method === "POST" && path === "/api/restart") { state.restarts = (state.restarts || 0) + 1; Object.values(S).forEach((x) => { x.pending = false; }); return J({ ok: true }); }
+    if (method === "POST" && path === "/api/restart") {
+      /* refused while the chip's firmware is written (2026-11-21): 409, and nothing restarts */
+      const dj = state.diagJob, dms = (((window.__mockPreset && window.__mockPreset.diag) || {}).updateMs) || 3000;
+      if (dj && Date.now() - dj.t0 < dms) { state.restartsRefused = (state.restartsRefused || 0) + 1; return J({ error: "not now: the OBD chip's firmware is being updated. Try again in a minute" }, 409); }
+      state.restarts = (state.restarts || 0) + 1; Object.values(S).forEach((x) => { x.pending = false; }); return J({ ok: true }); }
     if (method === "POST" && path === "/api/faults/clear") { S.__faults = []; return J({ cleared: true }); }
     if (method === "POST" && path === "/api/vpn/keygen") return J({ public_key: "MockPubKey000000000000000000000000000000000=" });
     if (method === "POST" && path === "/api/autopid/dtc/scan") return J({ started: true }, 202);

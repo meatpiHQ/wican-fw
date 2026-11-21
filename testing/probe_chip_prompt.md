@@ -13,7 +13,7 @@ on chip firmware V2.3.22 the warm start the bring-up sends kills the chip's
 automatic protocol search until a power cycle, so the vehicle detection and
 every app's `ATSP0` fail to find the car; V2.3.24 does not have the fault.
 Ali's fix: the vehicle step of Quick Setup asks for the update first. The
-probe boots `#/setup/vehicle` four times over the mock (`__mockPreset.diag`:
+probe boots the page nine times over the mock (`__mockPreset.diag`:
 `chip22`, `updateMs`, `updateFail`; `POST /api/obd_chip/update` starts a job
 that `GET /api/obd_chip` animates):
 
@@ -39,6 +39,23 @@ that `GET /api/obd_chip` animates):
   progress popup (the banner reads Updating meanwhile), Done, Continue, the
   banner gone and still gone on the next refresh.
 - **F** the Status page with a current chip: no popup, no banner.
+- **G** (2026-11-21, GitHub issue #1075: the update is offered only in a
+  start that began with the power coming on, `fw.power_on`; the mock's
+  `diag.noPowerOn`) the vehicle step in any other start: the other popup
+  (`#chip-fw-unplug`) names both versions and the three steps (unplug WiCAN
+  from the car, wait one minute, plug it back in and open the page again),
+  one button OK and no Update anywhere; the banner says the same in one
+  sentence and has no button (`data-wait="unplug"`); Detect is disabled
+  and stays so with both acknowledgements ticked; OK closes the popup,
+  the banner stays; nothing is posted to the update route.
+- **H** the same on the Status page; the popup is not opened again by the
+  next refresh; then the power "comes on" (the mock's flag flips): the
+  offer opens once, with Update now on the banner (the once-per-session
+  mark is per popup).
+- **I** the offer is on the screen and the device restarts behind the
+  page's back (the flag flips before the click): Update and continue asks
+  the device again, opens the way to a start from power-on instead of the
+  progress popup, the banner follows, and nothing is posted.
 
 The flow is one helper in index.html (`chipFw`: prompt, banner, run, done)
 that the wizard chunk and the Status page share; the popup CSS lives in the
@@ -50,6 +67,12 @@ page since the Status page shows it too.
   with `make_preview.py --min`; later the same day with the Status page
   scenes E and F (40 checks), plain and minified
   (`test-reports/logs/chip_prompt_2026-11-08/probes_round2.log`).
+
+- 2026-11-21, the unplug scenes G, H and I and the mock's `fw.power_on`
+  (the route refuses with 409 and `power_cycle` under `diag.noPowerOn`):
+  `CHIP PROMPT PROBE PASS`, 59 checks, plain and with `make_preview.py
+  --min`. `probe_setup.mjs`, `probe_power.mjs`, `probe_sleep_soon.mjs` and
+  `probe_fw_update.mjs` re-run green on the same page.
 
 ## Traps
 

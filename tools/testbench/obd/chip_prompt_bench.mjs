@@ -23,6 +23,19 @@
      banner   (--legs prompt,banner) a tap beside the popup closes it: the
               banner stays with Update now and Detect stays disabled; Update
               now runs the same job to Done
+     unplug   (2026-11-21, GitHub issue #1075: the update is offered only in
+              a start that began with the power coming on) in a start behind
+              a planned restart the step opens with the other popup: the
+              three steps (unplug, one minute, plug back in), one button OK
+              and no Update; the banner says the same and has no button;
+              Detect stays disabled; the Status page likewise; the device
+              refuses the route (409 with power_cycle)
+
+   The offering legs (prompt, banner, status) need a start from power-on:
+   the bench cuts the DUT's supply once ahead of them (the simulator's
+   output off for a few seconds, on again) and no leg restarts the unit
+   after that. The writes down to
+   V2.3.22 carry the bench's word (`any_start`).
 
    Afterwards: no new E line in the ring, no unexpected reset, the uploaded
    file deleted, the chip on the packaged version (what the bench found, when
@@ -30,7 +43,7 @@
    the Playwright devDependency of tools/webui_preview, and the components
    tree (MEATPI_COMPONENTS_PATH, else the dev layout) for the V2.3.22 image.
 
-   node tools/testbench/obd/chip_prompt_bench.mjs [out dir] [--dut 10.42.1.75] [--port 8089] [--legs prompt,banner] [--fw22 <path>]
+   node tools/testbench/obd/chip_prompt_bench.mjs [out dir] [--dut 10.42.1.75] [--port 8089] [--legs unplug,prompt,banner,status] [--fw22 <path>] [--sim http://10.8.8.1]
    Verdict: CHIP PROMPT PASS / CHIP PROMPT FAIL: <names>. */
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
@@ -47,6 +60,7 @@ const PORT = Number(arg("--port", "8089"));
 const LEGS = arg("--legs", "prompt").split(",").map((s) => s.trim()).filter(Boolean);
 const compRoot = process.env.MEATPI_COMPONENTS_PATH || join(here, "..", "..", "..", "..", "..", "components", "meatpi-components", "components");
 const FW22 = arg("--fw22", join(compRoot, "obd_chip_manager", "obd_fw", "V2.3.22.txt"));
+const SIM = arg("--sim", process.env.WICAN_SIM_URL || "http://10.8.8.1");   /* the DUT's supply: ECU sim v2 */
 const out = (process.argv[2] && !process.argv[2].startsWith("--")) ? process.argv[2] : "shots_chip_prompt";
 const base = `http://127.0.0.1:${PORT}`;
 mkdirSync(out, { recursive: true });
@@ -84,14 +98,47 @@ async function putChipOn22(label) {
   if (s0 && verOf(s0.fw && s0.fw.chip) === "V2.3.22") { say(label, "the chip is already on V2.3.22"); return true; }
   const st = upload("/data/V2.3.99.txt", FW22);
   check(`${label}: the V2.3.22 image uploaded as /data/V2.3.99.txt (${st})`, st === 200 || st === 201);
-  const r = await send("POST", "/api/obd_chip/update", { path: "/data/V2.3.99.txt" });
-  check(`${label}: the write to V2.3.22 started (${r.status})`, r.status === 202, r.body);
+  const r = await send("POST", "/api/obd_chip/update", { path: "/data/V2.3.99.txt", any_start: true });
+  check(`${label}: the write to V2.3.22 started with the bench's word (${r.status})`, r.status === 202, r.body);
   await sleep(3000);
   const s1 = await waitChip(`${label}: the stream to V2.3.22 ends`, (s) => !(s.fw && s.fw.update && s.fw.update.running), 120000);
   const s2 = await waitChip(`${label}: the chip back on V2.3.22, outdated`, (s) => s.ready && verOf(s.fw && s.fw.chip) === "V2.3.22" && s.fw.outdated === true, 60000);
   const del = await send("DELETE", "/api/fs/file?path=/data/V2.3.99.txt");
   check(`${label}: the uploaded file deleted (${del.status})`, del.status === 200);
   return !!(s1 && s2 && s2.fw && s2.fw.outdated);
+}
+
+/* a start from power-on: the simulator's output off for a few seconds, on
+   again, the DUT up. (Until the simulator firmware of 2026-11-21 the output
+   came back by itself: a program on this PC reset the simulator at every
+   cut, and its boot switched the output on. It stays off now until asked.) */
+const simPower = async (on) => { try { await fetch(SIM + "/api/power", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ output: on }), signal: AbortSignal.timeout(6000) }); return true; } catch (e) { return false; } };
+async function powerOnStart(label) {
+  const s0 = await chipState();
+  if (s0 && s0.fw && s0.fw.power_on === true) { say(label, "this start began with the power coming on already"); return true; }
+  await simPower(false);
+  await sleep(4000);
+  let gone = false;
+  for (let i = 0; i < 20 && !gone; i++) { gone = !(await getJ("/api/info", 1500)); if (!gone) await sleep(500); }
+  check(`${label}: the supply went away (the DUT stopped answering)`, gone);
+  /* on again, asked for; a simulator that is restarting at this moment (its
+     older firmware, or a reset by the PC) takes the request a few seconds later */
+  let on = false;
+  for (let i = 0; i < 12 && !on; i++) { on = await simPower(true); if (!on) await sleep(2000); }
+  check(`${label}: the supply switched on again`, on);
+  await waitBack(`${label}: after the power cut`);
+  const s = await waitChip(`${label}: the chip up in a start from power-on`, (x) => x.ready && x.fw && x.fw.power_on === true, 90000);
+  return !!s;
+}
+/* a start that is NOT one from power-on: a planned restart when needed */
+async function plainStart(label) {
+  const s0 = await chipState();
+  if (s0 && s0.fw && s0.fw.power_on === false) return true;
+  await send("POST", "/api/restart", {});
+  await sleep(6000);
+  await waitBack(`${label}: after the planned restart`);
+  const s = await waitChip(`${label}: the chip up in a start behind a restart`, (x) => x.ready && x.fw && x.fw.power_on === false, 90000);
+  return !!s;
 }
 
 const tun = spawn("ssh", ["-N", "-L", `127.0.0.1:${PORT}:${DUT}:80`, "rpi001"], { stdio: "ignore" });
@@ -106,7 +153,7 @@ try {
   const builtin = st0 && st0.fw.builtin;
   say("as found: chip", found, "device carries", builtin);
   const e0 = (await eLines()).length;
-  const u0 = await unexpected();
+  let u0 = await unexpected();
   writeFileSync(`${out}/as_found_chip.json`, JSON.stringify(st0, null, 1));
 
   browser = await chromium.launch({ channel: "chrome" });
@@ -156,7 +203,40 @@ try {
     check(`${label}: the chip on ${builtin}, ready, not outdated`, !!(s && s.ready && verOf(s.fw.chip) === builtin && s.fw.outdated === false), s && s.fw);
   };
 
-  if (LEGS.includes("prompt")) {
+  if (LEGS.includes("unplug")) {
+    /* 2026-11-21: no offer in a start that did not begin with the power
+       coming on; the way to one instead */
+    const L = "unplug";
+    if (await putChipOn22(L) && await plainStart(L)) {
+      await openStep(L);
+      const m = await modalText();
+      check(`${L}: the popup names both versions and the three steps`, /needs a firmware update/.test(m) && /V2\.3\.22/.test(m) && new RegExp(builtin.replace(/\./g, "\\.")).test(m) && /Unplug WiCAN from the car/.test(m) && /Wait one minute/.test(m) && /Plug it back in/.test(m), m.slice(0, 260));
+      const acts = await page.evaluate(() => [...document.querySelectorAll("#modal-root .acts button")].map((b) => b.textContent.trim()));
+      check(`${L}: one button, OK, and no Update`, acts.length === 1 && acts[0] === "OK" && !/Update and continue/.test(m), acts);
+      check(`${L}: Detect my vehicle disabled`, (await detectDisabled()) === true);
+      const ban = await page.evaluate(() => { const b = document.querySelector("#qs-chip-banner"); return b ? { wait: b.getAttribute("data-wait"), buttons: b.querySelectorAll("button").length, text: b.textContent } : null; });
+      check(`${L}: the banner behind says the same and has no button`, !!ban && ban.wait === "unplug" && ban.buttons === 0 && /Unplug WiCAN from the car, wait one minute and plug it back in/.test(ban.text), ban);
+      await shot(`${L}_popup`);
+      await page.click('#modal-root .acts button:has-text("OK")'); await sleep(400);
+      check(`${L}: OK closes the popup, the banner stays`, !/needs a firmware update/.test(await modalText()) && (await hasBanner()));
+      await newPage();
+      await page.goto(base + "/#/status"); await sleep(4000);
+      const ms = await modalText();
+      const sb = await page.evaluate(() => { const b = document.querySelector("#chip-fw-banner"); return b ? { wait: b.getAttribute("data-wait"), buttons: b.querySelectorAll("button").length } : null; });
+      check(`${L}: the Status page shows the same popup and a banner with no button`, /Unplug WiCAN from the car/.test(ms) && !/Update and continue/.test(ms) && !!sb && sb.wait === "unplug" && sb.buttons === 0, { banner: sb, modal: ms.slice(0, 120) });
+      await shot(`${L}_status`);
+      const r = await send("POST", "/api/obd_chip/update", {});
+      check(`${L}: the device refuses the route in this start (409 with power_cycle)`, r.status === 409 && /power_cycle/.test(JSON.stringify(r.body)), r.body);
+      const s = await chipState();
+      check(`${L}: the chip is untouched (V2.3.22, ready)`, !!(s && s.ready && verOf(s.fw.chip) === "V2.3.22"), s && s.fw);
+    }
+  }
+  /* the offer needs a start from power-on: one cut, and no leg restarts the
+     unit behind it (a leg's write down to V2.3.22 leaves the start as it is) */
+  const offering = LEGS.some((l) => ["prompt", "banner", "status"].includes(l));
+  const offered = offering ? await powerOnStart("power") : true;
+  if (offering) u0 = await unexpected();   /* a power cut starts the count again */
+  if (LEGS.includes("prompt") && offered) {
     const L = "prompt";
     if (await putChipOn22(L)) {
       await openStep(L);
@@ -171,7 +251,7 @@ try {
       await runUpdate(L, "Update and continue");
     }
   }
-  if (LEGS.includes("banner")) {
+  if (LEGS.includes("banner") && offered) {
     const L = "banner";
     if (await putChipOn22(L)) {
       await openStep(L);
@@ -187,7 +267,7 @@ try {
     }
   }
 
-  if (LEGS.includes("status")) {
+  if (LEGS.includes("status") && offered) {
     /* the Status page (Ali, 2026-11-08: a device set up before never re-runs
        the wizard): the same popup and banner, the same job */
     const L = "status";

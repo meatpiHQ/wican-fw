@@ -2800,7 +2800,10 @@
          stream of 3557 records over diag.updateMs (3000 by default), then the
          chip is away for a second (its fresh bring-up) and reads the packaged
          version; diag.updateFail = "ESP_ERR_TIMEOUT" ends the stream at record
-         1248 with that error and the chip stays on V2.3.22 */
+         1248 with that error and the chip stays on V2.3.22. Since
+         2026-11-21 `fw.power_on` (this start began with the power coming
+         on: true unless diag.noPowerOn), and the update route refuses with
+         409 + power_cycle in any other start */
       const job = state.diagJob; const el = job ? Date.now() - job.t0 : -1; const ms = typeof d.updateMs === "number" ? d.updateMs : 3000;
       const streaming = !!job && el < ms; const restarting = !!job && !d.updateFail && el >= ms && el < ms + 1000; const lifted = !!job && !d.updateFail && el >= ms;
       const chip22 = !!d.chip22 && !lifted;
@@ -2808,8 +2811,11 @@
         eeprom_guard: { rewrites: 0, blocked: 0, protocol_saves: 0, memory_off: 1, app_resets: 0, hidden_bytes: 0, pp_restores: 0, memory_refused: 0, requests_held: 0, switch_owed: false, protocol_kept: 0, stored_protocol: "6" },
         uart: { rx_bytes: 18, rx_chunks: 1, rx_max_chunk: 18, rx_overflows: 0, rx_buffered: down ? 34 : 0, tx_bytes: 212 },
         fw: { builtin: "V2.3.24", current: "V2.3.22, V2.3.24", chip: down ? "" : d.damaged ? "ERR (stored identity damaged)" : (chip22 ? "MIC3624 V2.3.22" : "MIC3624 V2.3.24"),
-          outdated: !down && chip22 && !d.damaged, damaged: !down && !!d.damaged,
-          update: streaming ? { running: true, lines: Math.round(3557 * el / ms), total: 3557, source: "builtin V2.3.24", done: false, last: "" }
+          outdated: !down && chip22 && !d.damaged, damaged: !down && !!d.damaged, power_on: !d.noPowerOn,
+          /* a chip that is down never answered the start-up's version
+             question: nothing written, `no_answer` (2026-11-21) */
+          update: down ? { running: false, lines: 0, total: 3557, source: "builtin V2.3.24", done: true, last: "ESP_ERR_TIMEOUT", no_answer: true }
+                : streaming ? { running: true, lines: Math.round(3557 * el / ms), total: 3557, source: "builtin V2.3.24", done: false, last: "" }
                 : (job && d.updateFail) ? { running: false, lines: 1248, total: 3557, source: "builtin V2.3.24", done: true, last: d.updateFail }
                 : d.updating ? { running: true, lines: 1500, total: 3557, source: "builtin V2.3.24", done: false, last: "" }
                              : { running: false, lines: 3557, total: 3557, source: "builtin V2.3.24", done: true, last: "ESP_OK" } },
@@ -3109,6 +3115,8 @@
       /* no force since 2026-11-01 (Ali): the device refuses it, and the
          probe proves the page never sends it */
       if (body && body.force) { state.diagForced = (state.diagForced || 0) + 1; return J({ error: "force is not supported: the chip is written only when the image is newer than its firmware" }, 400); }
+      /* 2026-11-21: only in a start that began with the power coming on */
+      if (((window.__mockPreset && window.__mockPreset.diag) || {}).noPowerOn && !(body && body.any_start)) { state.diagRefused = (state.diagRefused || 0) + 1; return J({ error: "the chip is updated only in a start that began with the power coming on: unplug the adapter, wait one minute and plug it back in", power_cycle: true }, 409); }
       state.diagUpdates = (state.diagUpdates || 0) + 1;
       /* the job (2026-11-08): one at a time, animated by GET /api/obd_chip */
       { const d = (window.__mockPreset && window.__mockPreset.diag) || {}; const ms = typeof d.updateMs === "number" ? d.updateMs : 3000;
@@ -3130,13 +3138,14 @@
     }
     if (method === "POST" && path === "/api/can/selftest") {
       const d = (window.__mockPreset && window.__mockPreset.diag) || {};
+      state.diagSelftests = (state.diagSelftests || 0) + 1;
       state.diagSelftest = d.selftestRefusal
         ? { running: false, done: true, pass: false, verdict: d.selftestRefusal, refusal: d.selftestRefusal, bus: { baud_kbps: 0, live: false }, esp_heard: false, reply: "none", rpm: -1, took_ms: 3, steps: [], lines: [] }
         : { running: false, done: true, pass: true, verdict: "PASS: both transceivers see each other", refusal: "", bus: { baud_kbps: 500, live: !!d.live }, esp_heard: true, reply: "ours", rpm: 1726, took_ms: 1880,
             steps: [{ name: "The chip asked, the ESP32 heard", ok: true, ms: 6, detail: "the chip sent 7DF 02 01 0C at 500 kbit/s; the ESP32 received it and acknowledged it" },
                     { name: "The ESP32 answered, the chip read it", ok: true, ms: 9, detail: "the ESP32 sent 7EF 04 41 0C 1A F8; the chip printed it: engine speed 1726 rpm, from the ESP32" },
                     { name: "Bus health and clean-up", ok: true, ms: 120, detail: "0 bus error(s), 0 tx error(s); chip restored, AutoPID resumes" }],
-            lines: ["can    listened 412 ms at 500 kbit/s: silent", "chip   ATTP6     OK", "chip   ATH1      OK", "chip   ATSH 7DF  OK", "chip   ATCAF1    OK", "chip   010C  (sent)", "can    rx 7DF [02 01 0C] after 6 ms", "can    tx 7EF [04 41 0C 1A F8]: queued", "chip   printed: 7EF 04 41 0C 1A F8", "chip   ATPC      OK", "chip   ATD       OK"] };
+            lines: ["can    listened 412 ms at 500 kbit/s: silent", "apid   off the chip for the test (40 ms)", "chip   ATD       OK", "chip   ATE0      OK", "chip   ATTP6     OK", "chip   ATH1      OK", "chip   ATSH 7DF  OK", "chip   ATCAF1    OK", "chip   010C  (sent)", "can    rx 7DF [02 01 0C] after 6 ms", "can    tx 7EF [04 41 0C 1A F8]: queued", "chip   printed: 7EF 04 41 0C 1A F8", "chip   ATPC      OK", "chip   ATD       OK"] };
       return J({ started: true }, 202);
     }
 
@@ -3357,7 +3366,11 @@
     }
     if (method === "POST" && path === "/api/autopid/group") { if (body && typeof body.enabled === "boolean") state.groupOn = body.enabled; return J({ ok: true }); }
     if (method === "POST" && path === "/api/settings/submit") return J({ reboot: false });
-    if (method === "POST" && path === "/api/restart") { state.restarts = (state.restarts || 0) + 1; Object.values(S).forEach((x) => { x.pending = false; }); return J({ ok: true }); }
+    if (method === "POST" && path === "/api/restart") {
+      /* refused while the chip's firmware is written (2026-11-21): 409, and nothing restarts */
+      const dj = state.diagJob, dms = (((window.__mockPreset && window.__mockPreset.diag) || {}).updateMs) || 3000;
+      if (dj && Date.now() - dj.t0 < dms) { state.restartsRefused = (state.restartsRefused || 0) + 1; return J({ error: "not now: the OBD chip's firmware is being updated. Try again in a minute" }, 409); }
+      state.restarts = (state.restarts || 0) + 1; Object.values(S).forEach((x) => { x.pending = false; }); return J({ ok: true }); }
     if (method === "POST" && path === "/api/faults/clear") { S.__faults = []; return J({ cleared: true }); }
     if (method === "POST" && path === "/api/vpn/keygen") return J({ public_key: "MockPubKey000000000000000000000000000000000=" });
     if (method === "POST" && path === "/api/autopid/dtc/scan") return J({ started: true }, 202);
@@ -4377,7 +4390,7 @@ async function api(path,opts={}){
   const res=await fetch(API+path,o);
   const ct=res.headers.get("content-type")||"";
   let data; if(ct.includes("json")){try{data=await res.json();}catch{data=null;}} else data=await res.text();
-  if(!res.ok)throw new Error((data&&data.error)?data.error:(typeof data==="string"&&data)||("HTTP "+res.status));
+  if(!res.ok){const er=new Error((data&&data.error)?data.error:(typeof data==="string"&&data)||("HTTP "+res.status));er.status=res.status;throw er;}
   return data;
 }
 async function tryGet(p){try{return await api(p);}catch{return null;}}
@@ -4577,7 +4590,7 @@ function sleepHoldText(){
   const st=sleepSoon.st;if(!st||typeof st.holds_left!=="number")return"";
   /* a log read in progress (the Home Assistant backfill, the dashboard's
      history) pushes the countdown out a minute at a time (2026-11-06) */
-  const act=st.activity_s>0?(st.activity_why==="chip_update"?"Kept awake while the OBD chip firmware is updated. ":"Kept awake while the log is being read. "):"";
+  const act=st.activity_s>0?(st.activity_why==="chip_update"?"Kept awake while the OBD chip firmware is updated. ":st.activity_why==="fw_update"?"Kept awake while the firmware is updated. ":"Kept awake while the log is being read. "):"";
   if(st.hold_s>0)return act+"Kept awake on your request ("+st.holds_left+" of "+st.holds_max+" holds left). ";
   return act+(st.holds_left===0?"Kept awake "+st.holds_max+" times: no further extension. ":"");
 }
@@ -5001,7 +5014,10 @@ function setConn(s,txt){
   else if(prev==="offline"&&s==="online"){refreshSleep();route();}
 }
 async function refreshSettingsList(){const list=await tryGet("/api/settings");if(list&&list.components)conn.settings=list.components;}
-async function restartNow(){try{await api("/api/restart",{method:"POST"});}catch{}expectReboot("Restarting");}
+/* a request that dies with the connection is the restart itself; a 409 is the
+   device saying not now (the OBD chip's firmware is being written,
+   2026-11-21) and nothing restarts */
+async function restartNow(){try{await api("/api/restart",{method:"POST"});}catch(e){if(e&&e.status===409){toast(e.message,"err");return;}}expectReboot("Restarting");}
 function expectReboot(reason="Rebooting"){conn.rebootUntil=Date.now()+95000;setConn("reboot",reason+", waiting for the device…");}
 async function ping(){
   try{const st=await api("/api/status");conn.status=st;
@@ -5601,16 +5617,35 @@ async function networksRowPicker(rows,component,values,info){
    POST /api/obd_chip/update, GET /api/obd_chip for the records written, then
    the chip's own restart) with its progress in a popup that a tap beside it
    does not close, the Done popup, and the banner with the same offer.
-   WiCAN stays awake meanwhile (the sleep entry waits for the job). */
+   WiCAN stays awake meanwhile (the sleep entry waits for the job).
+   Since 2026-11-21 (issue #1075, Ali) the update is offered only in a start
+   that began with the power coming on (GET /api/obd_chip fw.power_on; the
+   device refuses the route otherwise): in any other start the popup and
+   the banner tell the user to unplug WiCAN for a minute, with no button. */
 const chipFw={
   verOf:s=>{const m=/V\d+\.\d+\.\d+/.exec(s||"");return m?m[0]:"";},
   outdated:st=>!!(st&&st.ready&&st.fw&&st.fw.outdated),
+  powerOn:st=>!!(st&&st.fw&&st.fw.power_on),
+  UNPLUG:"Unplug WiCAN from the car, wait one minute and plug it back in",
   now(st){return this.verOf(st&&st.fw&&st.fw.chip)||"an older version";},
   builtin(st){return (st&&st.fw&&st.fw.builtin)||"the packaged version";},
   pop(){const m=document.querySelector("#modal-root .modal");if(m)m.classList.add("qs-pop-modal");return m;},
   /* the offer: one button (Ali: "OK or continue"); a tap beside it closes it */
   prompt(st,onStart){
     const lbl=t=>h("b",{style:"font-weight:600;color:var(--text-2)"},t);
+    if(!this.powerOn(st)){
+      /* not a start from power-on: no offer, the way to one */
+      const step=(n,t)=>h("div",{style:"display:grid;grid-template-columns:22px minmax(0,1fr);gap:8px;align-items:baseline"},h("b",{class:"mono",style:"color:var(--text-2)"},n+"."),h("span",{},t));
+      modal({title:null,body:h("div",{class:"qs-pop",id:"chip-fw-unplug"},h("span",{class:"ci info"},ic("cpu")),
+        h("div",{style:"min-width:0"},h("h3",{},"The OBD chip needs a firmware update"),
+          h("p",{},"The chip in this WiCAN runs firmware "+this.now(st)+", this WiCAN carries "+this.builtin(st)+". The update is offered right after WiCAN has been powered on:"),
+          h("div",{style:"display:grid;gap:6px;margin:4px 0 12px;padding:12px 14px;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;font-size:13.5px"},
+            step(1,"Unplug WiCAN from the car."),step(2,"Wait one minute."),step(3,"Plug it back in and open this page again.")),
+          h("p",{class:"help"},"The chip starts fresh when the power comes on, with nothing in progress on it: that is when it is updated. Your settings are not touched."))),
+        actions:[{label:"OK",kind:"pri",fn:null}]});
+      this.pop();
+      return;
+    }
     modal({title:null,body:h("div",{class:"qs-pop"},h("span",{class:"ci info"},ic("cpu")),
       h("div",{style:"min-width:0"},h("h3",{},"The OBD chip needs a firmware update"),
         h("p",{},"The chip in this WiCAN runs firmware "+this.now(st)+". On that version the automatic protocol search stops working after a restart, so apps and the vehicle detection cannot find the car until the device is unplugged. This WiCAN carries "+this.builtin(st)+", which does not have the fault."),
@@ -5623,6 +5658,10 @@ const chipFw={
   /* the banner with the same offer; cs = {state, err, tries} of the caller */
   banner(st,cs,onClick,id){
     const failed=cs.state==="failed";
+    if(!this.powerOn(st)&&cs.state!=="running"){
+      return h("div",{class:"banner warn",id,"data-wait":"unplug",style:"display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:12px"},ic("alert"),
+        h("div",{},h("b",{},"The OBD chip needs a firmware update. "),"The chip runs "+this.now(st)+", this WiCAN carries "+this.builtin(st)+". "+this.UNPLUG+": the update is offered here then."));
+    }
     return h("div",{class:"banner "+(failed?"crit":"warn"),id,style:"display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:12px"},ic("alert"),
       h("div",{},...(failed
         ?[h("b",{},"The chip firmware update did not finish. "),"The attempt ended with "+cs.err+". Try again: an interrupted write is completed by the next attempt."+(cs.tries>=2?" If it fails again, unplug WiCAN for ten seconds, plug it back in and try once more.":"")+" The chip still runs "+this.now(st)+"; its automatic protocol search stays broken until it is on "+this.builtin(st)+"."]
@@ -5631,6 +5670,11 @@ const chipFw={
   },
   /* the job with its progress popup; resolves {ok:true, st} or {ok:false, why} */
   async run(st0){
+    /* the page's copy may be from before a restart: asked again, and no
+       popup when this start is not one from power-on (the caller shows
+       the way to one) */
+    const fresh=await tryGet("/api/obd_chip");
+    if(fresh&&!this.powerOn(fresh))return {ok:false,wait:true,st:fresh};
     const builtin=this.builtin(st0);
     const bar=h("i",{style:"display:block;height:100%;width:0;background:var(--primary);border-radius:6px;transition:width .3s"});
     const line=h("span",{},"Starting the update…"),pct=h("span",{class:"mono",style:"font-weight:600"},"");
@@ -5799,7 +5843,7 @@ function buildMenu(active,sub){
     el.append(h("div",{class:"nav-warn"},
       h("div",{class:"nw-h"},ic("alert"),h("span",{},"Restart pending")),
       h("div",{class:"nw-b"},niceList(pending)+" changed: ",
-        h("a",{href:"#",onclick:async e=>{e.preventDefault();if(await confirmModal("Restart WiCAN now?","Reboot")){try{await api("/api/restart",{method:"POST"});}catch{}expectReboot("Restarting");}}},"reboot to apply"),".")));
+        h("a",{href:"#",onclick:async e=>{e.preventDefault();if(await confirmModal("Restart WiCAN now?","Reboot"))await restartNow();}},"reboot to apply"),".")));
 }
 function niceList(names){return names.slice(0,3).map(niceName).join(", ")+(names.length>3?" +"+(names.length-3):"");}
 let cleanup=null,curSection=null;
@@ -6073,6 +6117,7 @@ PAGES.status=async(view)=>{
     if(cs.state==="running")return;
     cs.state="running";cs.err="";paintChip();
     const r=await chipFw.run(chipSt);
+    if(r.wait){cs.state="unknown";chipSt=r.st;paintChip();chipFw.prompt(r.st,startChip);return;}
     if(!r.ok){cs.state="failed";cs.err=r.why;cs.tries++;paintChip();return;}
     chipSt=r.st;cs.state="done";paintChip();chipFw.done(r.st,null);
   }
@@ -6081,8 +6126,11 @@ PAGES.status=async(view)=>{
     const s=await tryGet("/api/obd_chip");if(!s)return;
     chipSt=s;paintChip();
     if(chipFw.outdated(s)&&cs.state==="unknown"){
-      let seen=false;try{seen=sessionStorage.getItem(chipKey)==="1";}catch(_){}
-      if(!seen){try{sessionStorage.setItem(chipKey,"1");}catch(_){}chipFw.prompt(s,startChip);}
+      /* once per browser session for each of the two popups: the way to
+         the offer, then, after the power came on, the offer itself */
+      const mark=chipFw.powerOn(s)?"offer":"unplug";
+      let seen=false;try{seen=sessionStorage.getItem(chipKey)===mark;}catch(_){}
+      if(!seen){try{sessionStorage.setItem(chipKey,mark);}catch(_){}chipFw.prompt(s,startChip);}
     }
   }
   /* this boot's cause is fixed for the whole boot, fetched once, not every refresh */
@@ -9126,7 +9174,7 @@ PAGES.system=async(view,sub)=>{
       actions:[{label:"Close"}]});}},"Restart History");
   paneMaint.append(card("Maintenance","refresh",
     h("div",{class:"rowflex",style:"flex-wrap:wrap;gap:10px"},
-      h("button",{class:"btn sm",onclick:async()=>{if(await confirmModal("Restart WiCAN now?","Reboot")){try{await api("/api/restart",{method:"POST"});}catch{}expectReboot("Restarting");}},},ic("refresh"),"Reboot"),
+      h("button",{class:"btn sm",onclick:async()=>{if(await confirmModal("Restart WiCAN now?","Reboot"))await restartNow();},},ic("refresh"),"Reboot"),
       histBtn,
       h("button",{class:"btn sm",title:"Start over with the first-run wizard: nothing is deleted by itself",onclick:()=>{location.hash="#/setup";}},ic("sparkles"),"Run Quick Setup again"),
       h("button",{class:"btn sm danger",onclick:async()=>{
@@ -12705,6 +12753,7 @@ SCREENS.vehicle=async()=>{
     if(W.chip.state==="running")return;
     W.chip.state="running";W.chip.err="";render();
     const r=await chipFw.run(D.chip);
+    if(r.wait){W.chip.state="unknown";D.chip=r.st;render();chipFw.prompt(r.st,startChipUpdate);return;}
     if(!r.ok){chipFailed(r.why);return;}
     D.chip=r.st;W.chip.state="done";render();
     chipFw.done(r.st,()=>render());
@@ -14038,7 +14087,10 @@ async function chipCard(){
       s.ready?chip("ready at "+fmtBaud(s.baud)+" baud","ok"):chip("chip not up","warn"),
       fw.damaged?chip("stored identity damaged","crit"):ver?chip("firmware "+ver,fw.outdated?"warn":"ok"):null,
       chip("device carries "+(fw.builtin||"-"),""),
-      up.running?chip("update running","info"):up.done&&up.last&&up.last!=="ESP_OK"?chip("last update: "+up.last,"warn"):null);
+      /* a chip that never answered its version question was not written:
+         that is no failed update, and "last update: ESP_ERR_TIMEOUT" read as
+         one (issue #1075; Ali, 2026-11-21: say it in words) */
+      up.running?chip("update running","info"):up.done&&up.no_answer?chip("not checked: the chip did not answer","warn"):up.done&&up.last&&up.last!=="ESP_OK"?chip("last update: "+up.last,"warn"):null);
     const wire=(s.bringup&&s.bringup.wire)||[];
     if(!s.ready){
       const b=banner("warn","alert",h("span",{},h("b",{},"The chip did not come up at this start. "),"The bring-up saw: "+(wire.length?wireWords(wire):"nothing recorded")+". Open the wire tools below to see what the chip sends."));
@@ -14050,6 +14102,11 @@ async function chipCard(){
          one. */
       const b=banner("crit","alert",h("span",{},h("b",{},"The OBD chip's stored identity is damaged. "),"The chip still works, but it lost what it stores about itself (its name, its version, its serial number). WiCAN uses it as it is and does not rewrite its firmware: a rewrite cannot repair it. Please contact MeatPi support and include the chip configuration below."));
       b.style.marginTop="10px";noteRow.replaceChildren(b);
+    }else if(fw.outdated&&!up.running&&!fw.power_on){
+      /* issue #1075 (2026-11-21): offered only in a start that began with
+         the power coming on; the device refuses the route otherwise */
+      noteRow.replaceChildren(h("div",{class:"banner warn","data-wait":"unplug",style:"display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:10px;margin-top:10px"},ic("alert"),
+        h("div",{},h("b",{},"A newer chip firmware is available. "),"The chip runs "+(ver||"an older version")+", this device carries "+(fw.builtin||"a newer image")+". Unplug WiCAN from the car, wait one minute and plug it back in: the update is offered here then.")));
     }else if(fw.outdated&&!up.running){
       updBtn.textContent="Update to "+(fw.builtin||"the packaged image");
       noteRow.replaceChildren(h("div",{class:"banner warn",style:"display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:10px;margin-top:10px"},ic("alert"),
@@ -14149,6 +14206,10 @@ async function selftestCard(){
   render(await tryGet("/api/can/selftest"));
   const runBtn=h("button",{class:"btn pri sm",type:"button",onclick:async()=>{
     runBtn.disabled=true;
+    /* AutoPID is polling: the test takes it off the chip for its two
+       seconds, and the user is told before it does (Ali, 2026-11-21) */
+    const ap=await tryGet("/api/autopid");
+    if(ap&&ap.stats&&ap.stats.running&&!await confirmModal("AutoPID is polling the vehicle. It pauses for the self-test (about 2 seconds) and carries on afterwards.","AutoPID is active")){runBtn.disabled=false;return;}
     try{await api("/api/can/selftest",{method:"POST"});}catch(e){toast(e.message,"err");runBtn.disabled=false;return;}
     render({running:true});
     let r=null;for(let i=0;i<30;i++){await new Promise(res=>setTimeout(res,500));r=await tryGet("/api/can/selftest");if(r&&!r.running)break;}

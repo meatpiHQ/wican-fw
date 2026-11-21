@@ -13,6 +13,15 @@
      C  the job fails (ESP_ERR_TIMEOUT at record 1248): the banner turns red
         with the error and Try again; a second failure adds the unplug advice
      D  a chip on V2.3.24: no popup, no banner, Detect as before
+     G  (2026-11-21, GitHub issue #1075) a start that did not begin with the
+        power coming on (`diag.noPowerOn`): the other popup, the three steps
+        (unplug, one minute, plug back in), one button OK, no Update; the
+        banner says the same with no button; Detect disabled; nothing posted
+     H  the same on the Status page; the popup once per browser session
+     I  the page's copy is from before a restart: the offer is on the
+        screen, the device has restarted meanwhile; Update and continue
+        asks the device again, shows the way to a start from power-on and
+        posts nothing
    Prints `CHIP PROMPT PROBE PASS`. Run after `python make_preview.py`
    (plain and `--min`). */
 import { readFileSync } from "node:fs";
@@ -147,6 +156,55 @@ function boot(preset, url = "http://wican.local/#/setup/vehicle") {
     await sleep(1800);
     check("F: no popup, no banner on the Status page with a current chip", !p.modalOn() && !p.$("#chip-fw-banner") && /Live overview/.test(p.text()));
     check("F: no JS errors", p.errs.length === 0, p.errs);
+  }
+  /* ---- G: not a start from power-on: the way to one, no offer ---- */
+  {
+    const p = boot({ diag: { chip22: true, noPowerOn: true } });
+    await sleep(1500);
+    const m = p.modalText();
+    check("G: the popup names both versions and the three steps", p.modalOn() && !!p.$("#chip-fw-unplug") && /The OBD chip needs a firmware update/.test(m) && /V2\.3\.22/.test(m) && /V2\.3\.24/.test(m) && /Unplug WiCAN from the car\./.test(m) && /Wait one minute\./.test(m) && /Plug it back in and open this page again\./.test(m), m.slice(0, 300));
+    const acts = [...p.d().querySelectorAll("#modal-root .acts button")];
+    check("G: one button, OK, and no Update anywhere", acts.length === 1 && /^OK$/.test(acts[0].textContent.trim()) && !p.modalBtn(/Update/) && !p.btn(/Update now/));
+    const ban = p.$("#qs-chip-banner");
+    check("G: the banner says the same and has no button", !!ban && ban.getAttribute("data-wait") === "unplug" && ban.querySelectorAll("button").length === 0 && /Unplug WiCAN from the car, wait one minute and plug it back in: the update is offered here then\./.test(ban.textContent), ban && ban.textContent);
+    check("G: Detect my vehicle disabled with the chip beside it", p.detect() && p.detect().disabled && /Update the chip first/.test(p.text()));
+    acts[0].click(); await sleep(200);
+    check("G: OK closes the popup, the banner stays", !p.modalOn() && !!p.$("#qs-chip-banner"));
+    p.tick(p.$("#qs-plugged")); p.tick(p.$("#qs-ignition")); await sleep(50);
+    check("G: Detect stays disabled with both acknowledgements ticked", p.detect() && p.detect().disabled);
+    check("G: nothing was posted to the update route", !(p.M().diagUpdates) && !(p.M().diagRefused), [p.M().diagUpdates, p.M().diagRefused]);
+    check("G: no JS errors", p.errs.length === 0, p.errs);
+  }
+  /* ---- H: the same on the Status page ---- */
+  {
+    const p = boot({ diag: { chip22: true, noPowerOn: true } }, "http://wican.local/#/status");
+    await sleep(1800);
+    check("H: the Status page opens with the same popup", /Live overview/.test(p.text()) && p.modalOn() && !!p.$("#chip-fw-unplug") && /Wait one minute\./.test(p.modalText()) && !p.modalBtn(/Update/));
+    const ban = p.$("#chip-fw-banner");
+    check("H: its banner has no button", !!ban && ban.getAttribute("data-wait") === "unplug" && ban.querySelectorAll("button").length === 0, ban && ban.textContent);
+    p.modalBtn(/^OK$/).click(); await sleep(200);
+    await sleep(4600);   /* the page's next refresh */
+    check("H: the popup is not opened again by the next refresh, the banner stays", !p.modalOn() && !!p.$("#chip-fw-banner"));
+    /* the power came on meanwhile: the offer, once */
+    p.w.__mockPreset.diag.noPowerOn = false;
+    const offered = await p.waitFor(() => p.modalOn() && !!p.modalBtn(/Update and continue/), 7000);
+    check("H: after a start from power-on the offer opens, with Update now on the banner", offered && !!p.btn(/Update now/));
+    check("H: nothing was posted", !(p.M().diagUpdates) && !(p.M().diagRefused));
+    check("H: no JS errors", p.errs.length === 0, p.errs);
+  }
+  /* ---- I: the offer on the screen, the device restarted meanwhile ---- */
+  {
+    const p = boot({ diag: { chip22: true, updateMs: 1500 } });
+    await sleep(1500);
+    check("I: the offer", p.modalOn() && !!p.modalBtn(/Update and continue/));
+    p.w.__mockPreset.diag.noPowerOn = true;
+    p.modalBtn(/Update and continue/).click();
+    const way = await p.waitFor(() => !!p.$("#chip-fw-unplug"), 4000);
+    check("I: Update and continue shows the way to a start from power-on instead", way && !/Updating the OBD chip firmware/.test(p.modalText()), p.modalText().slice(0, 120));
+    const ban = p.$("#qs-chip-banner");
+    check("I: the banner follows, with no button", !!ban && ban.getAttribute("data-wait") === "unplug" && ban.querySelectorAll("button").length === 0);
+    check("I: nothing was posted to the update route", !(p.M().diagUpdates) && !(p.M().diagRefused), [p.M().diagUpdates, p.M().diagRefused]);
+    check("I: no JS errors", p.errs.length === 0, p.errs);
   }
   console.log(fails ? "CHIP PROMPT PROBE FAIL (" + fails + ")" : "CHIP PROMPT PROBE PASS");
   process.exit(fails ? 1 : 0);

@@ -11,7 +11,11 @@
    name, the Update button at its right edge, the confirm dialog, the POST
    without force: Ali 2026-10-28 and 2026-11-01), and a chip whose stored
    identity is damaged (issue #1023, 2026-11-12: the red state chip, the
-   banner that says so, no update offered). Prints `DIAG PROBE PASS`. */
+   banner that says so, no update offered). Since 2026-11-21 (Ali): the
+   self-test asks first while AutoPID polls (the popup, Cancel, Continue; no
+   popup when it does not poll), a chip that never answered reads "not
+   checked: the chip did not answer", and a restart asked for while the chip
+   is written is refused with a toast. Prints `DIAG PROBE PASS`. */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -82,7 +86,16 @@ function boot(hash, preset) {
 
     /* the self-test */
     check("not run yet before the first run", !!self && /not run yet/.test(self.textContent) && !self.querySelector("textarea"));
-    p.click(p.btn(self, "Run the self-test")); await sleep(1500);
+    /* AutoPID polls (the mock's default): the popup first (Ali, 2026-11-21) */
+    p.click(p.btn(self, "Run the self-test")); await sleep(400);
+    let am = p.modal();
+    check("AutoPID is polling: a popup says it pauses for the test, and nothing is posted yet", !!am && /AutoPID is active/.test(am.textContent) && /AutoPID is polling the vehicle/.test(am.textContent) && /pauses for the self-test/.test(am.textContent) && !p.w.__mockState.diagSelftests, am && am.textContent.slice(0, 160));
+    p.click(am && p.$$("button", am).find((b) => /^Cancel$/.test(b.textContent.trim()))); await sleep(500);
+    check("Cancel: no test is run and the button is free again", !p.w.__mockState.diagSelftests && /not run yet/.test(self.textContent) && !p.btn(self, "Run the self-test").disabled);
+    p.click(p.btn(self, "Run the self-test")); await sleep(400);
+    am = p.modal();
+    p.click(am && p.$$("button", am).find((b) => /^Continue$/.test(b.textContent.trim()))); await sleep(1500);
+    check("Continue: one test is posted", p.w.__mockState.diagSelftests === 1, p.w.__mockState.diagSelftests);
     check("the run ends in PASS as the verdict chip", /PASS: both transceivers see each other/.test(self.textContent) && p.$$("li", self).length === 0 && p.$$("details", self).length === 0);
     const sta = self.querySelector("textarea");
     check("the result is one copyable block in the console's text", !!sta && /^--- CAN self-test \(\d\d:\d\d:\d\d\) ---\n/.test(sta.value) && /\n\[ok\] The chip asked, the ESP32 heard \(6 ms\)\n     the chip sent 7DF 02 01 0C/.test(sta.value) && /\nexchange:\n/.test(sta.value) && /\n  chip   printed: 7EF 04 41 0C 1A F8\n/.test(sta.value) && /\ntook 1880 ms\n--- end ---$/.test(sta.value), sta && sta.value.slice(0, 160));
@@ -98,6 +111,7 @@ function boot(hash, preset) {
     const chip = p.cardByTitle("OBD chip");
     check("a down chip shows the warning chip and no firmware chip", !!chip && /chip not up/.test(chip.querySelector(".rowflex").textContent) && !/firmware V/.test(chip.querySelector(".rowflex").textContent));
     check("the banner carries the bring-up's wire verdicts and points at the wire tools, not at a rewrite", !!chip && /did not come up at this start/.test(chip.textContent) && /at 2 000 000 baud nothing; at 115 200 baud 2 byte\(s\) without a prompt \(FC 00\)/.test(chip.textContent) && /Open the wire tools below/.test(chip.textContent) && !/Rewrite/.test(chip.textContent), chip && chip.textContent.slice(0, 400));
+    check("a chip that never answered reads 'not checked: the chip did not answer', not a failed update with an error code", !!chip && /not checked: the chip did not answer/.test(chip.querySelector(".rowflex").textContent) && !/last update/.test(chip.textContent) && !/ESP_ERR_TIMEOUT/.test(chip.querySelector(".rowflex").textContent), chip && chip.querySelector(".rowflex").textContent);
     p.click(p.btn(chip, "Read the chip configuration")); await sleep(500);
     check("the report is refused while the chip is down", /Could not read the chip/.test(chip.textContent));
     check("no jsdom errors", p.errs.length === 0, p.errs.slice(0, 2));
@@ -109,12 +123,26 @@ function boot(hash, preset) {
     const p = boot("#/system/maintenance", { diag: { selftestRefusal: "the CAN bus is off: enable it in CAN bus settings" } });
     await sleep(2600);
     const self = p.cardByTitle("CAN self-test");
+    p.w.__mockState.groupOn = false;                 /* AutoPID not polling: no popup */
     p.click(p.btn(self, "Run the self-test")); await sleep(1500);
+    check("AutoPID not polling: the test is posted at once, no popup", p.w.__mockState.diagSelftests === 1 && !p.modal(), p.w.__mockState.diagSelftests);
     check("a refusal is shown as not run with its reason and no block", /not run: the CAN bus is off/.test(self.textContent) && !self.querySelector("textarea"));
     check("no jsdom errors", p.errs.length === 0, p.errs.slice(0, 2));
     p.close();
   }
 
+  /* ---- boot 3b (2026-11-21, issue #1075): a chip on V2.3.22 in a start
+     that did not begin with the power coming on: the way to one, no button ---- */
+  {
+    const p = boot("#/system/maintenance", { diag: { chip22: true, noPowerOn: true } });
+    await sleep(2600);
+    const chip = p.cardByTitle("OBD chip");
+    const ban = chip && chip.querySelector(".banner");
+    check("not a start from power-on: the banner names both versions and the unplug, a minute, plug back in", !!ban && ban.getAttribute("data-wait") === "unplug" && /A newer chip firmware is available/.test(ban.textContent) && /The chip runs V2\.3\.22, this device carries V2\.3\.24/.test(ban.textContent) && /Unplug WiCAN from the car, wait one minute and plug it back in: the update is offered here then\./.test(ban.textContent), ban && ban.textContent);
+    check("not a start from power-on: no Update button on the card", !p.btn(chip, "Update to V2.3.24") && !p.btn(chip, "Update the chip firmware") && !!ban && ban.querySelectorAll("button").length === 0);
+    check("not a start from power-on: nothing posted, no JS errors", !(p.w.__mockState.diagUpdates) && p.errs.length === 0, p.errs);
+    p.close();
+  }
   /* ---- boot 4: a chip left on V2.3.22 ---- */
   {
     const p = boot("#/system/maintenance", { diag: { chip22: true } });
@@ -134,6 +162,13 @@ function boot(hash, preset) {
     p.click(ok); await sleep(400);
     const st = p.w.__mockState || null;
     check("confirming posts the update without force", !!(st && st.diagUpdates === 1 && !st.diagForced), st && [st.diagUpdates, st.diagForced]);
+    /* a restart asked for while the chip is written: the device says not now (2026-11-21) */
+    const maint4 = p.cardByTitle("Maintenance");
+    p.click(p.btn(maint4, "Reboot")); await sleep(300);
+    const rm = p.modal();
+    p.click(rm && p.$$("button", rm).find((b) => /^Continue$/.test(b.textContent.trim()))); await sleep(600);
+    const st2 = p.w.__mockState;
+    check("a restart during the chip write is refused: a toast says why and nothing restarts", st2.restartsRefused === 1 && !st2.restarts && /not now: the OBD chip's firmware is being updated/.test(p.$("#toasts").textContent) && p.$("#offline").style.display !== "flex" && p.$("#offline").dataset.k !== "reboot", [st2.restartsRefused, st2.restarts, p.$("#offline").style.display, p.$("#toasts").textContent.slice(0, 120)]);
     check("no jsdom errors", p.errs.length === 0, p.errs.slice(0, 2));
     p.close();
   }

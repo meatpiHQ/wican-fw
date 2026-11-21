@@ -1,8 +1,8 @@
 # The OBD chip firmware prompt on the device
 
-Command: `.\test.ps1 chipprompt` = `node tools/testbench/obd/chip_prompt_bench.mjs <out dir> --dut <dut ip> --legs prompt,banner,status` (by hand: `[--port 8089] [--fw22 <path>]`; the bench opens its own ssh tunnel to the DUT through rpi001)
+Command: `.\test.ps1 chipprompt` = `node tools/testbench/obd/chip_prompt_bench.mjs <out dir> --dut <dut ip> --legs unplug,prompt,banner,status` (by hand: `[--port 8089] [--fw22 <path>] [--sim http://10.8.8.1]`; the bench opens its own ssh tunnel to the DUT through rpi001)
 
-Needs: the DUT on the bench AP, rpi001, Chrome and the Playwright devDependency of `tools/webui_preview` (`npm install` there once), the components tree for the V2.3.22 image (`MEATPI_COMPONENTS_PATH`, else the dev layout)
+Needs: the DUT on the bench AP, rpi001, the simulator's supply (one power cut ahead of the offering legs, since 2026-11-21), AutoPID off or idle on the unit, Chrome and the Playwright devDependency of `tools/webui_preview` (`npm install` there once), the components tree for the V2.3.22 image (`MEATPI_COMPONENTS_PATH`, else the dev layout)
 
 The index row and the other stages: [../TESTING.md](../TESTING.md).
 
@@ -13,6 +13,22 @@ the chip is put on V2.3.22 the obdfw bench's way (the V2.3.22 image uploaded
 as `/data/V2.3.99.txt`: the firmware's "the name is the version" contract),
 the file deleted afterwards.
 
+- **unplug** (2026-11-21, GitHub issue #1075: the update is offered only in
+  a start that began with the power coming on): in a start behind a
+  planned restart (the bench asks for one when `fw.power_on` is true) the
+  vehicle step opens with the other popup, both versions and the three
+  steps (unplug WiCAN from the car, wait one minute, plug it back in), one
+  button OK and no Update; the banner behind says the same and has no
+  button (`data-wait="unplug"`); Detect is disabled; OK closes the popup
+  and the banner stays; the Status page shows the same popup and a banner
+  with no button; the device refuses `POST /api/obd_chip/update {}` (409
+  with `power_cycle`); the chip is untouched.
+- **the power cut**: the offering legs need a start from power-on. The
+  bench switches the simulator's output off once (the simulator restarts
+  itself and comes back with the output on a few seconds later), waits for
+  the DUT and for `fw.power_on` true, and no leg restarts the unit behind
+  that: a leg's write down to V2.3.22 (with the bench's word `any_start`)
+  leaves the start as it is.
 - **prompt**: the vehicle step opens with the popup (both versions, one
   button), Detect disabled with its chip, the banner behind; Update and
   continue; the progress popup with the records written while the API is
@@ -74,7 +90,31 @@ the out dir (`test-reports/logs/<stamp>/chip_prompt/` from the runner).
   banner gone and still gone on the next refresh, the chip on V2.3.24. 0 new
   E lines, 0 unexpected resets.
 
+- 2026-11-21 15:59, the build with the power-on rule (GitHub issue #1075;
+  unit 14c19f457fd9 on `v6.0.0p-beta.12-3-g883d1d4-dirty`, AutoPID off for
+  the run): **CHIP PROMPT PASS**, 61 checks, the four legs unplug, prompt,
+  banner and status, four chip writes, one power cut, 221 s
+  (`test-reports/2026-11-21_1559_chipprompt.md`). The unplug leg, in a
+  start behind a planned restart: the popup read "The chip in this WiCAN
+  runs firmware V2.3.22, this WiCAN carries V2.3.24. The update is offered
+  right after WiCAN has been powered on:" with the three steps and the one
+  button OK; the banner `data-wait="unplug"` with no button; Detect
+  disabled; the Status page the same; the route 409 with `power_cycle`;
+  the chip untouched. Then the supply cut (the DUT away for 9 s), and the
+  three offering legs ran as before in that one start from power-on.
+
+- 2026-11-21 16:57, the simulator on its firmware with the held-off port
+  and the bench switching the supply on itself: **CHIP PROMPT PASS**, the
+  four legs, 222 s (`test-reports/2026-11-21_1657_chipprompt.md`).
+
 ## Traps
+
+- **The offering legs need a start from power-on (2026-11-21).** The bench
+  cuts the supply once (`POST /api/power` on the simulator: output false,
+  and true again a few seconds later; the simulator firmware of that day no
+  longer switches the output back on by itself) and nothing may restart
+  the unit behind that: a planned restart in the middle turns every later
+  leg into the unplug popup.
 
 - The image goes up from the Pi (scp, then curl on rpi001 to the DUT): the
   first run of 2026-11-08 16:40 uploaded it from this PC through the tunnel

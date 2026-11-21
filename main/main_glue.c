@@ -26,6 +26,7 @@
 #include "fw_update.h"
 #include "ha_webhooks.h"
 #include "led_manager.h"
+#include "obd_chip.h"
 #include "ota_manager.h"
 #include "restart_tracker.h"
 #include "usb_acm_cli.h"
@@ -486,4 +487,17 @@ void main_glue_wire_fw_update(void)
 void main_glue_wire_factory_reset(void)
 {
     (void)api_http_set_factory_reset(main_factory_reset);
+}
+
+/* ---- no restart while the OBD chip's firmware is written -------------------------- */
+
+static const char *restart_hold(void)
+{
+    return obd_chip_kept_for_update() ? "the OBD chip's firmware is being updated"
+                                      : NULL;
+}
+
+void main_glue_wire_restart_hold(void)
+{
+    restart_tracker_set_hold(restart_hold);
 }

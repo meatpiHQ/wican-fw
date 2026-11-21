@@ -56,7 +56,7 @@ usage: can_selftest_bench.py [--dut localhost:18081] [--sim http://10.8.8.1]
   to the PC's own address on that link by lib/sim_net.py: on this PC the LAN
   router is 192.168.8.1 too and answers a plain request first). The
   simulator is put back as found at the end (or as --sim-restore says).
-Needs: the branch firmware on the DUT, the chip up, autopid idle or off, the
+Needs: the branch firmware on the DUT, the chip up, AutoPID on or off, the
 simulator on the bus (its broadcast in either state).
 """
 import json
@@ -208,6 +208,23 @@ def wait_ready(limit):
     return oc if isinstance(oc, dict) else {}
 
 
+def chip_free(limit):
+    """The chip ready and its claim coming free: read as `none`, or, under an
+    AutoPID that polls without a pause (every status read says `command`),
+    seen in its count of answered polls going on, which a stuck claim would
+    stop. -> (ok, what was seen)"""
+    oc = wait_ready(limit)
+    if oc.get("ready") and oc.get("claim") == "none":
+        return True, (True, "none", oc.get("baud"))
+    a0 = autopid_snapshot()
+    time.sleep(4)
+    a1 = autopid_snapshot()
+    moved = a1["ok"] - a0["ok"]
+    st, oc = http(DUT, "/api/obd_chip")
+    oc = oc if isinstance(oc, dict) else {}
+    return bool(oc.get("ready") and a0["running"] and moved > 0), (oc.get("ready"), oc.get("claim"), oc.get("baud"), "AutoPID +%d polls in 4 s" % moved)
+
+
 def wait_dut(limit):
     """/api/info answers again (after a planned restart)"""
     t0 = time.time()
@@ -246,6 +263,11 @@ def autopid_enable(on):
     st, r = http(DUT, "/api/settings/submit", "POST", {})
     print("%s autopid.enabled -> %s, submit: %s %s (the DUT restarts)" % (now(), on, st, r))
     return wait_dut(120)
+
+
+def autopid_yields():
+    st, ap = http(DUT, "/api/autopid")
+    return ((ap or {}).get("stats") or {}).get("yields") if isinstance(ap, dict) else None
 
 
 def autopid_snapshot():
@@ -312,7 +334,12 @@ def main():
     check("fw.outdated is false on a chip at the packaged version", fw.get("outdated") is False, fw)
 
     # ---- the self-test, as found ----
-    run_selftest("as found", sim_bc if sim_bc in (True, False) else None)
+    # a polling AutoPID is traffic too (its requests and the car's answers):
+    # the bus is live then, whatever the simulator broadcasts (2026-11-21)
+    ap_polls = bool(autopid_snapshot()["running"])
+    if ap_polls:
+        print("%s AutoPID is polling as found: the bus is expected live in both legs" % now())
+    run_selftest("as found", True if ap_polls else (sim_bc if sim_bc in (True, False) else None))
 
     # ---- flipped ----
     if not SKIP_FLIP and sim_bc in (True, False):
@@ -321,7 +348,7 @@ def main():
         check("the simulator's broadcast flipped", got == (not sim_bc), got)
         if got == (not sim_bc):
             time.sleep(3)
-            run_selftest("flipped", not sim_bc)
+            run_selftest("flipped", True if ap_polls else (not sim_bc))
 
     # ---- the chip report ----
     print("== chip report ==")
@@ -359,8 +386,8 @@ def main():
             break
         time.sleep(0.5)
     check("the scan names 2000000", (pr or {}).get("auto", {}).get("detected") == 2000000, (pr or {}).get("auto"))
-    st, oc = http(DUT, "/api/obd_chip")
-    check("the chip is back to ready after the tools", st == 200 and oc.get("ready") and oc.get("claim") == "none", oc and (oc.get("ready"), oc.get("claim")))
+    free, seen = chip_free(5)
+    check("the chip is back to ready after the tools, its claim free", free, seen)
 
     # ---- a chip left on V2.3.22: the warning (--fw22) ----
     if FW22:
@@ -373,8 +400,11 @@ def main():
         data = open(FW22, "rb").read()
         st, r = http_raw(DUT, "/api/fs/upload?path=/data/V2.3.99.txt", data)
         check("the V2.3.22 image uploaded to /data as V2.3.99.txt (%d bytes)" % len(data), st in (200, 201), (st, r))
-        st, r = http(DUT, "/api/obd_chip/update", "POST", {"path": "/data/V2.3.99.txt"})
-        check("POST update {path} -> 202", st == 202, (st, r))
+        # `any_start` (2026-11-21, issue #1075): the user's update is taken only
+        # in a start that began with the power coming on; this bench's start
+        # is whatever the run before it left, so it says the bench's word
+        st, r = http(DUT, "/api/obd_chip/update", "POST", {"path": "/data/V2.3.99.txt", "any_start": True})
+        check("POST update {path, any_start} -> 202", st == 202, (st, r))
         fw = wait_update(90)
         check("the .22 write ends ESP_OK with every record", bool(fw) and fw.get("last") == "ESP_OK" and fw.get("lines") == fw.get("total") and fw.get("total", 0) > 0, fw)
         oc = wait_ready(40)
@@ -382,8 +412,8 @@ def main():
         check("fw.outdated is true on a chip at V2.3.22", oc.get("fw", {}).get("outdated") is True, oc.get("fw"))
         st, r = http(DUT, "/api/obd_chip/update", "POST", {"force": True})
         check("POST {force:true} -> 400 (the forced rewrite is gone)", st == 400, (st, r))
-        st, r = http(DUT, "/api/obd_chip/update", "POST", {})
-        check("POST the packaged update (the card's button) -> 202", st == 202, (st, r))
+        st, r = http(DUT, "/api/obd_chip/update", "POST", {"any_start": True})
+        check("POST the packaged update (the card's button, with any_start) -> 202", st == 202, (st, r))
         fw = wait_update(90)
         check("the packaged update lifts the chip (ESP_OK, every record)", bool(fw) and fw.get("last") == "ESP_OK" and fw.get("lines") == fw.get("total") and fw.get("total", 0) > 0, fw)
         oc = wait_ready(40)
@@ -424,15 +454,58 @@ def main():
         check("POST /api/can/selftest -> 202 (with AutoPID polling)", st == 202, (st, r))
         r = selftest_wait(30)
         check("verdict PASS with AutoPID polling", bool(r) and r.get("pass"), r and r.get("verdict"))
+        # the test takes AutoPID off the chip first and puts the chip at its
+        # defaults (2026-11-21, Ali: the self-test pauses AutoPID). Until
+        # then a test under a polled profile failed every second time (12 of
+        # 24: nine hardware verdicts on healthy hardware, the chip still
+        # carrying the receive filter of the row polled last, and three
+        # "could not be claimed"), so one run proves little: six in all
+        check("the test took AutoPID off the chip first (its exchange says so)",
+              bool(r) and any("apid   off the chip for the test" in ln for ln in (r.get("lines") or [])), r and (r.get("lines") or [])[:3])
+        verdicts = []
+        for _ in range(5):
+            http(DUT, "/api/can/selftest", "POST", {})
+            rr = selftest_wait(30) or {}
+            verdicts.append("PASS" if rr.get("pass") else (rr.get("refusal") or rr.get("verdict") or "no result"))
+            time.sleep(1.5)
+        check("five more tests with AutoPID polling: PASS every time", all(v == "PASS" for v in verdicts), verdicts)
+        c = autopid_snapshot()
+        check("no poll failed over the six tests", c["failed"] - b["failed"] == 0, (b["failed"], c["failed"]))
+        try:
+            with urllib.request.urlopen(DUT + "/api/logs/ring", timeout=10) as ring_r:
+                ring_txt = ring_r.read().decode("utf-8", "replace")
+        except Exception as exc:  # noqa: BLE001
+            ring_txt = "<%s>" % exc
+        check("AutoPID's own words in the log ring: paused for a diagnostic tool, then resumed",
+              "paused: a diagnostic tool holds the bus" in ring_txt and "resumed: the diagnostic tool released the bus" in ring_txt)
+        # a single requester gets the chip while AutoPID polls (2026-11-21:
+        # the poller leaves a gap for a task that waits; one read in ten of
+        # the chip's configuration report failed before under the bench
+        # unit's 29-row table, and two took 3 s)
+        y0 = autopid_yields()
+        reports = []
+        for _ in range(8):
+            t_r = time.time()
+            st, rep = http(DUT, "/api/obd_chip/report")
+            reports.append((st, round(time.time() - t_r, 1)))
+            time.sleep(0.5)
+        check("the chip's configuration report is read 8 times of 8 with AutoPID polling",
+              all(s == 200 for s, _t in reports), reports)
+        y1 = autopid_yields()
+        print("%s autopid yields (gaps left for a waiting task): %s -> %s" % (now(), y0, y1))
         c = autopid_snapshot()
         time.sleep(15)
         d = autopid_snapshot()
         rate_after = (d["ok"] - c["ok"]) / 15.0
         check("AutoPID resumed at its rate (%.1f ok/s after, %.1f before)" % (rate_after, rate_before), rate_after >= 0.5 * rate_before, (c["ok"], d["ok"]))
         check("no new poll failures after the test (at most the one refused during it)", d["failed"] - b["failed"] <= 2, (b["failed"], c["failed"], d["failed"]))
-        fresh = [n for n, (v, ts) in d["params"].items() if ts and d["now_us"] - ts < 5_000_000]
+        # one round of the table, and half as much again: 5 s for a short table,
+        # more for one whose round is longer (29 rows at 3.8 polls a second: 7.6 s)
+        round_s = (len(d["params"]) / rate_after) if rate_after > 0 else 5.0
+        fresh_s = max(5.0, 1.5 * round_s)
+        fresh = [n for n, (v, ts) in d["params"].items() if ts and d["now_us"] - ts < fresh_s * 1e6]
         rpm = d["params"].get("EngineRPM", (None, None))
-        check("the values are fresh after the test (%d of %d within 5 s)" % (len(fresh), len(d["params"])), len(fresh) >= max(1, len(d["params"]) // 2), fresh[:6])
+        check("the values are fresh after the test (%d of %d within %.0f s)" % (len(fresh), len(d["params"]), fresh_s), len(fresh) >= max(1, len(d["params"]) // 2), fresh[:6])
         check("EngineRPM comes from the simulator, not the test's 1726", rpm[0] is not None and abs(float(rpm[0]) - 1726) > 1, rpm)
         st, can_b = http(DUT, "/api/can")
         same = all(isinstance(can_a, dict) and isinstance(can_b, dict) and can_a.get(k) == can_b.get(k) for k in ("running", "baud_kbps", "listen_only", "silent", "state"))
@@ -442,8 +515,8 @@ def main():
         # about 40 ms of every 70 at 14 polls/s (33 of 60 samples read
         # "command" on 2026-11-01), so one GET is a coin flip; what must
         # hold is that the claim comes free, which a stuck one never does
-        oc_b = wait_ready(5)
-        check("the chip is ready and comes unclaimed between polls after the test", oc_b.get("ready") and oc_b.get("claim") == "none" and oc_b.get("baud") == (oc_a or {}).get("baud"), (oc_b.get("ready"), oc_b.get("claim"), oc_b.get("baud")))
+        free, seen = chip_free(5)
+        check("the chip is ready and its claim comes free between polls after the test", free and seen[2] == (oc_a or {}).get("baud"), seen)
         echoed, txt = probe_echo()
         check("the chip answers without echo after the test (the restore keeps the bring-up's ATE0)", echoed is False, txt)
         if not ap_was_on:

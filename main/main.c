@@ -338,6 +338,7 @@ void app_main(void)
     main_glue_wire_ble_cli();
     /* glue: the web route's factory reset is the device's full wipe */
     main_glue_wire_factory_reset();
+    main_glue_wire_restart_hold();
 
     /* ---- the ONE settings apply pass, then start everything --------------- */
     main_boot_init("settings_manager_start", settings_manager_start);
@@ -374,6 +375,14 @@ void app_main(void)
     /* glue: imu/battery events -> <prefix>/events via the async path */
     /* glue: the MQTT bench surface (bench/cmd burst + bench/echo) */
     main_boot_start("main_bench", main_bench_start);
+    /* a new image is confirmed to the bootloader HERE, before the OBD chip
+       hears a word from it (Ali, 2026-11-21, issue #1075): from the chip's
+       bring-up on, no power cut brings the previous firmware back (one from
+       6.0.0-beta.5 or older writes its older chip firmware over the chip's
+       and pulses the chip's reset line). An image that crashes before this
+       line still falls back in the bootloader. No flash access when the
+       image is confirmed already (fw_update.h). */
+    main_boot_init("fw_update_confirm_start", fw_update_confirm_start);
     /* async since 2026-07-26 (was ~2 s of the 4.1 s boot): returns once
        the bring-up task is launched; consumers gate inside obd_chip, so
        obd=1 in the boot line = launch ok, chip outcome = the component's
