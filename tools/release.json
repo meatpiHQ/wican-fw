@@ -9,6 +9,10 @@
   "asset_name": "wican-fw_obd_pro_v{version}.bin",
   "zip_name": "wican-fw_obd_pro_v{version}.zip",
   "chip": "esp32s3",
+  "components": {
+    "repo": "meatpiHQ/meatpi-components",
+    "tag": "{source_tag}"
+  },
   "stable_mirror": {
     "repo": "meatpiHQ/wican-fw",
     "tag": "v{version_tagged}",
