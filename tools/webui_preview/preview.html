@@ -2753,7 +2753,10 @@
     "/api/webhook": () => J({ url: state.webhookUrl !== undefined ? state.webhookUrl : S.ha_webhooks.values.url, enabled: true, interval: 15, manual_override: false, data_mode: "changed", gzip: false,
       /* Active on (2026-11-08): the station is on HomeWiFi */
       networks: S.ha_webhooks.values.networks || "", on_network: !S.ha_webhooks.values.networks || String(S.ha_webhooks.values.networks).split(",").map((s) => s.trim()).includes("HomeWiFi"),
-      status: "ok", last_post: new Date().toISOString(), retries: 0, success_count: 512, fail_count: 3, last_error: "", last_error_time: "" }),
+      status: "ok", last_post: new Date().toISOString(), retries: 0, success_count: 512, fail_count: 3, last_error: "", last_error_time: "",
+      /* why the last push's addresses failed (2026-11-22): none here; a probe presets a failing unit through
+         __mockPreset.webhook, which lies over the whole answer (so it can drop `failures` too, an older unit) */
+      failures: [], ...((window.__mockPreset || {}).webhook || {}) }),
     /* `network` + `paused` since 2026-10-11 (issue #976); a probe presets the state through __mockPreset.vpn */
     "/api/vpn": () => J({ state: "connected", type: "wireguard", endpoint: "vpn.example.com:51820", network: "HomeWiFi", paused: false, routes: ["10.66.0.0/24"], ts_ip: "", ts_peers: 0, derp: false, reason: "", connects: 1, failures: 0, uptime_s: 8040, ...((window.__mockPreset || {}).vpn || {}) }),
     "/api/usb": () => J(usbScene() ? usbScene().usb : { enabled: true, device_present: true, host_active: true, eth_connected: true, driver: "cdc_ncm", ip: "192.168.7.2", attaches: 1 }),
@@ -6701,6 +6704,40 @@ function tabbedPage(container,base,tabs,sub){
   container.append(strip,panes);show(active);
 }
 const liveBadge=()=>h("span",{class:"chip ok",title:"Apply Configuration takes effect immediately: no restart"},h("span",{class:"d"}),"Applies live");
+/* Why a push to Home Assistant failed, in plain words (2026-11-22). The card said "failed" and nothing else for
+   every kind of failure, and a field report needed the device log to tell a far end that closed the secure
+   handshake from a name that was not found. The unit now reports, per address that did not take the last push,
+   a reason word and a code (`failures` of GET /api/webhook). The card says it in one line under the chips and
+   keeps the explanation in the bubble beside it (Ali: simple and clean, extra information in a bubble).
+   reason: [the line, the bubble's title, the bubble's text]. */
+const PUSH_FAIL={
+  dns:["the name in the address was not found","The name was not found","WiCAN asked its DNS server for this name and got no answer. Check the spelling. A name that only exists inside your home network is not known on the road."],
+  no_answer:["nothing answers at this address","Nothing answers","The connection was refused or timed out. Check that Home Assistant is running, that the port is right, and that it is open to the network WiCAN is on."],
+  tls_closed:["the server closed the connection during the secure handshake","The server closed the connection","WiCAN reached this address, and the other side hung up before the secure connection was set up. Often: an https address with a bare IP where a reverse proxy or Nabu Casa needs the name, or a proxy that does not let this device in."],
+  tls_refused:["the server refused the secure connection","The server refused the secure connection","The server answered the hello with an error. Often: the proxy does not know the name in the address."],
+  cert_untrusted:["the server's certificate is not trusted","The certificate is not trusted","The certificate is not signed by an authority WiCAN knows. For a private or self-signed certificate, add its CA under Certificates and select it on this card."],
+  /* one line for two cases the unit cannot tell apart (its TLS library does not hand over what the check found) */
+  cert:["the server's certificate was not accepted","The certificate was not accepted","Either the certificate is for another name than the one in the address, or it is not signed by the authority selected for this webhook under Certificates. Use the name the certificate was issued for, and check which certificate set is selected on this card."],
+  not_https:["this port does not speak https","The port does not speak https","The address starts with https, and the server on that port answers in plain http. Home Assistant's own port 8123 is plain http unless SSL is switched on there."],
+  tls:["the secure connection could not be set up","The secure connection failed","The handshake with the server ended in a way WiCAN has no plain words for."],
+  no_reply:["the server did not answer in time","The server did not answer","The connection opened and then nothing came back."],
+  other:["the push did not go through","The push failed","WiCAN could not send the push and has no plain words for the reason."],
+};
+function pushFail(f){
+  if(f.reason!=="http")return PUSH_FAIL[f.reason]||PUSH_FAIL.other;
+  const n=f.http||0;
+  if(n===400)return["Home Assistant answered 400","Home Assistant answered 400","Behind a reverse proxy this usually means the proxy is not listed under trusted_proxies in Home Assistant's http settings."];
+  if(n===502||n===503||n===504)return["the reverse proxy could not reach Home Assistant ("+n+")","The proxy answered alone","The proxy answered, Home Assistant behind it did not."];
+  return["the server answered "+n,"The server answered "+n,"The server took the connection and answered with this status in place of taking the push."];
+}
+/* one line of the card for a failed address; `many` = the unit holds two addresses, so the line names which
+   one in the words of the card's own fields */
+function pushFailLine(f,many){
+  const[line,title,text]=pushFail(f),t=f.time?new Date(f.time):null,ok=t&&!isNaN(t);
+  const b=infoBtn("What this means",title,text+(f.code?" For support: "+f.code+(ok?", "+t.toLocaleTimeString():"")+".":""));
+  b.style.verticalAlign="middle";b.style.marginLeft="6px";
+  return h("span",{class:"help",style:"flex-basis:100%;color:var(--text)",dataset:{pushfail:f.reason}},(many?(f.slot===2?"Failover URL":"Webhook URL"):"Last failure")+": "+line,b);
+}
 PAGES.automate=async(view,sub)=>{
   const p=page(view,null,"Automate","What to poll from the vehicle, and where the data goes.");
   const wrap=h("div",{class:"pane"});p.append(wrap);
@@ -6772,6 +6809,9 @@ PAGES.automate=async(view,sub)=>{
     const statsEl=h("div",{class:"rowflex",style:"flex-wrap:wrap;gap:8px;margin-top:10px"});
     const paint=async()=>{const wh=await tryGet("/api/webhook");if(!wh)return;
       const bad=wh.status&&wh.status!=="ok"&&wh.status!=="disabled";
+      /* why (2026-11-22): a line per address that did not take the last push, while the push as a whole failed
+         (with status ok an entry means the failover delivered, which is the normal state on the road) */
+      const fails=wh.status==="failed"&&Array.isArray(wh.failures)?wh.failures:[],many=Array.isArray(wh.urls)&&wh.urls.length>1;
       statsEl.replaceChildren(
         chip("OK: "+fmt.num(wh.success_count||0),"ok"),
         chip("Fail: "+fmt.num(wh.fail_count||0),(wh.fail_count||0)>0?"crit":""),
@@ -6779,9 +6819,12 @@ PAGES.automate=async(view,sub)=>{
         /* Active on (2026-11-08): the pushes wait while the station is not on a selected network */
         ...(wh.on_network===false?[chip("Waiting for "+(splitNets(wh.networks).join(", ")||"its networks"),"warn"),
           h("span",{class:"help",style:"flex-basis:100%"},"Not on a selected network"+(wifiNames.current?" (on "+wifiNames.current+" now)":" (no WiFi network now)")+": pushes resume when WiCAN is back on one. Nothing is counted as a failure meanwhile.")]:[]),
-        ...(wh.status==="rejected"?[h("span",{class:"help",style:"color:var(--crit)"},"Home Assistant rejected this device's identity: pushes are paused until it re-registers.")]:[]),
+        /* --danger is the UI's red; until 2026-11-22 these two lines named --crit, which no theme defines, and
+           came out in the plain text colour */
+        ...(wh.status==="rejected"?[h("span",{class:"help",style:"color:var(--danger)"},"Home Assistant rejected this device's identity: pushes are paused until it re-registers.")]:[]),
         /* a 410 (2026-11-15): the device was removed in Home Assistant while it could not be told */
-        ...(wh.status==="removed"?[h("span",{class:"help",style:"color:var(--crit);flex-basis:100%"},"This device was removed in Home Assistant, so WiCAN cleared its webhook and stopped pushing. Add the device in Home Assistant again to resume.")]:[]),
+        ...(wh.status==="removed"?[h("span",{class:"help",style:"color:var(--danger);flex-basis:100%"},"This device was removed in Home Assistant, so WiCAN cleared its webhook and stopped pushing. Add the device in Home Assistant again to resume.")]:[]),
+        ...fails.map(f=>pushFailLine(f,many)),
         wh.url?h("span",{class:"help",style:"overflow-wrap:anywhere"},"URL: ",h("b",{class:"mono",style:"color:var(--text)"},wh.url)):h("span",{class:"help"},"Not registered: the HA integration registers itself when it discovers the device"));};
     await paint();
     /* Store and forward (2026-11-06): the vehicle parameters logged to the SD

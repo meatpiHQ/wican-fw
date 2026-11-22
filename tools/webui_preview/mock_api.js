@@ -620,7 +620,10 @@
     "/api/webhook": () => J({ url: state.webhookUrl !== undefined ? state.webhookUrl : S.ha_webhooks.values.url, enabled: true, interval: 15, manual_override: false, data_mode: "changed", gzip: false,
       /* Active on (2026-11-08): the station is on HomeWiFi */
       networks: S.ha_webhooks.values.networks || "", on_network: !S.ha_webhooks.values.networks || String(S.ha_webhooks.values.networks).split(",").map((s) => s.trim()).includes("HomeWiFi"),
-      status: "ok", last_post: new Date().toISOString(), retries: 0, success_count: 512, fail_count: 3, last_error: "", last_error_time: "" }),
+      status: "ok", last_post: new Date().toISOString(), retries: 0, success_count: 512, fail_count: 3, last_error: "", last_error_time: "",
+      /* why the last push's addresses failed (2026-11-22): none here; a probe presets a failing unit through
+         __mockPreset.webhook, which lies over the whole answer (so it can drop `failures` too, an older unit) */
+      failures: [], ...((window.__mockPreset || {}).webhook || {}) }),
     /* `network` + `paused` since 2026-10-11 (issue #976); a probe presets the state through __mockPreset.vpn */
     "/api/vpn": () => J({ state: "connected", type: "wireguard", endpoint: "vpn.example.com:51820", network: "HomeWiFi", paused: false, routes: ["10.66.0.0/24"], ts_ip: "", ts_peers: 0, derp: false, reason: "", connects: 1, failures: 0, uptime_s: 8040, ...((window.__mockPreset || {}).vpn || {}) }),
     "/api/usb": () => J(usbScene() ? usbScene().usb : { enabled: true, device_present: true, host_active: true, eth_connected: true, driver: "cdc_ncm", ip: "192.168.7.2", attaches: 1 }),
