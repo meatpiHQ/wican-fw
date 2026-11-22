@@ -209,7 +209,13 @@ def analyze_param(name, rows, truth, phases, run, x0, x1, judge):
            "unseen": 0, "unseen_examples": [], "checked": 0,
            "before": {"checked": 0, "mismatches": 0, "examples": []}}
     live = [r for r in in_run if not overlaps(phases, "parked", r[0], r[0] + 0.001)]
-    diffs = [b[0] - a[0] for a, b in zip(live, live[1:]) if 0 < b[0] - a[0] < 30 * table_period]
+    # a parameter's period is the median step of its own rows, holes left out.
+    # What counts as a hole is not tied to a fast table alone: the unit's own
+    # values (the battery voltage, a row every 10 s) keep their pace whatever
+    # the table's period is, and with a table of 100 ms a limit of 30 periods
+    # threw every one of their steps away (the period then fell back to the
+    # table's and the coverage read 1 %).
+    diffs = [b[0] - a[0] for a, b in zip(live, live[1:]) if 0 < b[0] - a[0] < max(30 * table_period, 60.0)]
     period = statistics.median(diffs) if len(diffs) >= 5 else table_period
     out["period_s"] = round(period, 3)
     changed_only = judge.get("log_mode") == "changed"
@@ -245,7 +251,13 @@ def analyze_param(name, rows, truth, phases, run, x0, x1, judge):
                 if ts >= truth[0][0] + slack:
                     break
                 out["before"]["checked"] += 1
-                if abs(value - want) > tol and not (ts >= truth[0][0] - slack and abs(value - truth[0][2]) <= tol):
+                # around the first set value a row may carry any value the
+                # simulator held by then, as in the drive itself: with
+                # --step-s under the slack the second and third value are
+                # there before the slack is over (a row "1" 0.4 s after the
+                # simulator went from 1 to 2 was called wrong)
+                held = [s[2] for s in truth[:bisect.bisect_right(starts, ts + slack)] if s[1] + slack >= ts]
+                if abs(value - want) > tol and not any(abs(value - a) <= tol for a in held):
                     out["before"]["mismatches"] += 1
                     if len(out["before"]["examples"]) < 5:
                         out["before"]["examples"].append({"at": hhmm(ts, True), "logged": value, "simulator": want})
@@ -445,6 +457,46 @@ def match_away(points, rows, phases, conv=None, reach=2.5):
             "distinct_values": len(distinct), "away_s": round(span)}
 
 
+def match_spacing(points, rows, phases, steps, conv=None, to_ha=None, margin=20.0):
+    """The away time's states against the integration's option History detail
+    (`steps`: seconds per trip, 0 = every change). The rule as the option's
+    text gives it: a state when the logged value, as the sensor shows it,
+    is another than the last one written, and not sooner than the spacing
+    after it. A state of the fill carries its row's own stamp, so here the
+    states are taken on Home Assistant's raw time (`to_ha` undoes the judge's
+    clock mapping) and compared with the rows to the millisecond.
+
+    Per away phase, inside it by `margin` seconds at both ends (the first
+    and the last state of a gap follow other rules): the states found, how
+    many sit on a logged row's stamp, how many come sooner than the spacing
+    after the one before, and the number the rule gives when it is started
+    at the first state found."""
+    conv = conv or (lambda v: v)
+    to_ha = to_ha or (lambda t: t)
+    dec = max((d for _, v, d in points if v is not None), default=0)
+    stamps = [t for t, _ in rows]
+    out = []
+    for i, ph in enumerate(p for p in phases if p["kind"] == "away"):
+        step = float(steps[min(i, len(steps) - 1)])
+        a, b = ph["t0"] + margin, ph["t1"] - margin
+        got = sorted((to_ha(t), v) for t, v, _ in points if v is not None and a < to_ha(t) < b)
+        rec = {"trip": ph.get("trip"), "step": step, "states": len(got), "on_a_row": 0, "too_soon": 0,
+               "rule": None, "rows": len(rows_between(rows, a, b))}
+        for k, (t, _) in enumerate(got):
+            j = bisect.bisect_left(stamps, t - 0.002)
+            rec["on_a_row"] += j < len(stamps) and abs(stamps[j] - t) <= 0.002
+            rec["too_soon"] += k > 0 and t - got[k - 1][0] < step - 0.002
+        if got:
+            last_t, last_v, count = got[0][0], round(got[0][1], dec), 1
+            for t, v in rows_between(rows, got[0][0] + 0.002, b):
+                shown = round(conv(v), dec)
+                if shown != last_v and t - last_t >= step - 1e-6:
+                    last_t, last_v, count = t, shown, count + 1
+            rec["rule"] = count
+        out.append(rec)
+    return out
+
+
 def decimate(rows, x0, x1, gap_thr, columns=900):
     """At most four points a column (first, low, high, last) and a None
     where the rows have a hole, for the chart."""
@@ -517,6 +569,8 @@ def analyze(logdir):
     t_pull = max((t for t in pulls if t_kept is None or t < t_kept), default=None)
     kept_hours = [int(t_pull // 3600) * 3600] if (t_kept and t_pull and int(t_pull // 3600) * 3600 + 3600 <= t_kept) else []
     fill_active = any((s.get("states") or {}).get("active") for s in run.get("syncs") or [])
+    # the integration's option History detail as the bench set it, per trip (--history-step)
+    hist_steps = [float(s) for s in (run.get("ha") or {}).get("history_step") or []]
     logged = run.get("table", {}).get("parameters") or []
     names = list(dict.fromkeys(list(params) + [n for n in logged if n in rows or n in entities]
                                + [n for n in rows if rows_between(rows[n], x0, x1)]))
@@ -550,6 +604,8 @@ def analyze(logdir):
         home_pts = [p for p in st["points"] if (phase_at(phases, p[0]) or {}).get("kind") == "home"]
         rec["live"] = match_states(home_pts, r, x0, x1, conv_state)
         rec["away"] = match_away(st["points"], r, phases, conv_state)
+        rec["spacing"] = (match_spacing(st["points"], r, phases, hist_steps, conv_state, lambda t: t + off_pi - off_dut)
+                          if hist_steps and eid else [])
         rec["five_min_rows_away"] = five
         done = [h for h in rec["hours"] if h["status"] in ("exact", "differs", "missing")]
         exact = [h for h in done if h["status"] == "exact"]
@@ -576,8 +632,14 @@ def analyze(logdir):
     changed_only = judge.get("log_mode") == "changed"
     minc = judge.get("min_coverage", 95)
     if away and not changed_only:
-        bad = []
+        bad, strays = [], []
         for name, rec in per.items():
+            if name not in params and name not in logged and not rec["device"]:
+                # rows of a parameter the run's table does not carry: the last
+                # lap of the table the unit had before the run's own took over
+                # (--table profile). Nothing says it should be there while away.
+                strays.append(name)
+                continue
             cov = [p["coverage_pct"] for p in rec["log"]["phases"] if p["kind"] == "away" and p["coverage_pct"] is not None]
             holes = [g for g in rec["log"]["gaps"] if g["phase"] == "away"]
             if not cov or min(cov) < minc or holes:
@@ -585,8 +647,12 @@ def analyze(logdir):
                 if holes:
                     why += f", {len(holes)} hole(s) up to {max(g['seconds'] for g in holes):.0f} s"
                 bad.append(f"{name} ({why})")
-        checks.append((f"[log] every parameter recorded through the away time ({len(per) - len(bad)} of {len(per)}; "
+        judged = len(per) - len(strays)
+        checks.append((f"[log] every parameter recorded through the away time ({judged - len(bad)} of {judged}; "
                        f"{minc:.0f} % of the samples, no hole)", not bad, "; ".join(bad[:6])))
+        if strays:
+            notes.append(f"{len(strays)} parameter(s) have rows in the run and are not in the run's table (the unit's table from "
+                         f"before the run, its last lap): {', '.join(strays[:8])}; not judged for the away time")
     driven = {n: r for n, r in per.items() if r["driven"]}
     if driven:
         bad = [f"{n}: {r['log']['mismatches']} of {r['log']['checked']} rows" for n, r in driven.items()
@@ -684,6 +750,42 @@ def analyze(logdir):
                            f"that moment ({matched} of {total})", bool(changed) and not none and not wrong,
                            detail if detail else ("no parameter changed while away: nothing proven" if not changed else "")))
             notes.append(states_note + " The integration wrote the logged values of the away time as states (its History fill).")
+            if hist_steps:
+                bad, judged = [], 0
+                by_trip = {}
+                for name, r in with_sensor.items():
+                    for sp in r.get("spacing") or []:
+                        if not sp["states"] and not sp["rule"]:
+                            continue
+                        judged += 1
+                        rule = sp["rule"] or 0
+                        t = by_trip.setdefault(sp["trip"], {"step": sp["step"], "rows": 0, "states": 0, "rule": 0})
+                        t["rows"] += sp["rows"]
+                        t["states"] += sp["states"]
+                        t["rule"] += rule
+                        why = []
+                        if sp["on_a_row"] < sp["states"]:
+                            why.append(f"{sp['states'] - sp['on_a_row']} of {sp['states']} states on no logged row's stamp")
+                        if sp["too_soon"]:
+                            why.append(f"{sp['too_soon']} sooner than {sp['step']:g} s after the one before")
+                        if abs(sp["states"] - rule) > max(2, 0.02 * rule):
+                            why.append(f"{sp['states']} states where the spacing gives {rule}")
+                        if why:
+                            bad.append(f"{name}, trip {sp['trip']}: " + ", ".join(why))
+                label = "; ".join(f"trip {k}: {t['step']:g} s{' = every change' if t['step'] == 0 else ''}, {t['rows']} logged rows, "
+                                  f"{t['states']} states, the spacing gives {t['rule']}" for k, t in sorted(by_trip.items(), key=lambda kv: str(kv[0])))
+                checks.append(("[ha] History detail as set: the away time's states are the ones the spacing gives, each on a logged "
+                               f"row's own stamp, none sooner than the spacing after the one before ({label})",
+                               judged > 0 and not bad,
+                               "; ".join(bad[:4]) if bad else ("no sensor has states inside the away time: nothing proven" if not judged else "")))
+                told = sorted({(s.get("states") or {}).get("step") for s in run.get("syncs") or []
+                               if (s.get("states") or {}).get("states_written")} - {None})
+                widened = [s["states"] for s in run.get("syncs") or []
+                           if (s.get("states") or {}).get("step_used") not in (None, (s.get("states") or {}).get("step"))]
+                notes.append(f"History detail: the catch-up runs that wrote states report a spacing of {', '.join(f'{v:g} s' for v in told) or '-'}"
+                             + (f"; {len(widened)} run(s) widened it for their cap: "
+                                + ", ".join(f"{w.get('step'):g} to {w.get('step_used'):g} s ({w.get('states_at_step')} points asked)" for w in widened)
+                                if widened else "; no run was over its cap"))
         else:
             notes.append(states_note + " This integration imports hourly statistics only, so the History panel keeps a gap "
                          "or a flat line across a drive whatever was imported")

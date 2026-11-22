@@ -140,6 +140,27 @@ class HaLong(hb.Ha):
                 return None if e.get("disabled_by") else e.get("entity_id")
         return None
 
+    def options(self, entry_id, changes=None):
+        """The entry's options as its options form shows them ({field: the
+        value it would submit}). With `changes` the form is submitted with
+        them (every other field as it was); the values from before come back."""
+        base = "/api/config/config_entries/options/flow"
+        code, flow = self.call(base, {"handler": entry_id})
+        if code != 200 or not isinstance(flow, dict) or "flow_id" not in flow:
+            raise RuntimeError(f"the options form did not open: {code} {json.dumps(flow)[:200]}")
+        before = {f["name"]: f.get("default") for f in flow.get("data_schema") or [] if "name" in f}
+        unknown = [k for k in (changes or {}) if k not in before]
+        if changes is None or unknown:
+            self.call(f"{base}/{flow['flow_id']}", method="DELETE")
+            if unknown:
+                raise RuntimeError(f"the options form of this integration has no field {', '.join(unknown)} "
+                                   f"(it has: {', '.join(before)})")
+            return before
+        code, res = self.call(f"{base}/{flow['flow_id']}", {**before, **changes})
+        if not isinstance(res, dict) or res.get("type") != "create_entry":
+            raise RuntimeError(f"the options form refused {changes}: {code} {json.dumps(res)[:300]}")
+        return before
+
     def stats(self, ids, start_epoch, period):
         if not ids:
             return {}
@@ -463,6 +484,11 @@ def main():
                    help="run this copy of the integration (a custom_components/wican folder on this PC) instead of the one the "
                         "Home Assistant has installed: copied to the Pi for the run, the installed one put back at the end "
                         "(the Home Assistant must be one this run starts)")
+    g.add_argument("--history-step", default="", metavar="S",
+                   help="the integration's option 'History detail' for the run: seconds between two History points of one "
+                        "sensor, 0 = every change (a comma list = per trip, the last value repeats; empty = as found). Set "
+                        "through the options form before each trip, put back at the end; the judge then checks the spacing "
+                        "of the away time's states")
     g = ap.add_argument_group("the drive")
     g.add_argument("--profile", default=drive_sim.DEFAULT_PROFILE, help="the drive profile (JSON; drive_sim.py lists the patterns)")
     g.add_argument("--params", default="", help="comma list: only these parameters of the profile")
@@ -516,6 +542,12 @@ def main():
         return lambda trip: vals[min(trip, len(vals)) - 1]
     home_min, drive_min, park_min = (per_trip(args.home_min, "--home-min"), per_trip(args.drive_min, "--drive-min"),
                                      per_trip(args.park_min, "--park-min"))
+    hist_step = None
+    if args.history_step.strip():
+        hist_step = per_trip(args.history_step, "--history-step")
+        if any(hist_step(t) != int(hist_step(t)) or not 0 <= hist_step(t) <= 3600 for t in range(1, args.trips + 1)):
+            raise SystemExit(f"--history-step wants whole seconds from 0 to 3600: {args.history_step!r}")
+    HIST_KEY = "history_states_step"
 
     args.logdir = args.logdir or os.path.join(REPO, "test-reports", "logs", "hadrive_" + time.strftime("%Y%m%d_%H%M%S"))
     os.makedirs(args.logdir, exist_ok=True)
@@ -529,7 +561,7 @@ def main():
     t_run0 = time.time()
     started_ha = added_entry = swapped = False
     units_found, units_set, stat_ids = None, False, []
-    table_found = table_set = reg_found = None
+    table_found = table_set = reg_found = hist_found = None
     files_before = None
     sim_found = {}
     psu = None
@@ -839,6 +871,31 @@ def main():
             t_last_return = None
             for trip in range(1, args.trips + 1):
                 print(f"== d2 trip {trip} of {args.trips}")
+                if hist_step is not None:
+                    step = int(hist_step(trip))
+                    try:
+                        before = ha.options(entry_id, {HIST_KEY: step})
+                        now_set = ha.options(entry_id).get(HIST_KEY)
+                    except RuntimeError as e:
+                        before, now_set = {}, None
+                        log(f"History detail: {e}")
+                    if hist_found is None and HIST_KEY in before:
+                        hist_found = {HIST_KEY: before[HIST_KEY]}
+                    doc["ha"].setdefault("history_step", []).append(step)
+                    check(f"[d2] trip {trip}: the integration's option History detail set to {step} s"
+                          + (" (every change)" if step == 0 else ""), now_set == step,
+                          f"the form shows {now_set} (before: {before.get(HIST_KEY)})")
+                else:
+                    # not asked for: the judge holds the away time's states to
+                    # the spacing the entry has (an integration without the
+                    # option has no such field, and nothing is judged)
+                    try:
+                        as_found = ha.options(entry_id).get(HIST_KEY)
+                    except RuntimeError:
+                        as_found = None
+                    if isinstance(as_found, (int, float)) and not isinstance(as_found, bool):
+                        doc["ha"].setdefault("history_step", []).append(as_found)
+                        log(f"trip {trip}: the integration's option History detail is {as_found:g} s (as found)")
                 run.event("at home", trip=trip)
                 cut = run.wait(home_min(trip) * 60, f"trip {trip}, at home", stoppable=True)
                 if trip == 1 and args.leave_at_minute >= 0 and not cut:
@@ -1175,6 +1232,12 @@ def main():
                     run.ha.ws_call({"type": "recorder/clear_statistics", "statistic_ids": [CONTROL_ENTITY]})
                 except Exception as e:  # noqa: BLE001
                     log(f"the bench's control sensor was not removed: {type(e).__name__}: {e}")
+            if run.ha is not None and run.entry_id and hist_found and not added_entry and not args.keep_ha:
+                try:
+                    run.ha.options(run.entry_id, hist_found)
+                    log(f"the integration's option History detail as found ({hist_found[HIST_KEY]} s)")
+                except Exception as e:  # noqa: BLE001
+                    log(f"the option History detail was NOT put back to {hist_found[HIST_KEY]} s: {type(e).__name__}: {e}")
             if run.ha is not None and run.entry_id and added_entry and not args.keep_ha:
                 code, r = run.ha.call(f"/api/config/config_entries/entry/{run.entry_id}", method="DELETE")
                 log(f"the entry this run added is removed again: {code}")
