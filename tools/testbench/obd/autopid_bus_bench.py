@@ -70,6 +70,17 @@ interfaces answer the same OBD requests):
   app       an ELM app over /ws/obd in the middle of it (`ATZ`, `0100`):
             answered on the car's protocol; ten seconds after its last word
             the rows of every bus are answered again
+  raw       rows sent with the chip's CAN formatting off (`ATCAF0` in the
+            init; components pull request 7, GitHub issue #1077: until then
+            such a row never had a value, its reply compared with the
+            length byte for a service, while Test showed the right one). On
+            the car's protocol and on single-wire CAN: a raw OBD request
+            (`02010C`) has the simulator's 800 rpm; a GMLAN $AA read
+            (`03AA0107`), whose answer carries no service to compare, has
+            the reply's byte; and a row with formatting ON (`ATCAF1` in its
+            init) that is asked right behind a raw row of its type is still
+            answered. Every row answered in every round, no failure; a
+            standard PID behind it finds the chip formatting again
   the chip  chip_nvm's snapshot the same before and after, no protocol
             save, the stored protocol as found; with Automate off the chip
             reads the car's protocol and the link table as found
@@ -78,7 +89,7 @@ The unit's tables, its Automate settings and the simulator are put back as
 found (planned restarts: two for the stored filter, Automate on with the held
 init, the init as found, Automate back). AutoPID must be off at the start.
 
-usage: autopid_bus_bench.py [--dut localhost:18081] [--only test,speed,store,filter,hold,poll,guard,park,pause,app]
+usage: autopid_bus_bench.py [--dut localhost:18081] [--only test,speed,store,filter,hold,poll,guard,park,pause,app,raw]
   the DUT through an ssh tunnel (`ssh -N -L 18081:<dut>:80 rpi001`), ECU sim
   v2 at its own address (it is the unit's supply too). About 8 min.
 """
@@ -107,7 +118,7 @@ def arg(name, default):
 
 DUT_HP = arg("--dut", "localhost:18081")
 DUT = "http://" + DUT_HP
-ONLY = [x for x in arg("--only", "test,speed,store,filter,hold,poll,guard,park,pause,app").split(",") if x]
+ONLY = [x for x in arg("--only", "test,speed,store,filter,hold,poll,guard,park,pause,app,raw").split(",") if x]
 SIM_GROUPS = ("ecu_sim", "kline", "j1850")
 PERIOD_MS = 2000
 RPM = "[B3:B4]/4"
@@ -123,8 +134,19 @@ ROWS = [
     ("bus_ch_rpm", "010C1", RPM, 800, "ch"),
     ("bus_sw_rpm", "010C1", RPM, 800, "sw"),
 ]
+#: rows of the leg `raw` (components pull request 7, GitHub issue #1077): name, request, init, expression, value,
+#: bus. With `ATCAF0` the request is the whole data field, the length byte first; the digit behind it is the reply
+#: count, as in a formatted request. ECU sim v2 has no GMLAN ECU and refuses service AA (`03 7F AA 11`): that
+#: frame is the reply the $AA row reads (its byte 3, 0x11). The row with formatting on stands behind the raw ones
+RAW_ROWS = [
+    ("raw_obd_rpm", "02010C1", "ATCAF0", RPM, 800, None),
+    ("raw_obd_aa", "03AA01071", "ATCAF0", "B3", 17, None),
+    ("raw_obd_fmt", "010C1", "ATCAF1", RPM, 800, None),
+    ("raw_sw_rpm", "02010C1", "ATCAF0", RPM, 800, "sw"),
+    ("raw_sw_fmt", "010C1", "ATCAF1", RPM, 800, "sw"),
+]
 OTHER = ("ms", "ch", "sw")
-SLOT = {"ms": ("B", "MS_CAN"), "ch": ("C", "CH_CAN"), "sw": ("F", "SW_CAN,3")}
+SLOT ={"ms": ("B", "MS_CAN"), "ch": ("C", "CH_CAN"), "sw": ("F", "SW_CAN,3")}
 #: every CAN interface of the simulator answering 11 bit OBD
 ALL_LIVE = {"enabled": True, "hs_bitrate_kbps": 500, "ms_bitrate_kbps": 125, "ch_bitrate_kbps": 500}
 for _b in ("hs", "ms", "ch", "sw"):
@@ -656,6 +678,70 @@ def leg_app():
               delta[bus]["ok"] >= 2 and delta[bus]["failed"] == 0, delta[bus])
 
 
+def raw_tables(rows):
+    group = {"name": "default", "enabled": True, "period_ms": PERIOD_MS}
+    pids = []
+    for name, cmd, init, expr, _, bus in rows:
+        row = {"name": name, "type": "custom", "cmd": cmd, "init": init, "group": "default", "period_ms": 0, "enabled": True,
+               "parameters": [{"name": name, "expression": expr, "unit": ""}]}
+        if bus:
+            row["bus"] = bus
+        pids.append(row)
+    return {"groups": [group], "pids": pids, "filters": []}
+
+
+def stamps():
+    """when each value was last published (the unit's clock, microseconds)"""
+    return {p.get("name"): p.get("ts_us") for p in (stats().get("params") or [])}
+
+
+def raw_rounds(what, rows, rounds=6):
+    """A table of `rows` put while the poller runs, then `rounds` rounds watched: every row's value, how many times it
+    was published, and its bus's answers and failures counted from the moment the table went in. A row that is refused
+    three times in a row backs off to four periods, is then asked at another moment of the round and may pass from then
+    on: "has a value" and a count that begins behind the first rounds do not tell such a row from a healthy one."""
+    b0 = buses()
+    st, r = http("/api/autopid/config", "PUT", raw_tables(rows))
+    if not check("raw: %s: the tables with rows that set ATCAF0 are accepted" % what, st == 200, r):
+        return
+    time.sleep(PERIOD_MS / 1000.0 + 1)      # the first round
+    first = stamps()
+    seen = {row[0]: set() for row in rows}
+    t_end = time.time() + rounds * PERIOD_MS / 1000.0
+    while time.time() < t_end:
+        for name, ts in stamps().items():
+            if name in seen and ts is not None and ts != first.get(name):
+                seen[name].add(ts)
+        time.sleep(0.3)
+    b1, vals = buses(), values()
+    for name, cmd, init, _, want, bus in rows:
+        check("raw: %s: %s (%s behind %s, %s) has its value (%s) and is published in every round" % (
+            what, name, cmd, init, bus or "the car's protocol", want),
+            vals.get(name) == want and len(seen[name]) >= rounds - 1, "%s, published %d times in %d rounds" % (vals.get(name), len(seen[name]), rounds))
+    for bus in sorted({row[5] or "obd" for row in rows}):
+        n = len([row for row in rows if (row[5] or "obd") == bus])
+        delta = {k: (b1.get(bus) or {}).get(k, 0) - (b0.get(bus) or {}).get(k, 0) for k in ("ok", "failed")}
+        check("raw: %s: %s: no row refused or unanswered since the tables went in (%d rows)" % (what, bus, n),
+              delta["ok"] >= n * (rounds - 1) and delta["failed"] == 0, delta)
+
+
+def leg_raw():
+    """rows with the chip's CAN formatting off, and a row with formatting on behind them"""
+    st, r = test_call(None, None, "02010C1", "ATCAF0")
+    check("raw: a Test of a raw request (ATCAF0, 02010C) shows the simulator's 800 rpm",
+          st == 200 and isinstance(r, dict) and r.get("ok") and r.get("value") == 800, r if not isinstance(r, dict) else (r.get("raw"), r.get("error")))
+    # The car's protocol alone first: rows of one type on one bus, so nothing puts the baseline back between
+    # them, and the row with formatting on is asked behind a raw row in every round. With rows on single-wire
+    # CAN the chip leaves and comes home once a round (the baseline both times), which hides a wrong reading
+    # of the row that happens to be asked first.
+    raw_rounds("the car's protocol alone", [row for row in RAW_ROWS if row[5] is None])
+    raw_rounds("with single-wire CAN", RAW_ROWS)
+    st, r = test_call(None, kind="std")
+    check("raw: a standard PID behind them finds the chip formatting again (the reply without the frame's padding)",
+          st == 200 and isinstance(r, dict) and r.get("ok") and r.get("value") == 800 and (r.get("raw") or "").strip() == "7E8 04 41 0C 0C 80",
+          r if not isinstance(r, dict) else (r.get("raw"), r.get("error")))
+
+
 def main():
     # The stage's tunnel may not stand yet: test.ps1 gives it 3 s, and an ssh
     # to the Pi takes 3 to 7 s here whenever the PC has to look the name up
@@ -703,7 +789,7 @@ def main():
         if "filter" in ONLY:
             leg_filter()
         held = "hold" in ONLY and leg_hold()
-        if any(x in ONLY for x in ("poll", "guard", "park", "pause", "app")):
+        if any(x in ONLY for x in ("poll", "guard", "park", "pause", "app", "raw")):
             polling = leg_poll(found_ap.get("custom_init", ""), held)
         if polling and "guard" in ONLY:
             leg_guard(live)
@@ -713,6 +799,8 @@ def main():
             leg_pause()
         if polling and "app" in ONLY:
             leg_app()
+        if polling and "raw" in ONLY:
+            leg_raw()
     except SystemExit:
         pass
     finally:

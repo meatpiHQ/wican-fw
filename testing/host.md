@@ -10,6 +10,25 @@ Host **unit** suites (`components/*/host_test`, 526 tests across 44 components a
 
 **Pi offline:** `bash tools/testbench/host_gcc_wsl.sh <vpn_manager|config_backup>` from WSL compiles that PURE suite with the system gcc + Unity under ASan/UBSan (no IDF build; 2026-10-16, issues #985 to #989: `vpn_manager` 11, `config_backup` 24; add a case per IDF-free suite)
 
+**2026-11-23 08:19, `.\test.ps1 host autopid`: PASS, 199 tests (3 new)**
+(`test-reports/2026-11-23_0819_host_autopid.md`), components pull request 7 (joe-meyer, GitHub issue
+#1077) and what went on top of it; the device half and its records are in
+[autopid_bus_bench.md](autopid_bus_bench.md), leg `raw`. His two, in `test_main.c`:
+`test_resp_raw_cmd_request` (the request a raw row's frame carries: `02010C` gives `010C`, with
+spaces, with the frame padded to eight bytes and with a reply count behind it; a GMLAN `$AA` read, a
+first frame, a length past the bytes, a zero length, one byte, an AT or ST command and the empty cmd
+give nothing to compare) and `test_resp_raw_row_guard` (`7E8 04 41 0C ..` is refused against `02010C`
+as written and taken against the request behind the length byte, another PID's answer is still refused,
+a `$AA` answer on `54C` has no service at all). Ours, in `test_chain.c`:
+`test_chain_moved_follows_the_formatting` (`ap_chain_moved`: a chain's bits are added to the ones
+before; `ATCAF1` takes the raw bit back and that bit alone, whichever chain set it; in one chain the
+last `ATCAF` word counts; a chain without one, a request, nothing and NULL leave it; `ATCAF`, `ATCAF12`
+and `ATCAF2` are not that word; and the case it is for: `010C` with `ATCAF1` in its init behind a raw
+row is compared as written, the raw row is raw again in the next round). Before our part a scratch case
+on his head (199 with it, on the Pi) showed the two facts the bench then met on the unit: the bits a
+runner adds up for `ATCAF0;` then `ATCAF1;ATSH7E0;` still said raw, and `010C` read as a raw frame is
+"length 1, service 0C", so `41 0C` was refused. His head alone on `main`: 198; `main`: 196.
+
 **2026-11-21:** can.send (GitHub issue #1072, the device half and its records are in
 [cansend.md](cansend.md)). `autopid` 194 PASS through `.\test.ps1 host autopid` on the Pi
 (`test-reports/2026-11-21_0151_host_autopid.md`, on the final sources), 8 new in `test_send.c`:
