@@ -28,6 +28,10 @@ Legs:
      the importer mirror: expressions as published, renames, filters) is applied; the
      settings get the profile's init as `specific_init`, its name as
      `vehicle`, and the poller enabled (submit-reboot when they changed).
+     A current car with an init of its own in the vehicle store has that
+     init set aside for the run: a car's own init is the one that is sent,
+     so the profile's would never go out (2026-11-23: the Leaf's flow
+     control words missing, every multi-frame PID cut at its first frame).
   L3 the poll: /api/autopid watched for --watch seconds after the first
      profile value. Claims: every request of the profile reached the ECU
      and was answered (no flow-control timeout), every filter parameter
@@ -39,8 +43,8 @@ Legs:
      profile's init chain: the chip's raw reply lines go to the log (the
      byte view the device really gets), the decoded values are compared.
   L5 restore: the saved tables and settings (a submit-reboot when the
-     settings had to change), the actor stopped, `0100` answered by the
-     simulator again.
+     settings had to change), the current car's own init as it was, the
+     actor stopped, `0100` answered by the simulator again.
 
 usage: autopid_profile_e2e_bench.py [--dut localhost:18081] [--pcan PCAN_USBBUS1]
           [--profiles FILE|URL] [--car "Leaf ZE1 (2018-)"] [--watch 60]
@@ -72,6 +76,7 @@ import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -373,6 +378,25 @@ def get_json(base, path):
         return st, None
 
 
+def current_car(base):
+    """The vehicle store's current car: its key and its own init ('' when it
+    has none, None for both when the store names no current car)."""
+    st, veh = get_json(base, "/api/autopid/vehicles")
+    key = (veh or {}).get("current") or None
+    for car in (veh or {}).get("vehicles") or []:
+        if key and car.get("key") == key:
+            return key, car.get("specific_init") or ""
+    return None, None
+
+
+def set_car_init(base, key, init):
+    """A car's own init written through the vehicle store's route; True when
+    the store reads it back so."""
+    st, body = http(base, "PUT", "/api/autopid/vehicles/"
+                    + urllib.parse.quote(key, safe=""), {"specific_init": init})
+    return st == 200 and current_car(base) == (key, init), "%s %s" % (st, body.strip()[:80])
+
+
 def submit_and_wait(base, window=150):
     st, body = http(base, "POST", "/api/settings/submit", {})
     print("  submit -> %s %s" % (st, body.strip()[:80]))
@@ -452,6 +476,8 @@ def main():
     saved_cfg = None
     saved_settings = None
     settings_changed = False
+    car_key, car_init = None, None      # the current car's own init, set aside
+    car_init_aside = False
     summary_path = os.path.join(out, "actor_summary.json")
 
     try:
@@ -550,6 +576,16 @@ def main():
             json.dump(cfg, f, indent=1)
         st, body = http(base, "PUT", "/api/autopid/config", cfg)
         c.add("table accepted", st == 200, "%s %s" % (st, body.strip()[:100]))
+        # a car's own init is the one that is sent: with one in the store the
+        # `specific_init` staged below would never go out
+        car_key, car_init = current_car(base)
+        if car_key and car_init:
+            with open(os.path.join(out, "saved_car_init.json"), "w") as f:
+                json.dump({"key": car_key, "specific_init": car_init}, f)
+            car_init_aside = True       # before the write: the restore must run
+            ok, said = set_car_init(base, car_key, "")
+            c.add("the current car's own init set aside for the run (%r)" % car_init,
+                  ok, said)
         new_settings = dict(saved_settings)
         for k in ("degraded", "pending_reboot"):
             new_settings.pop(k, None)
@@ -761,6 +797,9 @@ def main():
             st, body = http(base, "PUT", "/api/settings/autopid", restore)
             c.add("settings restored", st == 200, "%s %s" % (st, body.strip()[:80]))
             c.add("the DUT rebooted and is back (restore)", submit_and_wait(base))
+        if car_init_aside:
+            ok, said = set_car_init(base, car_key, car_init)
+            c.add("the current car's own init back as it was (%r)" % car_init, ok, said)
         if saved_cfg is not None:
             st, body = http(base, "POST", "/api/autopid/test", {"cmd": "0100"},
                             timeout=40)
