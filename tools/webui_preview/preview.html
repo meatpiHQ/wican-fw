@@ -8617,7 +8617,15 @@ PAGES.terminal=async(view)=>{
   out.append(cursor);
   let ws=null,hist=[],hi=0;
   const dec=new TextDecoder();
-  const put=t=>{cursor.remove();out.append(t);out.append(cursor);out.scrollTop=out.scrollHeight;};
+  /* one text node, written at most once a frame and capped (2026-11-21, GitHub issue #1085): ATMA on a busy
+     bus (about 2,800 frames/s on a 2012 Volt) froze the tab, a node and a layout per message, kept forever.
+     A hidden tab draws no frames, so what waits is capped too. */
+  const TERM_KEEP=200000;const tnode=document.createTextNode("");out.insertBefore(tnode,cursor);
+  let pend="",raf=0;
+  const trim=s=>{if(s.length<=TERM_KEEP)return s;const at=s.indexOf("\n",s.length-TERM_KEEP);
+    return"[earlier output dropped]\n"+s.slice(at<0?s.length-TERM_KEEP:at+1);};
+  const flush=()=>{raf=0;tnode.data=trim(tnode.data+pend);pend="";out.scrollTop=out.scrollHeight;};
+  const put=t=>{pend=trim(pend+t);if(!raf)raf=requestAnimationFrame(flush);};
   /* ---- readiness: the terminal only works when a WebSocket channel is
      bridged to the console (cli ⇄ /ws/cli) or the OBD chip (obd ⇄ /ws/obd).
      A fresh device ships with ws_cli DISABLED and no cli bridge, so

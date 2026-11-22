@@ -17,7 +17,18 @@ read) is the witness of what was on the wire.
             a bad id, an id over 11 bits called an 11-bit one, bad data, a
             frame without data through the chip, wake on another bus than
             single-wire CAN, a speed for `obd`, both forms at once, nine
-            frames, a gap too long (400 with a sentence, nothing on any bus)
+            frames, a gap too long (400 with a sentence, nothing on any bus);
+            a key the request or a frame does not know, and a frame's key
+            beside `frames` (components pull request 10: until then such a
+            request was answered ok and sent as if the key were not there);
+            the data's three refusals each by its own sentence
+  reply     what comes back for a frame through the chip (components pull
+            request 9): an OBD request to 7DF on the car's CAN pins, `reply`
+            the chip's whole answer as one line and `replies` the same
+            answer one line an entry (until then `reply` was cut at 47
+            characters and there was no `replies`); a frame nobody answers
+            gives `NO DATA` in both; a frame through WiCAN's own controller
+            has no `replies`
   buses     one frame on each bus through the chip, with an 11-bit and with
             a 29-bit id (`obd` on the car's CAN pins, `ms`, `ch`, `sw`):
             answered `sent`, read by the simulator on that bus and on no
@@ -63,7 +74,7 @@ and the simulator are put back as found.
 
 usage: can_send_bench.py [--dut localhost:18081] [--skip-precan]
                          [--precan vpw,iso9141]   (also: pwm, kwp5, kwpfast)
-                         [--only route,buses,can,seq,noack,wake,script,app,precan,polling]
+                         [--only route,buses,reply,can,seq,noack,wake,script,app,precan,polling]
   the DUT through an ssh tunnel (`ssh -N -L 18081:<dut>:80 rpi001`), ECU sim
   v2 at its own address (it is the unit's supply too). About 5 min, up to
   six planned restarts (three with --skip-precan; one more for every
@@ -93,7 +104,7 @@ def arg(name, default):
 DUT_HP = arg("--dut", "localhost:18081")
 DUT = "http://" + DUT_HP
 SIM = bench_bus.SIM_URL
-ALL_LEGS = "route,buses,can,seq,noack,wake,script,app,precan,polling"
+ALL_LEGS = "route,buses,reply,can,seq,noack,wake,script,app,precan,polling"
 ONLY = [x for x in arg("--only", ALL_LEGS).split(",") if x]
 if "--skip-precan" in ARGS and "precan" in ONLY:
     ONLY.remove("precan")
@@ -352,8 +363,16 @@ def leg_route(log):
         ("an id that is no hex", {"bus": "ms", "id": "7DG", "data": "01"}, "id is hex"),
         ("an id over 29 bits", {"bus": "ms", "id": "20000000", "data": "01"}, "id is hex"),
         ("an id over 11 bits called an 11-bit one", {"bus": "ms", "id": "800", "ext": False, "data": "01"}, "11 bits"),
-        ("half a byte of data", {"bus": "ms", "id": "7DF", "data": "012"}, "0 to 8 bytes"),
-        ("nine data bytes", {"bus": "ms", "id": "7DF", "data": "010203040506070809"}, "0 to 8 bytes"),
+        ("half a byte of data", {"bus": "ms", "id": "7DF", "data": "012"}, "data has half a byte"),
+        ("nine data bytes", {"bus": "ms", "id": "7DF", "data": "010203040506070809"}, "data is 8 bytes at most"),
+        ("data with a character that is no hex digit", {"bus": "ms", "id": "7DF", "data": "01 0G"}, "has another character"),
+        ("a key the request does not know", {"bus": "ms", "id": "7DF", "data": "01", "repeat": 3},
+         'unknown key "repeat" (bus, bus_kbps, id, ext, data, wake, gap_ms)'),
+        ("a key a frame does not know", {"bus": "ms", "frames": [{"id": "7DF", "data": "01"}, {"id": "7DF", "data": "01", "at_ms": 100}]},
+         'frame 2: unknown key "at_ms" (id, ext, data, wake, gap_ms)'),
+        ("a frame's key beside frames", {"bus": "ms", "gap_ms": 100, "frames": [{"id": "7DF", "data": "01"}]},
+         "gap_ms is a key of each frame in frames"),
+        ("a key in other letters", {"bus": "ms", "ID": "7DF", "id": "7DF", "data": "01"}, 'unknown key "ID"'),
         ("a frame without data through the chip", {"bus": "ms", "id": "7DF", "data": ""}, "without data"),
         ("wake on MS CAN", {"bus": "ms", "id": "100", "data": "00", "wake": True}, "bus sw alone"),
         ("a speed for the car's own protocol", {"bus": "obd", "bus_kbps": 250, "id": "7DF", "data": "01"}, "bus_kbps"),
@@ -405,6 +424,51 @@ def leg_buses(log):
                 check("buses: %s: behind the frame the car's protocol, the format words undone, the slot taken back" % bus,
                       all(w in behind for w in ("> ATTP", "> ATCAF1", "> ATV0", "> ATAT1", "> VTSET_CAN %s\n" % slot)) and
                       chip_home() == "obd", behind.replace("\n", " ")[:300])
+
+
+#: a VIN request to every ECU: the simulator's ECU answers it in three frames
+#: (the chip sends the flow control), so the chip says three lines
+VIN_ASK = "02 09 02 00 00 00 00 00"
+PID_ASK = "02 01 00 00 00 00 00 00"
+
+
+def _said(tr, words):
+    """the chip's line behind the data `words` in a transcript"""
+    at = tr.find("> " + words.replace(" ", "") + "\n< ")
+    return tr[at:].split("\n")[1][2:] if at >= 0 else ""
+
+
+def leg_reply(log):
+    st, r = send({"bus": "obd", "id": "7DF", "data": VIN_ASK})
+    first = (r.get("frames") or [{}])[0] if isinstance(r, dict) else {}
+    reply, lines = first.get("reply") or "", first.get("replies")
+    said = _said((r.get("transcript") or "") if isinstance(r, dict) else "", VIN_ASK)
+    ecu = said.split(" ")[0]
+    check("reply: a VIN request on the car's CAN pins: the ECU answers in three frames and `reply` is all of it, as the chip said it (%d characters)" % len(reply),
+          st == 200 and isinstance(r, dict) and r.get("ok") is True and first.get("result") == "sent" and len(said) > 47 and
+          said.count(ecu + " ") == 3 and reply == said, (reply, said))
+    check("reply: `replies` is the same answer, one frame an entry",
+          isinstance(lines, list) and len(lines) == 3 and " ".join(lines) == reply and
+          [ln[:len(ecu) + 3] for ln in lines] == [ecu + " 10", ecu + " 21", ecu + " 22"], lines)
+    st, r = send({"bus": "obd", "frames": [{"id": "7DF", "data": PID_ASK}, {"id": "7DF", "data": VIN_ASK}]})
+    got = r.get("frames") or [] if isinstance(r, dict) else []
+    per = [(f.get("reply") or "", f.get("replies")) for f in got]
+    check("reply: two requests in one call, each frame with its own answer (one line of 41 00, three of 49 02)",
+          st == 200 and len(per) == 2 and isinstance(per[0][1], list) and isinstance(per[1][1], list) and
+          len(per[0][1]) == 1 and "41 00" in per[0][0] and per[0][1] == [per[0][0]] and
+          len(per[1][1]) == 3 and "49 02" in per[1][0] and " ".join(per[1][1]) == per[1][0], per)
+    st, r = send({"bus": "ms", "frames": [{"id": "3F1", "data": "11"}, {"id": "3F2", "data": "22"}]})
+    got = r.get("frames") or [] if isinstance(r, dict) else []
+    check("reply: frames nobody answers say NO DATA in both, and nothing of the answers before is left in them",
+          st == 200 and len(got) == 2 and all(f.get("result") == "sent" and f.get("reply") == "NO DATA" and
+                                               f.get("replies") == ["NO DATA"] for f in got), got)
+    st, can0 = http("/api/can")
+    if isinstance(can0, dict) and can0.get("running") and not can0.get("listen_only") and not can0.get("silent"):
+        st, r = send({"bus": "can", "id": "5C7", "data": "01"})
+        first = (r.get("frames") or [{}])[0] if isinstance(r, dict) else {}
+        check("reply: a frame through WiCAN's own controller has no reply of the chip: neither key",
+              st == 200 and first.get("result") == "sent" and "reply" not in first and "replies" not in first, first)
+    check("reply: the chip is on the car's protocol again", chip_home() == "obd", chip_home())
 
 
 def leg_can(log):
@@ -742,7 +806,7 @@ def main():
             raise SystemExit(1)
         snap0 = chip_nvm.snapshot(DUT_HP)
         wait_chip_free()
-        for name, leg in (("route", leg_route), ("buses", leg_buses), ("can", leg_can), ("seq", leg_seq), ("noack", leg_noack),
+        for name, leg in (("route", leg_route), ("buses", leg_buses), ("reply", leg_reply), ("can", leg_can), ("seq", leg_seq), ("noack", leg_noack),
                           ("wake", leg_wake), ("script", leg_script), ("app", leg_app)):
             if name in ONLY:
                 leg(log)

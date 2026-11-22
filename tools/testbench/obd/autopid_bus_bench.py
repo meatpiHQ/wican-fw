@@ -26,6 +26,17 @@ interfaces answer the same OBD requests):
             table of AutoPID is saved: a row that is switched on, the Test
             route, a car's own init. A row that is switched off may keep one
             (a file an earlier build stored loads that way)
+  filter    a filter listens on the car's own bus (components pull request
+            11, GitHub issue #1078: until then a filter's `bus` was read by
+            nobody, a filter of a single-wire frame was accepted and never
+            filled): one that is on with `ms`, `sw`, `ch` or a word that is
+            no bus is refused with the filter and the way out, the tables
+            unchanged; switched off it is accepted and keeps its bus; `obd`
+            or no bus is accepted. Then tables as an earlier build stored
+            them (the filter on, bus `sw`), written as the file: at the
+            next start the loader switches that filter off, keeps its bus,
+            says so in one W line and loads the rest; a second start finds
+            nothing to repair
   hold      a type init in the settings with such a word (`custom_init`
             `STP53;ATSH726`, as an earlier build stored it): accepted and
             kept as typed across a restart, never sent, and the rows of that
@@ -64,15 +75,16 @@ interfaces answer the same OBD requests):
             reads the car's protocol and the link table as found
 
 The unit's tables, its Automate settings and the simulator are put back as
-found (planned restarts: Automate on with the held init, the init as found,
-Automate back). AutoPID must be off at the start.
+found (planned restarts: two for the stored filter, Automate on with the held
+init, the init as found, Automate back). AutoPID must be off at the start.
 
-usage: autopid_bus_bench.py [--dut localhost:18081] [--only test,speed,store,hold,poll,guard,park,pause,app]
+usage: autopid_bus_bench.py [--dut localhost:18081] [--only test,speed,store,filter,hold,poll,guard,park,pause,app]
   the DUT through an ssh tunnel (`ssh -N -L 18081:<dut>:80 rpi001`), ECU sim
   v2 at its own address (it is the unit's supply too). About 8 min.
 """
 import json
 import os
+import re
 import sys
 import time
 import urllib.error
@@ -95,7 +107,7 @@ def arg(name, default):
 
 DUT_HP = arg("--dut", "localhost:18081")
 DUT = "http://" + DUT_HP
-ONLY = [x for x in arg("--only", "test,speed,store,hold,poll,guard,park,pause,app").split(",") if x]
+ONLY = [x for x in arg("--only", "test,speed,store,filter,hold,poll,guard,park,pause,app").split(",") if x]
 SIM_GROUPS = ("ecu_sim", "kline", "j1850")
 PERIOD_MS = 2000
 RPM = "[B3:B4]/4"
@@ -345,6 +357,102 @@ def leg_store():
         say("NOTE no current car in the vehicle store: its route is not asked")
 
 
+#: where the tables are stored (autopid_config_file.c), the single-wire frame
+#: of GitHub issue #1078, and the parser's sentence for it
+CONFIG_PATH = "/data/autopid/config.json"
+FLT_ID = 0x1026C0CB
+FLT_SAID = "filter 1026C0CB: a filter listens on bus obd only (ms, sw, ch: not yet); switch it off"
+
+
+def restart_unit():
+    """a planned restart by the route, then the next boot with the chip ready"""
+    st, h = http("/api/restart/history")
+    b0 = h.get("boot_count") if isinstance(h, dict) else None
+    http("/api/restart", "POST", {})
+    PLANNED[0] += 1
+    time.sleep(6)
+    t0 = time.time()
+    while time.time() - t0 < 150:
+        st, h = http("/api/restart/history", timeout=4)
+        st2, oc = http("/api/obd_chip", timeout=4)
+        if isinstance(h, dict) and h.get("boot_count") not in (None, b0) and isinstance(oc, dict) and oc.get("ready"):
+            time.sleep(3)
+            return True
+        time.sleep(1)
+    return False
+
+
+def repair_lines():
+    """the loader's lines about a filter's bus that THIS start of the unit wrote. The log ring may or
+    may not hold the start before: a line's stamp is the time since its start, so the lines of this
+    start begin where the stamps last fall back"""
+    st, ring = http("/api/logs/ring", timeout=30)
+    text = ring if isinstance(ring, str) else json.dumps(ring)
+    lines = text.splitlines()
+    start, last = 0, -1
+    for i, ln in enumerate(lines):
+        m = re.match(r"(?:\x1b\[[0-9;]*m)?[EWIDV] \((\d+)\)", ln)
+        if m:
+            if int(m.group(1)) < last:
+                start = i
+            last = int(m.group(1))
+    return [ln.strip() for ln in lines[start:] if "with a bus other than obd switched off" in ln]
+
+
+def leg_filter():
+    """a filter listens on the car's own bus: another one refused while it is on, a stored one switched off once"""
+    def with_filter(bus, enabled=True):
+        t = tables()
+        flt = {"frame_id": FLT_ID, "monitor_ms": 200, "period_ms": 5000, "group": "default", "enabled": enabled,
+               "parameters": [{"name": "bus_flt", "expression": "B0", "unit": ""}]}
+        if bus is not None:
+            flt["bus"] = bus
+        t["filters"] = [flt]
+        return t
+
+    def said(got):
+        return got[1] if isinstance(got[1], str) else json.dumps(got[1])
+
+    def flt_of(cfg):
+        return next((f for f in (cfg.get("filters") or []) if f.get("frame_id") == FLT_ID), {}) if isinstance(cfg, dict) else {}
+
+    st, before = http("/api/autopid/config")
+    for bus in ("sw", "ms", "ch", "hs"):
+        got = http("/api/autopid/config", "PUT", with_filter(bus))
+        check("filter: a filter that is on with bus %s is refused, with the filter and the way out" % bus,
+              got[0] == 400 and FLT_SAID in said(got), (got[0], said(got)[:140]))
+    st, after = http("/api/autopid/config")
+    check("filter: the refused tables changed nothing", after == before)
+    got = http("/api/autopid/config", "PUT", with_filter("sw", False))
+    st, kept = http("/api/autopid/config")
+    check("filter: the same filter switched off is accepted and keeps its bus",
+          got[0] == 200 and flt_of(kept).get("bus") == "sw" and flt_of(kept).get("enabled") is False, (got[0], flt_of(kept)))
+    for bus in ("obd", None):
+        got = http("/api/autopid/config", "PUT", with_filter(bus))
+        check("filter: with %s it is accepted" % ("bus obd" if bus else "no bus"), got[0] == 200, got)
+    # tables as an earlier build stored them: the route refuses them now, so
+    # they are written as the file itself
+    stored = with_filter("sw")
+    got = http("/api/fs/upload?path=" + CONFIG_PATH, "POST", stored)
+    if not check("filter: tables as an earlier build stored them (the filter on, bus sw) written as the file", got[0] == 200, got):
+        return
+    if not check("filter: the unit started on that file (a planned restart)", restart_unit()):
+        return
+    st, loaded = http("/api/autopid/config")
+    lines = repair_lines()
+    check("filter: the loader switched that filter off and kept its bus, and one W line of this start says so",
+          flt_of(loaded).get("enabled") is False and flt_of(loaded).get("bus") == "sw" and len(lines) == 1 and "W (" in lines[0][:16],
+          (flt_of(loaded), lines[-1][-150:] if lines else "no line"))
+    check("filter: the rest of the tables loaded as written (%d rows, their group)" % len(stored["pids"]),
+          isinstance(loaded, dict) and loaded.get("pids") == stored["pids"] and loaded.get("groups") == stored["groups"],
+          "%d rows" % len(loaded.get("pids") or []) if isinstance(loaded, dict) else loaded)
+    again = restart_unit()
+    st, loaded2 = http("/api/autopid/config")
+    lines2 = repair_lines()
+    check("filter: a second start finds nothing to repair (no such line of that start, the tables the same)",
+          again and not lines2 and loaded2 == loaded, lines2[-1:])
+
+
 def leg_hold():
     """a type init with a word the chip stores: kept as typed, never sent, the rows behind it wait"""
     st, r = http("/api/autopid/config", "PUT", tables())
@@ -592,6 +700,8 @@ def main():
             leg_speed(("hs11_500", "ms11", "ch11", "sw11"))
         if "store" in ONLY:
             leg_store()
+        if "filter" in ONLY:
+            leg_filter()
         held = "hold" in ONLY and leg_hold()
         if any(x in ONLY for x in ("poll", "guard", "park", "pause", "app")):
             polling = leg_poll(found_ap.get("custom_init", ""), held)

@@ -53,6 +53,24 @@ trailer naming 100 points and no more; then the integration's
 registry over the websocket API, 6 hours back) must save a file under
 `www/wican/` with at least those points (read and removed on the Pi).
 
+**How both routes read `since` (b4g, 2026-11-22, components pull request
+8, GitHub issue #1079).** Between the track and the service, four more
+checks. A first request with `limit=40` ends inside the file and names
+its cursor (the two series lie one behind the other on the card, so a
+page that short pairs no point: the cursor is what is followed, not the
+points). From that cursor the track is asked twice, once with the colon
+and once with the colon written `%3A`: the two answers must have the same
+trailer and the same points, fewer than 100 (until this change the GPX
+route read the value raw, took the encoded cursor for a plain time and
+gave the track from the file's start again). Seven values that are
+neither an epoch nor a cursor (`abc`, `12x`, `12%3A`, `%3A5`, `-5`,
+`%00`, sixty digits), on the export and on the track, must each be
+answered 400 `since is <epoch> or <epoch>:<offset>` (they were read as
+far as they parsed: a full export from the oldest file for `abc`); that
+400 is plain text, since its sentence has angle brackets; and the whole
+track is served again afterwards (the GPX route gives up its "a track is
+being built" mark before it refuses).
+
 **The GPS track card (2026-11-06 evening).** The integration ships a
 Lovelace card (`custom:wican-gpx-card`) that draws a track on Home
 Assistant's own map. `node tools/testbench/ha/gpx_card_check.mjs <ha url>
@@ -143,7 +161,55 @@ stops it itself).
     Assistant 2026.2.3 there has the recorder database version 53 too, and
     the History fill wrote its states.
 
-**Traps.** The integration runs an automatic pull at most every 5 min
+- 2026-11-23 00:05, components pull request 8 (overkillthemighty) merged
+  onto components `main` `79caf32` and our own reading of `since` (image
+  sha256 `719f8f1c`, `v6.0.0p-beta.14-5-ga1ebe97-dirty`, unit
+  `14c19f457fd9`), the working tree of the integration (`5bd3e9c`) in the
+  bench HA for the run: **HA BACKFILL PASS, 58 checks** (the 54 of the run
+  before and the four of "How both routes read `since`"), 529 s, 2 planned
+  restarts, no E line. The track's first page of 40 ended at
+  `1795352775:98236`; from there, with the colon and with `%3A` alike,
+  `<!-- cursor="1795352775:108905" more="false" points="53" -->` and the
+  same 53 points; all fourteen malformed values answered 400 with the
+  sentence, as `text/plain`; the whole track (100 points) served again
+  right after. Report `test-reports/2026-11-23_0005_habackfill.md`.
+  - **Red before** (`--only b4g`, the unit's build of that morning,
+    `v6.0.0p-beta.14-3-gc371023`, which had our decode of the export's
+    `since` and not this change): the three new checks that ask something
+    of the firmware failed. Every malformed value was answered 200 with
+    rows (`since=abc` on the export: the oldest file from its start), no
+    answer was plain text, and the encoded cursor on the track did not go
+    on from the cursor. Log
+    `test-reports/logs/pr8_13_before_habackfill_b4g.log`.
+  - That run also had one E line, `data_logger: open
+    /sd/logs/dl_1795350440.jsonl failed (errno 13)`, 68 s into its start,
+    while the fourteen malformed requests ran: on that build each of them
+    was a full read of the ACTIVE file, one right behind the other. The
+    run on the new build, where they are refused before a file is opened,
+    had none. Not looked into further: see the trap below.
+
+**Traps.** A request that reads the logger's active file right behind
+another one can cost an E line (seen once, 2026-11-22, on the build
+before the `since` check: `open ... failed (errno 13)` while fourteen
+full exports of the active file ran back to back). A reading of the code,
+not proven on the bench: the route gates the writer only when its own
+open of the file fails, so a second request that arrives after the first
+has let the writer go, and before the writer has its file open again,
+would open the file ungated, and the writer's own open would then fail.
+Not reproduced since, not fixed: a bench that fires requests at the
+export or the track in a row should leave the writer a moment between
+them, or expect this line.
+
+A run leaves the bench HA's webhook registered on the unit: the bench
+takes the push settings "as found" after its b0 has reloaded the entry,
+which registers the webhook. A unit that had no push configured before
+(`ha_webhooks` off, no URL) comes out with it on, 15 s, the bench's URL;
+with ha-bench stopped again every push then writes three E lines of the
+HTTP client, and the next stage's `no E line` check fails on a good
+image (the `cansend` stage, 2026-11-22). Put `ha_webhooks` back by hand
+when the unit is not meant to stay paired with the bench HA.
+
+The integration runs an automatic pull at most every 5 min
 (`HISTORY_SYNC_MIN_INTERVAL`): a gap that ends inside that window is
 booked for the window's end, so a bench that restarts the device (the
 probe at the entry reload runs a pull) and comes home 4 min later waits

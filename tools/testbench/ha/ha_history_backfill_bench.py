@@ -736,6 +736,47 @@ def main():
                 check("[b4g] the document names the point count and no more", bool(trailer) and trailer.group(3) == "100" and trailer.group(2) == "false",
                       trailer.group(0) if trailer else "no trailer")
                 metric("b4g_gpx_bytes", len(gpx))
+            # both routes read `since` as a client writes it (6.0.0-beta.15,
+            # components pull request 8, GitHub issue #1079): the track's
+            # cursor with its colon as %3A is the same cursor (the GPX route
+            # read the value raw: the first page again), and a value that is
+            # neither an epoch nor a cursor is told to the client
+            import re as _re2
+            pt = r'<trkpt lat="([-\d.]+)" lon="([-\d.]+)"><time>([^<]+)</time>'
+            trl = r'<!-- cursor="([^"]+)" more="(true|false)" points="(\d+)" -->'
+            # a page that ends inside the file (the two series lie one behind
+            # the other on the card, so a short page pairs no point: the
+            # page's cursor is what is followed here, not its points)
+            code1, page1 = dut.api(f"/api/logger/gpx?since={t0_s - 5}&limit=40", timeout=60)
+            tr1 = _re2.search(trl, str(page1))
+            cur = tr1.group(1) if tr1 else ""
+            code_a, raw_page = dut.api(f"/api/logger/gpx?since={cur}&limit=4000", timeout=60)
+            code_b, enc_page = dut.api("/api/logger/gpx?since=" + urllib.parse.quote(cur, safe="") + "&limit=4000", timeout=60)
+            tra, trb = (_re2.search(trl, str(x)) for x in (raw_page, enc_page))
+            pa, pb = (_re2.findall(pt, str(x)) for x in (raw_page, enc_page))
+            check("[b4g] the track from a cursor inside the file: with its colon written %3A the route goes on from there, as with the colon (not from the file's start again)",
+                  bool(tr1) and tr1.group(2) == "true" and ":" in cur and code_a == code_b == 200 and bool(tra) and bool(trb)
+                  and tra.groups() == trb.groups() and pa == pb and len(pa) < 100,
+                  f"page 1 ends at {cur}; from there {tra.group(0) if tra else None} with {len(pa)} points; by %3A {trb.group(0) if trb else None} with {len(pb)} points")
+            said = "since is <epoch> or <epoch>:<offset>"
+            bad = {}
+            for route in ("/api/logger/export?stream=params&limit=5&since=", "/api/logger/gpx?limit=5&since="):
+                for v in ("abc", "12x", "12%3A", "%3A5", "-5", "%00", "1" * 60):
+                    code, body = dut.api(route + v, timeout=30, tries=1)
+                    if code != 400 or said not in str(body):
+                        bad[route.split("?")[0] + " " + v[:12]] = (code, str(body)[:50])
+            check("[b4g] a since that is neither form is answered 400 with the two forms, on the export and on the track (7 values each)", not bad, json.dumps(bad)[:300])
+            try:
+                with urllib.request.urlopen(dut.base + "/api/logger/export?stream=params&since=abc", timeout=15) as r:
+                    ctype = f"no 400 ({r.status})"
+            except urllib.error.HTTPError as e:
+                ctype = e.headers.get("Content-Type", "")
+            except OSError as e:
+                ctype = f"{type(e).__name__}: {e}"
+            check("[b4g] that 400 is plain text (its sentence has angle brackets)", ctype.startswith("text/plain"), ctype)
+            code, after_bad = dut.api(f"/api/logger/gpx?since={t0_s - 5}&limit=4000", timeout=60)
+            check("[b4g] the track is served again after the refusals (the route is not left busy)",
+                  code == 200 and len(_re2.findall(pt, str(after_bad))) == 100, f"{code} {str(after_bad)[:60]!r}")
             # the integration's service saves the same track under www/wican
             dev_id = ha.device_id_for(entry_id)
             check("[b4g] the HA device of the entry found", bool(dev_id), str(dev_id))
