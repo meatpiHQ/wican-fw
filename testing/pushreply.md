@@ -251,6 +251,7 @@ fingerprint stored with it matches the settings in use.
   working tree on `27cd5b4`): five new tests that fail on `27cd5b4` for the
   two faults above and pass now; 834 passed, coverage 96.36 %, ruff 744 and
   mypy 1 as before, hassfest reports no invalid integration.
+- 2026-11-22, two runs beside the push failure reasons (ha_webhooks keeps why an address failed; [pushfail.md](pushfail.md)): the first `PUSH REPLY FAIL` on a4 alone (`flash writes 80->90`), the second `PUSH REPLY PASS` (`54->54`) on the same image. The ten writes were config_backup refreshing its copies: the console has `config_backup: copies refreshed (flash + card)` 10.6 s after a3's `webhook settings taken from Home Assistant's reply`, inside a4's window. A race of the bench, there since the leg was written; a4 now lets the count come to rest before it starts (see the traps), and a third run with that wait was `PUSH REPLY PASS` again. `stack_ha_webhook_headroom_b` 10,424 to 10,484 of 16 KB with the two failure entries on the poster's stack.
 
 ## Traps
 
@@ -294,3 +295,4 @@ fingerprint stored with it matches the settings in use.
 - `cert_set` is a setting (reboot-to-apply), the address is not: r1 selects
   the set before the https legs. A registration and a reply keep the stored
   `cert_set`.
+- **A settings change is followed by the backup's refresh.** config_backup rewrites its copies about 10 s after any settings change (ten flash writes). A leg that counts flash writes after a leg that stored settings has to let that pass first: a4 reads the counter every 12 s until it stands still.

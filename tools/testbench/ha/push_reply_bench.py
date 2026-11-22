@@ -424,7 +424,18 @@ def legs_basic(b, base):
               f"{after[0]['status_keys'] if after else '?'} in the push "
               "after the reply")
 
+    # The settings a3 stored make config_backup refresh its copies about 10 s
+    # later (10 flash writes). That refresh fell inside this leg's window in
+    # one run of two on 2026-11-22 (`flash writes 80->90`, the console's
+    # `config_backup: copies refreshed` 10.6 s after `webhook settings
+    # taken`): let it pass before the count starts.
     w0 = dut.get("/api/status")["health"]["flash"]["writes"]
+    for _ in range(4):
+        time.sleep(12)
+        w = dut.get("/api/status")["health"]["flash"]["writes"]
+        if w == w0:
+            break
+        w0 = w
     b.settle(3)
     st2 = b.hook()
     w1 = dut.get("/api/status")["health"]["flash"]["writes"]
