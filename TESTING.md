@@ -254,7 +254,11 @@ CH344 quad-UART channel B, then CH342 A, both found by PnP name - see the
 physical-setup matrix), `-BenchHost rpi001`, `-DutIp` (default: resolve on the
 Pi, the hotspot's DHCP lease for hostname `wican_<DeviceId>` first, then
 mDNS minus the DUT's own AP subnet; pass an address to pin it), `-DeviceId 68ee8f5a653d` (the bench
-unit), `-NoReport`, `-SkipBenchCheck`.
+unit), `-NoReport`, `-SkipBenchCheck`, `-BreakBenchLock`.
+
+## The bench lock (one run on the bench at a time)
+
+Every kind that touches the bench (all but `list`, `host` and `check`) first takes a lock on the Pi and gives it back at its end; a second run started meanwhile ends at once with `NOT RUN. Another run holds the bench`, the holder, what it runs and since when. A lock whose run is gone is taken over by the next run; `-BreakBenchLock` takes it over whatever it is. Work by hand (a bench script through a tunnel of your own, a firmware upload) takes the lock by hand, from PowerShell: `python tools\testbench\lib\bench_lock.py take --owner <who> --what "<task>"`, then `$env:WICAN_BENCH_OWNER = '<who>'` for the `.\test.ps1` runs under it, and `... release --owner <who>` at the end (`status` says who holds the bench). The rules, the self-test and why it exists: [testing/bench_rig.md](testing/bench_rig.md), "The bench lock".
 
 ## The bench preflight (runs first, every kind)
 

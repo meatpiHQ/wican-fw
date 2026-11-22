@@ -38,6 +38,10 @@ param(
     [switch]$Flash,
     [switch]$NoReport,
     [switch]$SkipBenchCheck,  # bypass the physical-bench preflight
+    [switch]$BreakBenchLock,  # take the bench over from the run that holds its
+                              # lock (one run on the bench at a time, see "the
+                              # bench lock" below; a lock whose run is gone is
+                              # taken over without this)
     [switch]$SkipTidy,        # chipwake stage: the plain wake only, the leg that
                               # fills the OBD chip's store first is dropped
     [switch]$UartSilence,     # sleeptrig stage: add the 25 min UART-silence leg
@@ -1215,6 +1219,36 @@ if ($What -eq 'hil') {
     exit 1
 }
 Use-IdfEnv
+# ---- the bench lock: one run on the bench at a time (2026-11-23) ------------
+# Two runs against the one unit spoil each other: each restarts it under the
+# other, each saves "as found" what the other has staged, and each restore
+# puts the other's test state back (a profile stage and a Home Assistant
+# backfill bench, started by two sessions five minutes apart). A run that
+# touches the bench takes the lock on the Pi (tools\testbench\lib\
+# bench_lock.py) and gives it back at its end; `list`, `host` and `check`
+# change nothing on the bench and take none. A lock whose run is gone (this
+# process is what a later run looks for) is taken over by the next run. Work
+# by hand takes the lock by hand and names its owner in WICAN_BENCH_OWNER:
+# this script then runs under that lock and leaves it where it is.
+$script:benchLockOwner = $null     # the owner's name when THIS run took the lock
+if ($What -notin @('list', 'host', 'check')) {
+    $lockOwner = if ($env:WICAN_BENCH_OWNER) { $env:WICAN_BENCH_OWNER } else { "test.ps1 $What (pid $PID on $($env:COMPUTERNAME))" }
+    $lockArgs = @('take', '--owner', $lockOwner, '--what', "test.ps1 $What", '--pid', "$PID", '--ttl-min', '720', '--host', $BenchHost)
+    if ($BreakBenchLock) { $lockArgs += '--break' }
+    $lockSaid = & $script:BenchPy "$repo\tools\testbench\lib\bench_lock.py" @lockArgs 2>&1 | ForEach-Object { "$_" }
+    $lockCode = $LASTEXITCODE
+    foreach ($ln in $lockSaid) { Write-Host "bench lock: $ln" -ForegroundColor $(if ($lockCode -eq 3) { 'Red' } else { 'DarkGray' }) }
+    if ($lockCode -eq 0) {
+        $script:benchLockOwner = $lockOwner
+    } elseif ($lockCode -eq 3) {
+        Write-Host "${What}: NOT RUN. Another run holds the bench (the line above). Wait for it; -BreakBenchLock takes the bench over when that run is known to be gone." -ForegroundColor Red
+        Write-Host 'RESULT: FAIL' -ForegroundColor Red
+        exit 1
+    } elseif ($lockCode -ne 2) {
+        # 2 = held by this owner already (a lock taken by hand): nothing to take or to give back
+        Write-Host 'bench lock: not taken (the Pi did not answer, or the lock tool failed); the run goes on without it' -ForegroundColor Yellow
+    }
+}
 try {
     $benchOk = $true
     if ($What -ne 'list' -and -not $DutIp) { $DutIp = Resolve-DutIp }
@@ -3148,6 +3182,9 @@ try {
     } }
 } finally {
     Write-Report
+    if ($script:benchLockOwner) {
+        & $script:BenchPy "$repo\tools\testbench\lib\bench_lock.py" release --owner $script:benchLockOwner --host $BenchHost 2>&1 | ForEach-Object { Write-Host "bench lock: $_" -ForegroundColor DarkGray }
+    }
 }
 if ($script:anyFail) { Write-Host 'RESULT: FAIL' -ForegroundColor Red; exit 1 }
 if ($What -ne 'list') { Write-Host 'RESULT: PASS' -ForegroundColor Green }
