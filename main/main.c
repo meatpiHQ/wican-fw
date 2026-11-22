@@ -415,6 +415,8 @@ void app_main(void)
     main_boot_start("data_logger", data_logger_start);
     /* glue: autopid samples -> the logger's params stream */
     main_glue_wire_autopid_logger();
+    /* glue: the battery voltage into the same stream (device.batt_voltage) */
+    main_glue_wire_battery_logger();
     /* the backup key (NVS) and the copies worker; AFTER the filesystem, the
        card and every component whose files it mirrors (its first sweep
        runs 20 s later) */

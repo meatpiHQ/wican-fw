@@ -126,6 +126,23 @@ stops it itself).
   to 60 s; the restore left the settings, the table and the card as
   found, no unexpected reset, no E line, ha-bench stopped again.
 
+- 2026-11-22, the firmware with the battery voltage in the log
+  (`device.batt_voltage`, a row every 10 s) and the fixes of the logger's
+  carry-over queue, two runs:
+  - with the bench HA's own copy of the integration (the 2.0.0-beta1 code):
+    **FAIL, 5 of 49**. b3 saw no pull within 360 s of the return. That copy
+    drops a trigger that comes within 5 min of its last run when a follow-up
+    is already booked, and with a row of the hour still running in every
+    pull (the battery voltage) a follow-up is booked all the time. The
+    button's pull in b4 then imported the seeded hour exactly (mean 299.75,
+    0 to 599.5), which b4's own checks read as a second import.
+  - with the working tree of the integration put in its place for the run
+    (the copy set aside as `wican.installed` and put back after): **HA
+    BACKFILL PASS, 54 checks**, the pull 3 s into b3, b4 idempotent; the
+    stored marks carry `generation`, `states_until` and `kept`. Home
+    Assistant 2026.2.3 there has the recorder database version 53 too, and
+    the History fill wrote its states.
+
 **Traps.** The integration runs an automatic pull at most every 5 min
 (`HISTORY_SYNC_MIN_INTERVAL`): a gap that ends inside that window is
 booked for the window's end, so a bench that restarts the device (the

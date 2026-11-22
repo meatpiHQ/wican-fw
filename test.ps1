@@ -15,7 +15,7 @@
 # land in test-reports\logs\<run>\ (gitignored).
 #
 param(
-    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'bleoverload', 'blephy', 'blethru', 'bleram', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'profilee2e', 'slcan', 'canmax', 'mqttbatch', 'canbusoff', 'logtail', 'usbobd', 'httpauth', 'uploadconfirm', 'j2534auto', 'j2534std', 'j2534vbat', 'j2534vpw', 'j2534tp20', 'j2534fc', 'j2534session', 'j2534ext', 'multibus', 'cansend', 'kline', 'precan', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'wgcycle', 'tspublic', 'tlschain', 'tlsbyip', 'rulepost', 'pushreply', 'habackfill', 'garage', 'espnleasy', 'espnlapn', 'usbgps', 'usbdetach', 'abrp', 'backup', 'fwupdate', 'espnlota', 'logclock', 'sdformat', 'obdfw', 'chipprompt', 'chipguard', 'carname', 'canfilters', 'destnets', 'canselftest', 'attpstore', 'obdbringup', 'sleepword', 'sleeptrig', 'chipwake', 'connections', 'stackaudit', 'dwc2', 'logsinks', 'release', 'all', 'list')]
+    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'bleoverload', 'blephy', 'blethru', 'bleram', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'profilee2e', 'slcan', 'canmax', 'mqttbatch', 'canbusoff', 'logtail', 'usbobd', 'httpauth', 'uploadconfirm', 'j2534auto', 'j2534std', 'j2534vbat', 'j2534vpw', 'j2534tp20', 'j2534fc', 'j2534session', 'j2534ext', 'multibus', 'cansend', 'kline', 'precan', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'wgcycle', 'tspublic', 'tlschain', 'tlsbyip', 'rulepost', 'pushreply', 'habackfill', 'hadrive', 'garage', 'espnleasy', 'espnlapn', 'usbgps', 'usbdetach', 'abrp', 'backup', 'fwupdate', 'espnlota', 'logclock', 'sdformat', 'obdfw', 'chipprompt', 'chipguard', 'carname', 'canfilters', 'destnets', 'canselftest', 'attpstore', 'obdbringup', 'sleepword', 'sleeptrig', 'chipwake', 'connections', 'stackaudit', 'dwc2', 'logsinks', 'release', 'all', 'list')]
     [string]$What,
     [Parameter(Position = 1)][string]$Component,
     [ValidateSet('6.0.2', '6.1')][string]$Idf = '6.1',  # the ESP-IDF the build stages use (6.1 since 6.0.0-beta.5, 2026-10-27; 6.0.2 stays installed; build.ps1 -Idf has the same table)
@@ -79,8 +79,11 @@ param(
     [switch]$SkipPrecan,      # cansend stage: drop the leg on a car before CAN
                               # (the simulator a J1850 VPW car, then an ISO
                               # 9141-2 car; three planned restarts fewer)
-    [switch]$SkipSleep        # obdfw stage: drop the sleep-waits leg (no
+    [switch]$SkipSleep,       # obdfw stage: drop the sleep-waits leg (no
                               # sleep/wake cycle of the DUT)
+    [string]$DriveArgs = ''   # hadrive stage: arguments for the drive bench in
+                              # one string, e.g. '--drive-min 90 --trips 2
+                              # --park-min 8' (testing/hadrive.md lists them)
 )
 
 # 'Continue', not 'Stop': PS 5.1 turns redirected native stderr into
@@ -1166,6 +1169,7 @@ function Show-Inventory {
     Write-Host '  rulepost   - A rule''s http.post, plain and over https, on the event manager''s workers (GitHub issue #1067, 2026-11-16): two rules on mqtt.rx fired by one message each from the Pi''s broker; the plain post reaches a receiver on the Pi with the rendered body, the https posts (an ECDSA chain and an RSA chain) get the server''s answer, two at once put a handshake on each worker, the unit does not restart and each worker keeps 4 KB of stack; restored afterwards (~3 min, 2 planned restarts; needs internet for the DUT, the receiver on rpi001 over ssh)'
     Write-Host '  pushreply  - Settings in the reply to a push (2026-11-14): a stand-in for Home Assistant on the Pi answers the DUT''s pushes with webhook settings; taken and reported as the new revision, the same again without a flash write, refused when not JSON, too long, a bad field, pinned, or from a server a registration would not be taken from (plain http or https by IP to a public address); the revision gone after a change through the settings route; restored afterwards (~7 min, 3 planned restarts; -Untrusted adds the station''s network marked untrusted, the DUT''s USB-C on this PC, 3 more restarts)'
     Write-Host '  habackfill - Store and forward (2026-11-06): a drive recorded on the SD card as JSON lines reaches the bench Home Assistant''s long-term statistics once the pushes return, through the export route and its cursor; the Catch up history button, nothing imported twice, the sleep countdown pushed out while the log is read (the supply at 12.5 V), everything restored (~12 min, 2 planned restarts; needs the bench HA on rpi001, the simulator answering 010C, internal/bench_ha_credentials.json)'
+    Write-Host '  hadrive    - A drive in real time, start to finish (2026-11-22, the users'' reports of holes after a drive): at home on the bench AP, the AP off for the drive while ECU sim v2 plays a drive profile, home again, the integration''s pull, the follow-up past the hour; then every value set in the simulator against what the WiCAN recorded against what Home Assistant holds (hourly statistics, states), per parameter and per period, with a chart per parameter in report.html; -DriveArgs takes the bench''s own arguments (drive length, trips, a park with the supply down, the settle, Home Assistant''s unit system); prints HA DRIVE PASS (the default: 3 min at home, 20 min away, then up to an hour for the hour to end; 2 planned restarts; needs the P4 bench AP, ECU sim v2, the fresh Home Assistant on rpi001)'
     Write-Host '  espnleasy  - the ESPNetLink easy-setup surfaces on the DUT (2026-10-13): the usb summary on /api/status against /api/espnetlink, the sim_pin key (a no-op PUT, no restart), the UI doors in the served page, the GPS hint counting away from home (ap off on the P4 for 100 s, home again) (~6 min; needs the P4 daemon)'
     Write-Host '  espnlapn   - the carrier settings relay in the USB modes (2026-10-28): a bench APN set on the WiCAN reaches the dongle through the share pass (one planned dongle restart), a plain WiCAN restart writes nothing, the APN restored as found and the LTE back (~8 min, 3 to 4 planned WiCAN restarts, 2 dongle restarts; the dongle on the connector in a USB mode with its console on; its LTE is down while the bench APN is on it)'
     Write-Host '  garage     - the garage story with the ESPNetLink (2026-10-12): home WiFi on the P4, away on the dongle LTE with the VPN to betty, home again, flaps, a dongle reboot away, sleep/wake both ways; the data path judged at a receiver on betty by the source address of every POST; the default legs in usb_rndis with VPN variant A (~35 min; wifi_modem, variant B, g9 and g11 by hand)'
@@ -2342,6 +2346,31 @@ try {
                     $out = & $py -u "$repo\tools\testbench\ha\ha_history_backfill_bench.py" '--dut' 'localhost:18086' '--dut-ip' $DutIp '--pi' $BenchHost 2>&1 | ForEach-Object { Write-Host $_; $_ }
                     Save-StageLog 'ha_backfill' $out
                     if (-not ($out | Select-String -Quiet 'HA BACKFILL PASS')) { throw 'no HA BACKFILL PASS (the bench HA up on rpi001? the simulator answering 010C? testing/habackfill.md)' }
+                } finally {
+                    if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
+                    Stop-ConsoleTail $con
+                }
+            }
+        }
+        'hadrive' {
+            # A drive in real time (2026-11-22): home on the bench AP, the AP
+            # off while ECU sim v2 plays a drive profile, home again, the
+            # integration's pull and its follow-up past the hour; the truth
+            # against the unit's log against Home Assistant, per parameter
+            # and per period. -DriveArgs carries the bench's own arguments.
+            # testing/hadrive.md.
+            Invoke-Stage 'A drive, recorded and backfilled: the simulator, the SD card log, Home Assistant' {
+                $py = $script:BenchPy
+                $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18089:${DutIp}:80", $BenchHost)
+                $con = Start-ConsoleTail 'ha_drive'
+                try {
+                    Start-Sleep -Seconds 3
+                    if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (port 18089 busy?)" }
+                    $benchArgs = @('--dut', 'localhost:18089', '--dut-ip', $DutIp, '--pi', $BenchHost)
+                    if ($DriveArgs) { $benchArgs += ($DriveArgs -split '\s+' | Where-Object { $_ }) }
+                    $out = & $py -u "$repo\tools\testbench\ha\ha_drive_backfill_bench.py" @benchArgs 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    Save-StageLog 'ha_drive' $out
+                    if (-not ($out | Select-String -Quiet 'HA DRIVE PASS')) { throw 'no HA DRIVE PASS (report.md and report.html in the run''s log dir name the parameter and the period; testing/hadrive.md)' }
                 } finally {
                     if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
                     Stop-ConsoleTail $con

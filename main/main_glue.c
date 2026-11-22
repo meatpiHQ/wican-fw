@@ -9,6 +9,7 @@
 
 #include "esp_attr.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -17,6 +18,7 @@
 
 #include "api_http.h"
 #include "autopid.h"
+#include "battery_monitor.h"
 #include "ble_manager.h"
 #include "button_manager.h"
 #include "cmdline_manager.h"
@@ -253,6 +255,59 @@ void main_glue_wire_vehicle_status(void)
 void main_glue_wire_autopid_logger(void)
 {
     autopid_set_value_sink(data_logger_autopid_sink);
+}
+
+/** Composition glue: the unit's battery voltage -> the logger's params
+ *  stream as `device.batt_voltage` (2026-11-22, store and forward: the
+ *  Home Assistant integration fills the device's Battery Voltage sensor
+ *  from it, which stayed flat across a drive). One sample every
+ *  BATT_LOG_PERIOD_S, the number the status push carries (two decimals);
+ *  the logger's `autopid_log` gate decides: `all` takes every sample,
+ *  `changed` one that moved BATT_LOG_STEP_V since the last one it took.
+ *  esp_timer task: a cached reading and a ring push, nothing blocks. */
+#define BATT_LOG_PERIOD_S 10
+#define BATT_LOG_STEP_V   0.05f
+
+static esp_timer_handle_t s_batt_log_timer;
+
+static void batt_log_tick(void *arg)
+{
+    static float s_last = -1000.0f;
+    float volts = 0;
+
+    (void)arg;
+
+    if (battery_monitor_voltage(&volts) != ESP_OK)
+    {
+        return; /* no reading yet */
+    }
+
+    float moved = volts - s_last;
+    bool changed = moved >= BATT_LOG_STEP_V || moved <= -BATT_LOG_STEP_V;
+
+    if (changed)
+    {
+        s_last = volts;
+    }
+
+    data_logger_device_sink("batt_voltage",
+                            (double)((int)(volts * 100)) / 100.0, changed);
+}
+
+void main_glue_wire_battery_logger(void)
+{
+    const esp_timer_create_args_t args =
+    {
+        .callback = batt_log_tick,
+        .name = "batt_log",
+    };
+
+    if (s_batt_log_timer == NULL &&
+        esp_timer_create(&args, &s_batt_log_timer) == ESP_OK)
+    {
+        (void)esp_timer_start_periodic(s_batt_log_timer,
+                                       BATT_LOG_PERIOD_S * 1000000ULL);
+    }
 }
 
 /* ---- button CONFIG MODE (meatpi 2026-07-19, legacy config_mode.c) -----------

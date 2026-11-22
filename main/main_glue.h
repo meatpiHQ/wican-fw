@@ -31,6 +31,10 @@ void main_glue_wire_vehicle_status(void);
 /** Autopid samples feed data_logger's params stream. */
 void main_glue_wire_autopid_logger(void);
 
+/** The unit's battery voltage feeds data_logger's params stream
+ *  (`device.batt_voltage`, one sample every 10 s). */
+void main_glue_wire_battery_logger(void);
+
 /** Button long-press -> CONFIG MODE (BLE off, AP forced up, legacy
  *  yellow/blue LED alternation, 10 min timeout-reboot held open while
  *  an AP client is attached). */

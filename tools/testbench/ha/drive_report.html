@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__TITLE__</title>
+<style>
+:root {
+  color-scheme: light;
+  --surface-0: #f4f3f0; --surface-1: #fcfcfb; --rule: #dddbd5;
+  --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #7b7a75;
+  --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --truth: #52514e;
+  --band-away: rgba(82, 81, 78, 0.10); --band-parked: rgba(82, 81, 78, 0.20);
+  --good: #0ca30c; --critical: #d03b3b; --warning: #fab219;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --surface-0: #121211; --surface-1: #1a1a19; --rule: #383835;
+    --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #8f8e86;
+    --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --truth: #c3c2b7;
+    --band-away: rgba(240, 239, 236, 0.09); --band-parked: rgba(240, 239, 236, 0.18);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface-0: #121211; --surface-1: #1a1a19; --rule: #383835;
+  --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #8f8e86;
+  --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --truth: #c3c2b7;
+  --band-away: rgba(240, 239, 236, 0.09); --band-parked: rgba(240, 239, 236, 0.18);
+}
+body { margin: 0; background: var(--surface-0); color: var(--text-primary);
+       font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 1240px; margin: 0 auto; padding: 20px 16px 60px; }
+h1 { font-size: 22px; margin: 0 0 6px; } h2 { font-size: 16px; margin: 28px 0 8px; }
+p { margin: 6px 0; color: var(--text-secondary); }
+.muted { color: var(--text-muted); }
+ul { margin: 6px 0; padding-left: 0; list-style: none; }
+ul.verdict li { padding: 3px 0 3px 14px; border-left: 4px solid var(--rule); margin: 3px 0; }
+ul.verdict li.pass { border-left-color: var(--good); } ul.verdict li.fail { border-left-color: var(--critical); }
+ul.notes li { padding: 3px 0 3px 14px; border-left: 4px solid var(--warning); margin: 3px 0; color: var(--text-secondary); }
+.scroll { overflow-x: auto; background: var(--surface-1); border: 1px solid var(--rule); border-radius: 6px; }
+table { border-collapse: collapse; width: 100%; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+th, td { padding: 5px 8px; border-bottom: 1px solid var(--rule); text-align: left; white-space: nowrap; }
+th { color: var(--text-secondary); font-weight: 600; position: sticky; top: 0; background: var(--surface-1); }
+tr:last-child td { border-bottom: 0; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 20px; margin: 8px 0 12px; color: var(--text-secondary); font-size: 12.5px;
+          position: sticky; top: 0; background: var(--surface-0); padding: 6px 0; z-index: 2; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend svg { flex: none; }
+.filters { display: flex; gap: 14px; align-items: center; margin: 6px 0; color: var(--text-secondary); font-size: 12.5px; }
+.card { background: var(--surface-1); border: 1px solid var(--rule); border-radius: 6px; margin: 10px 0; padding: 8px 10px 4px; position: relative; }
+.card h3 { margin: 0; font-size: 13.5px; font-weight: 600; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.card h3 small { font-weight: 400; color: var(--text-muted); font-size: 12px; }
+.card svg { display: block; width: 100%; height: 200px; }
+.tip { position: absolute; pointer-events: none; background: var(--surface-1); border: 1px solid var(--rule); border-radius: 4px;
+       padding: 5px 8px; font-size: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.18); display: none; z-index: 3; white-space: nowrap; }
+.tip b { font-weight: 600; } .tip i { display: inline-block; width: 9px; height: 3px; margin-right: 6px; vertical-align: middle; }
+text { font: 11px system-ui, -apple-system, "Segoe UI", sans-serif; fill: var(--text-muted); }
+text.band { fill: var(--text-secondary); }
+</style>
+</head>
+<body>
+<main class="viz-root">
+<h1>__TITLE__</h1>
+<p>__HEAD__</p>
+<h2>Verdict</h2>
+<ul class="verdict">__VERDICT__</ul>
+<ul class="notes">__NOTES__</ul>
+<h2>Per parameter</h2>
+__SUMMARY__
+<h2>The integration's catch-up runs</h2>
+__SYNCS__
+<h2>The three records over time</h2>
+<div class="filters">
+  <label><input type="checkbox" id="onlyOdd"> only parameters with a finding</label>
+  <label><input type="checkbox" id="onlyDriven"> only driven parameters</label>
+</div>
+<div class="legend" id="legend"></div>
+<div id="charts"></div>
+</main>
+<script id="data" type="application/json">__DATA__</script>
+<script>
+(function () {
+  var D = JSON.parse(document.getElementById('data').textContent);
+  var NS = 'http://www.w3.org/2000/svg';
+  function el(tag, attrs, parent) {
+    var e = document.createElementNS(NS, tag);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  function hhmm(t, secs) {
+    var d = new Date(t * 1000), p = function (n) { return (n < 10 ? '0' : '') + n; };
+    return p(d.getUTCHours()) + ':' + p(d.getUTCMinutes()) + (secs ? ':' + p(d.getUTCSeconds()) : '');
+  }
+  function fmt(v) {
+    if (v === null || v === undefined) return '-';
+    return Math.abs(v) >= 1000 ? v.toFixed(0) : Math.abs(v) >= 10 ? (+v.toFixed(2)).toString() : (+v.toFixed(3)).toString();
+  }
+  var legend = document.getElementById('legend');
+  legend.innerHTML =
+    '<span><svg width="26" height="10"><line x1="0" y1="5" x2="26" y2="5" stroke="var(--truth)" stroke-width="1.5" stroke-dasharray="4 3"/></svg>set in the simulator (the truth)</span>' +
+    '<span><svg width="26" height="10"><line x1="0" y1="5" x2="26" y2="5" stroke="var(--series-1)" stroke-width="2"/></svg>recorded by the WiCAN (SD card log)</span>' +
+    '<span><svg width="26" height="10"><line x1="0" y1="5" x2="26" y2="5" stroke="var(--series-2)" stroke-width="2"/><circle cx="13" cy="5" r="3" fill="var(--series-2)"/></svg>Home Assistant states (the History panel)</span>' +
+    '<span><svg width="26" height="12"><rect x="0" y="1" width="26" height="10" fill="var(--series-3)" opacity="0.18"/><line x1="0" y1="6" x2="26" y2="6" stroke="var(--series-3)" stroke-width="2"/></svg>Home Assistant hourly statistics (mean, band = min to max)</span>' +
+    '<span><svg width="26" height="12"><rect x="0" y="0" width="26" height="12" fill="var(--band-away)" stroke="var(--rule)"/></svg>away from the home network</span>';
+
+  function render(card, d) {
+    var svg = card.querySelector('svg'), tip = card.querySelector('.tip');
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    var W = Math.max(640, svg.clientWidth || 1100), H = 200, L = 58, R = 10, T = 16, B = 22;
+    svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+    var x0 = D.x0, x1 = D.x1, lo = Infinity, hi = -Infinity;
+    function see(v) { if (v !== null && v !== undefined && isFinite(v)) { if (v < lo) lo = v; if (v > hi) hi = v; } }
+    d.truth.forEach(function (p) { see(p[1]); });
+    d.dev.forEach(function (p) { if (p) see(p[1]); });
+    d.states.forEach(function (p) { see(p[1]); });
+    d.hours.forEach(function (h) { if (h.ha) { see(h.ha.min); see(h.ha.max); see(h.ha.mean); } });
+    if (!isFinite(lo)) { lo = 0; hi = 1; }
+    if (hi - lo < 1e-9) { lo -= 1; hi += 1; }
+    var pad = (hi - lo) * 0.08; lo -= pad; hi += pad;
+    function X(t) { return L + (t - x0) / (x1 - x0) * (W - L - R); }
+    function Y(v) { return T + (hi - v) / (hi - lo) * (H - T - B); }
+    function clampX(t) { return Math.max(L, Math.min(W - R, X(t))); }
+    // the phases
+    D.phases.forEach(function (ph) {
+      if (ph.kind === 'home') return;
+      var a = clampX(ph.t0), b = clampX(ph.t1);
+      el('rect', { x: a, y: T, width: Math.max(0, b - a), height: H - T - B, fill: ph.kind === 'away' ? 'var(--band-away)' : 'var(--band-parked)' }, svg);
+      if (b - a > 40) el('text', { x: a + 4, y: T + 11, 'class': 'band' }, svg).textContent = ph.kind;
+    });
+    // the axes: the hours, a few values
+    el('line', { x1: L, y1: H - B, x2: W - R, y2: H - B, stroke: 'var(--rule)' }, svg);
+    var span = x1 - x0, tick = span > 6 * 3600 ? 3600 : span > 2 * 3600 ? 1800 : span > 3600 ? 600 : 300;
+    for (var t = Math.ceil(x0 / tick) * tick; t <= x1; t += tick) {
+      var top = t % 3600 === 0;
+      el('line', { x1: X(t), y1: T, x2: X(t), y2: H - B, stroke: 'var(--rule)', 'stroke-dasharray': top ? '' : '2 4', opacity: top ? 1 : 0.6 }, svg);
+      el('text', { x: X(t), y: H - 7, 'text-anchor': 'middle' }, svg).textContent = hhmm(t);
+    }
+    [lo + pad, (lo + hi) / 2, hi - pad].forEach(function (v) {
+      el('text', { x: L - 6, y: Y(v) + 4, 'text-anchor': 'end' }, svg).textContent = fmt(v);
+    });
+    // Home Assistant's hourly statistics
+    d.hours.forEach(function (h) {
+      var a = clampX(h.h), b = clampX(h.h + 3600);
+      if (b - a < 2) return;
+      if (h.ha && h.ha.mean !== null && h.ha.mean !== undefined) {
+        if (h.ha.min !== null && h.ha.max !== null)
+          el('rect', { x: a + 1, y: Y(h.ha.max), width: b - a - 2, height: Math.max(1, Y(h.ha.min) - Y(h.ha.max)), fill: 'var(--series-3)', opacity: 0.18 }, svg);
+        el('line', { x1: a + 1, y1: Y(h.ha.mean), x2: b - 1, y2: Y(h.ha.mean), stroke: 'var(--series-3)', 'stroke-width': 2 }, svg);
+      }
+      if (h.status !== 'no rows' && b - a > 70)
+        el('text', { x: b - 4, y: T + 11, 'text-anchor': 'end', 'class': 'band' }, svg).textContent = 'hour ' + hhmm(h.h) + ': ' + h.status;
+    });
+    // the truth, a step line
+    if (d.truth.length) {
+      var p = '';
+      d.truth.forEach(function (s, i) {
+        var nx = i + 1 < d.truth.length ? d.truth[i + 1][0] : Math.min(x1, D.validated);
+        p += (i ? 'L' : 'M') + clampX(s[0]).toFixed(1) + ' ' + Y(s[1]).toFixed(1) + 'L' + clampX(nx).toFixed(1) + ' ' + Y(s[1]).toFixed(1);
+      });
+      el('path', { d: p, fill: 'none', stroke: 'var(--truth)', 'stroke-width': 1.5, 'stroke-dasharray': '4 3' }, svg);
+    }
+    // the unit's log
+    var path = '', pen = false;
+    d.dev.forEach(function (q) {
+      if (!q) { pen = false; return; }
+      path += (pen ? 'L' : 'M') + X(q[0]).toFixed(1) + ' ' + Y(q[1]).toFixed(1);
+      pen = true;
+    });
+    if (path) el('path', { d: path, fill: 'none', stroke: 'var(--series-1)', 'stroke-width': 2, 'stroke-linejoin': 'round' }, svg);
+    // Home Assistant's states, held until the next one
+    var sp = '', on = false, lastY = null;
+    d.states.forEach(function (q, i) {
+      if (q[1] === null) { on = false; return; }
+      var x = clampX(q[0]), y = Y(q[1]);
+      sp += on ? 'L' + x.toFixed(1) + ' ' + lastY.toFixed(1) + 'L' + x.toFixed(1) + ' ' + y.toFixed(1) : 'M' + x.toFixed(1) + ' ' + y.toFixed(1);
+      var nxt = d.states[i + 1];
+      if (!nxt) sp += 'L' + clampX(Math.min(x1, D.validated)).toFixed(1) + ' ' + y.toFixed(1);
+      on = true; lastY = y;
+    });
+    if (sp) el('path', { d: sp, fill: 'none', stroke: 'var(--series-2)', 'stroke-width': 2 }, svg);
+    if (d.states.length <= 120) d.states.forEach(function (q) {
+      if (q[1] !== null) el('circle', { cx: clampX(q[0]), cy: Y(q[1]), r: 3, fill: 'var(--series-2)', stroke: 'var(--surface-1)', 'stroke-width': 1 }, svg);
+    });
+    // the hover layer
+    var cross = el('line', { x1: 0, y1: T, x2: 0, y2: H - B, stroke: 'var(--text-muted)', 'stroke-width': 1, visibility: 'hidden' }, svg);
+    var hit = el('rect', { x: L, y: T, width: W - L - R, height: H - T - B, fill: 'transparent' }, svg);
+    function at(evt) {
+      var r = svg.getBoundingClientRect(), px = (evt.clientX - r.left) * (W / r.width);
+      var t = x0 + (px - L) / (W - L - R) * (x1 - x0);
+      cross.setAttribute('x1', px); cross.setAttribute('x2', px); cross.setAttribute('visibility', 'visible');
+      var tr = null, dv = null, stv, hr = null, i;
+      for (i = 0; i < d.truth.length && d.truth[i][0] <= t; i++) tr = d.truth[i][1];
+      var best = 20;
+      d.dev.forEach(function (q) { if (q && Math.abs(q[0] - t) < best) { best = Math.abs(q[0] - t); dv = q[1]; } });
+      for (i = 0; i < d.states.length && d.states[i][0] <= t; i++) stv = d.states[i];
+      d.hours.forEach(function (h) { if (h.h <= t && t < h.h + 3600) hr = h; });
+      var rows = '<b>' + hhmm(t, true) + ' UTC</b>';
+      if (d.truth.length) rows += '<br><i style="background:var(--truth)"></i>simulator ' + fmt(tr);
+      rows += '<br><i style="background:var(--series-1)"></i>WiCAN log ' + (dv === null ? 'no row within 20 s' : fmt(dv));
+      rows += '<br><i style="background:var(--series-2)"></i>HA state ' + (stv ? (stv[1] === null ? 'unavailable' : fmt(stv[1])) + ' (since ' + hhmm(stv[0], true) + ')' : 'none yet');
+      if (hr) rows += '<br><i style="background:var(--series-3)"></i>HA hour ' + hhmm(hr.h) + ': ' + (hr.ha && hr.ha.mean !== null ? 'mean ' + fmt(hr.ha.mean) + ', ' + fmt(hr.ha.min) + ' to ' + fmt(hr.ha.max) : 'no row') +
+        (hr.exp ? ' (the log: mean ' + fmt(hr.exp.mean) + ', ' + fmt(hr.exp.min) + ' to ' + fmt(hr.exp.max) + '; ' + hr.status + ')' : '');
+      tip.innerHTML = rows; tip.style.display = 'block';
+      var cr = card.getBoundingClientRect(), left = evt.clientX - cr.left + 14;
+      if (left + tip.offsetWidth > cr.width - 6) left = evt.clientX - cr.left - tip.offsetWidth - 14;
+      tip.style.left = Math.max(4, left) + 'px'; tip.style.top = '34px';
+    }
+    hit.addEventListener('mousemove', at);
+    hit.addEventListener('mouseleave', function () { tip.style.display = 'none'; cross.setAttribute('visibility', 'hidden'); });
+  }
+
+  var host = document.getElementById('charts'), cards = [];
+  D.charts.forEach(function (d) {
+    var card = document.createElement('div');
+    card.className = 'card';
+    var odd = d.backfill !== 'every hour' || d.scale === 'other' ||
+      d.hours.some(function (h) { return h.status === 'differs' || h.status === 'missing'; });
+    card.dataset.odd = odd ? '1' : ''; card.dataset.driven = d.driven ? '1' : '';
+    card.innerHTML = '<h3></h3><svg role="img"></svg><div class="tip"></div>';
+    var h3 = card.querySelector('h3');
+    h3.textContent = d.name + ' ';
+    var sm = document.createElement('small');
+    sm.textContent = (d.entity || 'no sensor in Home Assistant') + (d.driven ? '' : ' (not driven: the simulator holds it)') + '; statistics: ' + d.backfill +
+      (d.scale === 'other' ? '; live states in another unit than the log' : '');
+    h3.appendChild(sm);
+    card.querySelector('svg').setAttribute('aria-label', d.name + ': the simulator, the WiCAN log and Home Assistant over time');
+    host.appendChild(card);
+    cards.push([card, d]);
+  });
+  function draw() { cards.forEach(function (c) { if (c[0].style.display !== 'none') render(c[0], c[1]); }); }
+  function filter() {
+    var odd = document.getElementById('onlyOdd').checked, drv = document.getElementById('onlyDriven').checked;
+    cards.forEach(function (c) { c[0].style.display = (odd && !c[0].dataset.odd) || (drv && !c[0].dataset.driven) ? 'none' : ''; });
+    draw();
+  }
+  document.getElementById('onlyOdd').addEventListener('change', filter);
+  document.getElementById('onlyDriven').addEventListener('change', filter);
+  window.addEventListener('resize', draw);
+  draw();
+})();
+</script>
+</body>
+</html>
