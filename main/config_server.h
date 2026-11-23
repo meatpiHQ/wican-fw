@@ -68,6 +68,14 @@ typedef struct _device_config
 	char sta_ssid[65];
 	char sta_pass[65];
 	char sta_security[8];
+	// Static STA IP config; each defaults to "" (DHCP) when the key is absent
+	// from config.json, so an incomplete or unset value can never leave the
+	// interface half-configured. sta_dns is optional even when static IP is
+	// in use -- an empty/invalid value falls back to sta_gateway.
+	char sta_static_ip[16];
+	char sta_gateway[16];
+	char sta_netmask[16];
+	char sta_dns[16];
 	char can_datarate[65];
 	char can_mode[65];
 	char port_type[65];
@@ -115,6 +123,10 @@ int8_t config_server_get_ap_ch(void);
 int8_t config_server_get_webhook_en(void);
 char *config_server_get_sta_ssid(void);
 char *config_server_get_sta_pass(void);
+char *config_server_get_sta_static_ip(void);
+char *config_server_get_sta_gateway(void);
+char *config_server_get_sta_netmask(void);
+char *config_server_get_sta_dns(void);
 int8_t config_server_get_can_rate(void);
 int8_t config_server_get_can_mode(void);
 int8_t config_server_get_port_type(void);
