@@ -366,25 +366,50 @@ static esp_err_t store_config_handler(httpd_req_t *req)
         return ESP_FAIL; // Invalid content length
     }
 
-    buf = (char *)malloc(buf_size);
+    buf = (char *)malloc(buf_size + 1);
     if (!buf)
     {
         return ESP_ERR_NO_MEM; // Memory allocation failure
     }
 
-    int ret = httpd_req_recv(req, buf, buf_size);
-
-    if (ret <= 0)
+    size_t got = 0;
+    while (got < buf_size)
     {
-        if (ret == HTTPD_SOCK_ERR_TIMEOUT)
+        int ret = httpd_req_recv(req, buf + got, buf_size - got);
+        if (ret <= 0)
         {
-            // Retry receiving if timeout occurred
+            // timeout or read error
             free(buf);
             return ESP_FAIL;
         }
-        // Handle read error
-        free(buf);
-        return ESP_FAIL;
+        got += ret;
+    }
+    buf[buf_size] = '\0';
+
+    // An empty station password means "unchanged" (the UI never receives it)
+    cJSON *cfg = cJSON_Parse(buf);
+    if (cfg)
+    {
+        cJSON *pw = cJSON_GetObjectItem(cfg, "sta_pass");
+        if (!cJSON_IsString(pw) || pw->valuestring[0] == '\0')
+        {
+            if (pw)
+            {
+                cJSON_ReplaceItemInObject(cfg, "sta_pass", cJSON_CreateString(device_config.sta_pass));
+            }
+            else
+            {
+                cJSON_AddStringToObject(cfg, "sta_pass", device_config.sta_pass);
+            }
+            char *merged = cJSON_PrintUnformatted(cfg);
+            if (merged)
+            {
+                free(buf);
+                buf = merged;
+                buf_size = strlen(merged);
+            }
+        }
+        cJSON_Delete(cfg);
     }
 
     FILE *f = fopen(FS_MOUNT_POINT"/config.json", "w");
@@ -611,9 +636,23 @@ static esp_err_t load_pid_auto_config_handler(httpd_req_t *req)
 
 static esp_err_t load_config_handler(httpd_req_t *req)
 {
-    const char* resp_str = (const char*)device_config_file;
+    // never hand the station password to the browser; an empty password on
+    // store_config keeps the stored one
+    char *masked = NULL;
+    cJSON *cfg = cJSON_Parse((const char*)device_config_file);
+    if (cfg)
+    {
+        if (cJSON_GetObjectItem(cfg, "sta_pass"))
+        {
+            cJSON_ReplaceItemInObject(cfg, "sta_pass", cJSON_CreateString(""));
+        }
+        masked = cJSON_PrintUnformatted(cfg);
+        cJSON_Delete(cfg);
+    }
+    const char* resp_str = masked ? masked : (const char*)device_config_file;
 	httpd_resp_set_type(req, "application/json");
     httpd_resp_send(req, (const char*)resp_str, HTTPD_RESP_USE_STRLEN);
+    free(masked);
     ESP_LOGI(TAG, "device_config_file: %s", device_config_file);
 	UBaseType_t stack_high_watermark = uxTaskGetStackHighWaterMark(NULL);
 	ESP_LOGI(TAG, "Task stack high watermark: %u words", stack_high_watermark);
