@@ -38,8 +38,10 @@ Legs:
   f3p the unit's own page, in Chrome (can_filters_page.mjs, skipped with
       --no-page): the CAN filters list on Custom PIDs with its live
       values, Add CAN filter, the fields, Test (the frame and 60 km/h),
-      Apply Configuration (the unit's table and its reading), and a filter
-      added on Vehicle Specific that arrives tagged `profile`
+      Apply Configuration (the unit's table and its reading), a filter
+      added on Vehicle Specific that arrives tagged `profile`, and (since
+      2026-11-23) Apply on Standard PIDs with a filter that has no ID:
+      nothing reaches the unit, the page opens the filter's row
   f4  the switches: `specific_enabled` off = the vehicle's filters rest
       (the page's one too), the custom ones and the PID go on;
       `custom_enabled` off = the opposite; Test still reads a resting

@@ -38,8 +38,24 @@
    Elsewhere:
      H  a car that does not send the frame: the dialog says so, no value
      I  Standard PIDs has no CAN filters list
-     J  a row in a shape the page does not know is shown and never rewritten
+     J  a row in a shape the page does not know (its ID as text under `id`, no
+        parameters list: a hand-made file can bring one, no device stores it) is
+        shown and never rewritten; it has no ID the device takes, so Apply stops
+        at it (L); given an ID it goes with everything it carried
      K  no page error in the whole run
+   Apply with a CAN filter that has no ID (2026-11-23, a user's report: "Rejected:
+   filter 0: frame_id required" under Standard PIDs, after one click on Add CAN
+   filter on another tab; the page sent the row, the device refused the whole
+   table and named the filter by its position):
+     L  Add CAN filter on Custom PIDs, then Apply on Standard PIDs: nothing is
+        sent, Custom PIDs opens with the row open and the cursor in its ID field,
+        the line under the list and the toast name the filter, no "Rejected" line;
+        with an ID typed the line goes and Apply sends the table; removed, the
+        table goes without it
+     M  Apply on the filter's own tab: the pane is not built again, and a search
+        that hides the row does not hide it now
+     N  a filter of the vehicle's set: Vehicle Specific opens
+     O  Raw Config goes as typed: the device's own words in the toast
    usage: node probe_can_filters.mjs   (after make_preview.py; node >= 20) */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -114,7 +130,10 @@ function boot(preset) {
   const rowOf = (re) => rows().find((r) => re.test(($(".fname", r) || {}).value || ""));
   const count = () => (($(".fltl .pidl-tools .help") || {}).textContent || "");
   const dirty = () => $$(".chip.warn").some((c) => /Unsaved edits/.test(c.textContent) && c.style.display !== "none");
-  return { w, d, $, $$, fire, set, btn, errs, modalText, closeModal, toasts, clearToasts, puts, tests, tab, apply, fl, rows, rowOf, count, dirty,
+  const onTab = () => $$(".seg button.on").map((x) => x.textContent.trim()).find((t) => /^(Standard PIDs|Custom PIDs|Vehicle Specific|Raw Config)$/.test(t)) || "";   /* the tab that is open */
+  const askLine = () => { const l = $(".fltl .flt-ask"); return l && l.style.display !== "none" ? l.textContent : ""; };   /* the list's own line */
+  const rejected = () => $$(".pidl-err:not(.flt-ask)").filter((l) => l.style.display !== "none" && /^Rejected/.test(l.textContent)).map((l) => l.textContent);
+  return { w, d, $, $$, fire, set, btn, errs, modalText, closeModal, toasts, clearToasts, puts, tests, tab, apply, fl, rows, rowOf, count, dirty, onTab, askLine, rejected,
     lastPut: () => puts[puts.length - 1], M: () => w.__mockState, close: () => dom.window.close() };
 }
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -316,19 +335,99 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 /* ================= a row in a shape the page does not know ================= */
 {
-  /* the mock's own table: a filter in a flat shape (id as text, no parameters list) */
-  const p = boot({});
+  /* a filter in a flat shape (its ID as text under `id`, no parameters list). No device stores one: the firmware
+     refuses a filter without a numeric frame_id. A hand-made file can bring it (the mock's own table had it until
+     2026-11-23, and the mock took it back on a PUT) */
+  const FLAT = { id: "0x18DAF110", name: "SOC_BMS", expression: "B5/2", unit: "%", monitor_ms: 1000 };
+  const p = boot({ autopidCfg: { ...table(), filters: [JSON.parse(JSON.stringify(FLAT))] } });
   const { $ } = p;
   await sleep(2500);
   await p.tab("Custom PIDs");
-  const before = JSON.parse(JSON.stringify(p.M().autopidCfg.filters));
-  const r = p.rows()[0];
+  let r = p.rows()[0];
   check("J: it is shown: its name, no ID the page can read (marked), no parameters", r && $(".fname", r).value === "SOC_BMS" && $(".fid", r).value === "" && $(".fid", r).classList.contains("bad") && /▸ 0 parameters/.test(r.textContent),
     r && [$(".fname", r).value, $(".fid", r).value]);
   $(".caret", r).click(); await sleep(150);
-  $(".flt-add").click(); await sleep(150);
-  check("J: Apply sends it as it was stored, beside the new one", await p.apply() && same(p.lastPut().filters[0], before[0]) && p.lastPut().filters.length === 2, p.lastPut().filters[0]);
+  check("J: Apply does not send a filter without an ID the device takes, and names it", !(await p.apply()) && p.puts.length === 0 && /^Not sent: the CAN filter SOC_BMS has no CAN ID\./.test(p.askLine()), [p.puts.length, p.askLine()]);
+  r = p.rows()[0];
+  p.set($(".fid", r), "0x18DAF110"); await sleep(50);
+  check("J: with its ID typed it goes with everything it carried, the ID as a number beside it", await p.apply() && same(p.lastPut().filters, [{ ...FLAT, frame_id: 0x18DAF110 }]), p.lastPut() && p.lastPut().filters);
   check("K: no page error with that row", p.errs.length === 0, p.errs.slice(0, 3));
+  p.close();
+}
+
+/* ================= Apply with a CAN filter that has no ID ================= */
+{
+  /* the reporter's table: standard PIDs, no filter anywhere */
+  const p = boot({ autopidCfg: { ...table(), filters: [] } });
+  const { $, $$ } = p;
+  await sleep(2500);
+  await p.tab("Custom PIDs");
+  $(".flt-add").click(); await sleep(150);
+  await p.tab("Standard PIDs");
+  check("L: on Standard PIDs nothing shows the new filter", !p.fl() && !/NewFilter/.test(($("#view") || {}).textContent || ""));
+  p.clearToasts();
+  check("L: Apply on Standard PIDs sends nothing", !(await p.apply()) && p.puts.length === 0, p.puts.length);
+  check("L: Custom PIDs is opened", p.onTab() === "Custom PIDs", p.onTab());
+  let nf = p.rowOf(/^NewFilter$/);
+  check("L: the filter's row is open, its ID field marked, the cursor in it", !!nf && nf.classList.contains("open") && $(".fid", nf).classList.contains("bad") && p.d().activeElement === $(".fid", nf),
+    nf && [nf.classList.contains("open"), p.d().activeElement && p.d().activeElement.className]);
+  check("L: the line under the list says what is missing and what to do",
+    p.askLine() === "Not sent: the CAN filter NewFilter has no CAN ID. Enter the ID of the frame it reads, or remove the filter, then Apply Configuration again.", p.askLine());
+  check("L: the toast names the filter and its tab", p.toasts().some((t) => /Not sent: the CAN filter NewFilter on Custom PIDs has no CAN ID/.test(t)), p.toasts());
+  check("L: no Rejected line (the device was not asked)", p.rejected().length === 0, p.rejected());
+  p.set($(".fid", nf), "3b3"); await sleep(50);
+  check("L: with an ID typed the line goes", p.askLine() === "" && !$(".fid", p.rowOf(/^NewFilter$/)).classList.contains("bad"), p.askLine());
+  await p.tab("Standard PIDs");
+  p.clearToasts();
+  check("L: Apply on Standard PIDs now sends the table, the filter with its ID", await p.apply() && p.puts.length === 1 && p.lastPut().filters.length === 1 && p.lastPut().filters[0].frame_id === 947 &&
+    p.onTab() === "Standard PIDs" && p.toasts().some((t) => /Configuration applied/.test(t)), [p.puts.length, p.onTab(), p.toasts()]);
+
+  /* the other way out: the filter removed */
+  await p.tab("Custom PIDs");
+  $(".flt-add").click(); await sleep(150);
+  await p.tab("Standard PIDs");
+  check("L: a second filter without an ID stops Apply again", !(await p.apply()) && p.puts.length === 1 && p.onTab() === "Custom PIDs" && /the CAN filter NewFilter_2 has no CAN ID/.test(p.askLine()), [p.puts.length, p.askLine()]);
+  $$("button.danger", $(".main", p.rowOf(/^NewFilter_2$/)))[0].click(); await sleep(150);
+  check("L: removed, the line goes", p.askLine() === "" && p.rows().length === 1, [p.askLine(), p.rows().length]);
+  check("L: and Apply sends the table without it", await p.apply() && p.puts.length === 2 && p.lastPut().filters.length === 1 && p.lastPut().filters[0].frame_id === 947, p.lastPut() && p.lastPut().filters);
+
+  /* ---- M: on the filter's own tab, behind a search ---- */
+  $(".flt-add").click(); await sleep(150);
+  const box = $(".pidl-tools .flt");
+  p.set(box, "oil", "input"); await sleep(150);
+  const hidden = p.rows().length === 0;
+  const pane = p.fl();
+  check("M: Apply on Custom PIDs itself sends nothing either", !(await p.apply()) && p.puts.length === 2, p.puts.length);
+  nf = p.rowOf(/^NewFilter_2$/);
+  check("M: the search hid the row, now it is shown, open, with the cursor in its ID field", hidden && !!nf && nf.classList.contains("open") && p.d().activeElement === $(".fid", nf), [hidden, !!nf]);
+  check("M: the pane was not built again (the same list and the same search box are on the page), the edits still unsaved", pane === p.fl() && pane.isConnected && box.isConnected && box.value === "oil" && p.dirty(), [pane === p.fl(), pane.isConnected, box.isConnected, box.value, p.dirty()]);
+  check("K: no page error in these runs", p.errs.length === 0, p.errs.slice(0, 3));
+  p.close();
+}
+{
+  /* ---- N: the vehicle's set ---- */
+  const p = boot({ autopidCfg: table() });
+  const { $ } = p;
+  await sleep(2500);
+  await p.tab("Vehicle Specific");
+  $(".flt-add").click(); await sleep(150);
+  await p.tab("Standard PIDs");
+  p.clearToasts();
+  check("N: a filter added on Vehicle Specific stops Apply on Standard PIDs", !(await p.apply()) && p.puts.length === 0, p.puts.length);
+  const nf = p.rowOf(/^NewFilter$/);
+  check("N: Vehicle Specific is opened, the row open with the cursor in its ID field", p.onTab() === "Vehicle Specific" && !!nf && nf.classList.contains("open") && p.d().activeElement === $(".fid", nf), p.onTab());
+  check("N: the toast names that tab", p.toasts().some((t) => /Not sent: the CAN filter NewFilter on Vehicle Specific has no CAN ID/.test(t)), p.toasts());
+  check("N: the line names the filter without an ID, not the vehicle's stored one", /^Not sent: the CAN filter NewFilter has no CAN ID/.test(p.askLine()), p.askLine());
+
+  /* ---- O: Raw Config goes as typed ---- */
+  await p.tab("Raw Config");
+  const ta = $("#view textarea");
+  const raw = ta ? JSON.parse(ta.value) : { filters: [] };
+  check("O: Raw Config shows the table with the filter that has no ID", !!ta && raw.filters.length === 3 && raw.filters[2].frame_id === 0, raw.filters.map((f) => f.frame_id));
+  p.clearToasts();
+  check("O: its Apply sends the JSON as typed", await p.apply() && p.puts.length === 1 && p.lastPut().filters[2].frame_id === 0, p.puts.length);
+  check("O: the device's own words come back in the toast, the tab stays", p.toasts().some((t) => /Config rejected: filter 2: frame_id required/.test(t)) && p.onTab() === "Raw Config", [p.toasts(), p.onTab()]);
+  check("K: no page error with the vehicle's set and Raw Config", p.errs.length === 0, p.errs.slice(0, 3));
   p.close();
 }
 

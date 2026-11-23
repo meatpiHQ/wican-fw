@@ -61,8 +61,15 @@ them and answers the standard PID; the unit's own protocol on it is the
   frame and 60 km/h; Apply Configuration, the unit's table carries the
   filter as typed with no tag, the unit reads it and the row shows it
   live; on Vehicle Specific the vehicle's filter under its name, and a
-  filter added there arrives tagged `profile` and is read; no page error.
-  Screenshots in the run's folder.
+  filter added there arrives tagged `profile` and is read. Since
+  2026-11-23 (p6, a user's report: "Rejected: filter 0: frame_id required"
+  under Standard PIDs): Add CAN filter on Custom PIDs and no ID typed, then
+  Apply on Standard PIDs sends nothing to the unit and its table is as it
+  was; the page opens Custom PIDs with the cursor in that filter's ID
+  field, the line under the list names the filter, the toast names the
+  tab, nothing reads "Rejected"; the row is removed again, so the table
+  stays as the legs before left it. No page error. Screenshots in the
+  run's folder.
 - **f4** the switches, a planned restart each: `specific_enabled` off =
   the vehicle's filters rest (the page's one too) while the custom filters
   and the PID go on, and Test still reads a resting filter's frame;
@@ -90,6 +97,34 @@ row of the unit's own tables decides what the chip is on.
   answers.
 
 ## Records
+
+**2026-11-23 10:29, `.\test.ps1 canfilters -DeviceId 14c19f457fd9`: `CAN
+FILTERS PASS`, 64 checks, four planned restarts, 144 s** (report
+`test-reports/2026-11-23_1029_canfilters.md`), on the build with the page's
+check for a CAN filter without an ID (image sha256 `0d8ab3014c05...`, put on
+the unit with `upload_confirm_bench.py --no-cut --no-sleep`: `UPLOAD CONFIRM
+PASS`, 4 checks, slot `ota_0`). The five new checks are p6's: no table sent,
+Custom PIDs open with the cursor in the CAN ID field of `NewFilter_2`, the
+line "Not sent: the CAN filter NewFilter_2 has no CAN ID. Enter the ID of the
+frame it reads, or remove the filter, then Apply Configuration again.", the
+toast naming Custom PIDs, nothing reading "Rejected".
+
+**2026-11-23 10:12 and 10:29, the report reproduced on the unit's own page,
+by hand in Chrome, before and after.** A user's report: on Standard PIDs,
+seven scanned PIDs ticked, Apply Configuration answered "Rejected: filter 0:
+frame_id required"; the same PIDs added one by one afterwards went through.
+The steps: Custom PIDs, one click on Add CAN filter, no ID typed, then
+Standard PIDs and Apply Configuration. On the unit as found (6.0.0-beta.14,
+build `v6.0.0p-beta.14-5-ga1ebe97-dirty`, slot `ota_1`, 29 PIDs and no
+filter in its table): the page sent the table with
+`{"name":"NewFilter","frame_id":0,...}` in `filters`, the unit answered HTTP
+400 `{"error":"filter 0: frame_id required"}`, the line under the Standard
+PIDs table read "Rejected: filter 0: frame_id required" and the toast
+"Config rejected: filter 0: frame_id required"; the unit's table was byte
+for byte as before; after a reload Custom PIDs showed no filter (the row was
+never stored), which is why the reporter's second try worked. On the build
+with the fix the same steps sent no table: Custom PIDs opened, the cursor in
+the CAN ID field of NewFilter, the line and the toast as in p6.
 
 **2026-11-14 04:23: `CAN FILTERS PASS`, 59 checks, 152 s, on the final
 image of the day** (report `test-reports/2026-11-14_0423_canfilters.md`).

@@ -267,7 +267,9 @@
         { name: "Coolant", cmd: "01051", group: "default", period_ms: 5000, type: "std", parameters: [{ name: "Coolant", expression: "B2-40", unit: "°C", class: "temperature", min: -40, max: 215 }] },
         { name: "OilTemp", cmd: "2101AF1", group: "default", period_ms: 2000, type: "custom", parameters: [{ name: "OilTemp", expression: "B4-40", unit: "°C" }] },
       ],
-      filters: [{ id: "0x18DAF110", name: "SOC_BMS", expression: "B5/2", unit: "%", monitor_ms: 1000 }],
+      /* the shape a device stores (2026-11-23): until then this filter was a flat row with its ID as text under `id`,
+         a shape the firmware refuses, and the mock took it on a PUT, so no probe saw what a filter without an ID does */
+      filters: [{ frame_id: 0x18DAF110, monitor_ms: 1000, parameters: [{ name: "SOC_BMS", expression: "B5/2", unit: "%" }] }],
     },
     dash: { RPM: 843, Speed: 0, Coolant: 88, SOC_BMS: 71.5 },
     polls: 1200, groupOn: true,
@@ -1148,6 +1150,10 @@
         const word = storesWord(p.cmd) || storesWord(p.init);
         if (word && p.enabled !== false) return J({ error: "pid " + p.name + ": " + word + " is stored by the OBD chip; use the row's Bus" }, 400);
       }
+      /* as the firmware (autopid_config.c; in the mock since 2026-11-23): a filter whose frame_id is not a number from 1 up
+         refuses the whole table, named by its position alone */
+      const noId = ((body && body.filters) || []).findIndex((f) => typeof f.frame_id !== "number" || !(Math.trunc(f.frame_id) >= 1));
+      if (noId >= 0) return J({ error: "filter " + noId + ": frame_id required" }, 400);
       state.autopidCfg = body || state.autopidCfg; return J({ ok: true });
     }
     const q = new URLSearchParams((full || "").split("?")[1] || "");

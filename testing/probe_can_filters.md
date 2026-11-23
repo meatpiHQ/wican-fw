@@ -26,7 +26,7 @@ carries stays as stored.
 The probe's table: one standard, one custom and one vehicle-specific PID,
 the vehicle's filter SPEED on 0x284 and a custom filter on the 29-bit ID
 0x18DAF110 with two parameters, one of them a multiplexed signal with a
-class and a range. Four boots of the Automate page:
+class and a range. Six boots of the Automate page (four until 2026-11-23):
 
 - **A** (Custom PIDs) the box says "Search by name, request or parameter";
   the CAN filters list shows the custom filter alone with its count, the ID
@@ -64,15 +64,69 @@ class and a range. Four boots of the Automate page:
   "silent"`): the dialog says so in the exchange and beside it, with no
   arrival time, no frame data and no value.
 - **I** Standard PIDs has no CAN filters list.
-- **J** a filter in a shape the page does not know (the mock's own table:
-  the ID as text, no parameters list) is shown, marked, and sent back as it
-  was stored.
+- **J** a filter in a shape the page does not know (the ID as text under
+  `id`, no parameters list: a hand-made file can bring one, no device
+  stores it) is shown and marked. It has no ID the device takes, so Apply
+  stops at it (as in L). With its ID typed it goes with everything it
+  carried, the ID as a number beside it.
 - **K** no page error in any boot.
 
+Since 2026-11-23, Apply with a CAN filter that has no ID. A user's report:
+on Standard PIDs, with seven scanned PIDs ticked, Apply Configuration
+answered "Rejected: filter 0: frame_id required", and the same PIDs added
+one by one after a reload went through. The cause, reproduced on the bench
+unit's own page (below): one click on Add CAN filter on another tab leaves
+a row with no ID in the page's tables, Apply sends the tables of every tab,
+and the device refuses them whole and names the filter by its position.
+
+- **L** Add CAN filter on Custom PIDs, then Apply on Standard PIDs:
+  nothing is sent; Custom PIDs opens with the row open, its ID field marked
+  and the cursor in it; the line under the list reads "Not sent: the CAN
+  filter NewFilter has no CAN ID. Enter the ID of the frame it reads, or
+  remove the filter, then Apply Configuration again."; the toast names the
+  filter and its tab; no "Rejected" line, the edits still unsaved. With an
+  ID typed the line goes and Apply on Standard PIDs sends the table. A
+  second such filter stops Apply again; removed, the line goes and the
+  table is sent without it.
+- **M** Apply pressed on the filter's own tab, with a search that hides the
+  row: nothing is sent, the row is shown and open with the cursor in its ID
+  field, and the pane is not built again (the same list and the same search
+  box stay on the page).
+- **N** a filter added on Vehicle Specific: Vehicle Specific opens, the
+  toast names that tab, the line names the new filter and not the vehicle's
+  stored one.
+- **O** Raw Config sends the JSON as typed: the table with the filter that
+  has no ID goes to the device, whose own words come back in the toast
+  ("Config rejected: filter 2: frame_id required"), and the tab stays.
+
 The mock answers `POST /api/autopid/test` with a `filter` body as the
-firmware does (`mock_api.js`).
+firmware does (`mock_api.js`). Since 2026-11-23 it also refuses a table
+with a filter whose `frame_id` is not a number from 1 up, with the
+firmware's words (`filter N: frame_id required`); until then it took such
+a table, and leg J expected the page to send one.
 
 ## Records
+
+**2026-11-23: `CAN FILTERS PROBE PASS`, 86 of 86, on the plain page and on
+the minified one**, with Apply stopped at a CAN filter that has no ID (legs
+J reworked, L to O new) and the mock refusing such a table as the firmware
+does. The same probe on the page as it was before the change (the
+`web_ui_v2` tree of components `a823199`, the stricter mock): red, with the
+reporter's words. Leg L: Apply on Standard PIDs sent the table (1 PUT), the
+tab stayed, the line under the Standard PIDs table read "Rejected: filter
+0: frame_id required" and the toast "Config rejected: filter 0: frame_id
+required"; leg J's Apply sent the flat row; the probe then stops at the row
+it expects on the page. Before the change, with the mock as it was: 61 of
+61, leg J having the page send a filter without an ID and the mock take
+it. The other probes that touch the tables were run before and after the
+change, green both times: profile filters 41 of 41 (its hand-made filter
+now in the stored shape), Automate, the dashboard and its layout, the
+standard choice (66), the row bus, J1939, WWH, Quick Setup, destinations,
+the new car (14), profile first (47); after it the smoke run too (24
+routes, 0 errors), and on the minified page profile filters and Automate.
+On the device: `.\test.ps1 canfilters`, 64 checks, its page leg p6
+([canfilters.md](canfilters.md), with the reproduction on the unit's own
+page before and after).
 
 **2026-11-14, later: `CAN FILTERS PROBE PASS`, 61 of 61, plain and
 minified**, after the page took the 4.x firmware's ways (Ali: "check how
@@ -94,6 +148,11 @@ page the profile filters, Automate and row bus probes again.
 - The page patches `replaceChildren`, `append` and `prepend` to drop null
   children; a list built outside `h()` must not rely on a native call
   doing the same.
-- The mock's default table holds a filter in a flat shape the firmware
-  would refuse (leg J uses it on purpose); a probe that needs real filters
-  presets `__mockPreset.autopidCfg`.
+- Until 2026-11-23 the mock's default table held a filter in a flat shape
+  the firmware refuses, and the mock took any table back. No probe could
+  see what a filter without an ID does on a device, and leg J had the page
+  send one on purpose. The default filter is in the stored shape now
+  (`frame_id` 0x18DAF110, one parameter SOC_BMS), the mock refuses as the
+  firmware does, and leg J presets its flat row itself.
+- A mock that is kinder than the firmware hides the page's faults: when a
+  route of the mock accepts a body, check that the firmware accepts it too.

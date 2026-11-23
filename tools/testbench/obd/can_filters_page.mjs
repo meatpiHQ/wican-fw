@@ -16,7 +16,12 @@
          no tag (a custom one), the unit reads it (60), the row shows it live
      p5  Vehicle Specific: the vehicle's filter under its name, live; a filter
          added there and applied is tagged profile:true on the unit and read (7)
-     p6  no page error
+     p6  Apply with a CAN filter that has no ID (2026-11-23, a user's report:
+         "Rejected: filter 0: frame_id required" under Standard PIDs): Add CAN
+         filter on Custom PIDs, then Apply on Standard PIDs sends nothing to the
+         unit; Custom PIDs opens with the cursor in the filter's ID field, the
+         line under the list names it; the row is removed again
+     p7  no page error
 
    node tools/testbench/obd/can_filters_page.mjs --base http://localhost:18081 [--out DIR]
    Prints PASS / FAIL lines and `PAGE LEG PASS` or `PAGE LEG FAIL`; the tables are
@@ -45,6 +50,8 @@ const waitValue = async (name, want, secs) => { let v; for (let i = 0; i < secs;
 const b = await chromium.launch({ channel: "chrome" });
 const page = await (await b.newContext({ viewport: { width: 1280, height: 1000 } })).newPage();
 const pageErrors = [];
+let puts = 0;      /* every table the page sent to the unit */
+page.on("request", (rq) => { if (rq.method() === "PUT" && /\/api\/autopid\/config/.test(rq.url())) puts++; });
 page.on("pageerror", (e) => pageErrors.push(String(e.message || e)));
 page.on("console", (m) => { if (m.type() === "error" && !/ERR_CONNECTION|ERR_EMPTY|ERR_TIMED|ERR_NETWORK|Failed to load resource/.test(m.text())) pageErrors.push(m.text()); });
 const shot = async (name) => { try { await page.screenshot({ path: `${out}/${name}.png`, fullPage: true }); } catch (e) { } };
@@ -128,11 +135,41 @@ try {
     check("p5: the unit reads it", (await waitValue("PageDoor", 7, 12)) === 7, await value("PageDoor"));
     await shot("p5_vehicle");
   }
+
+  /* ---- p6: Apply with a CAN filter that has no ID (2026-11-23, a user's report) ---- */
+  await tab("Custom PIDs");
+  const stored = JSON.stringify(await getJ("/api/autopid/config"));
+  await page.locator(".flt-add").click(); await sleep(400);
+  const blank = (await rows()).pop();
+  await tab("Standard PIDs");
+  const putsBefore = puts;
+  await page.locator("button.btn.pri", { hasText: /^Apply Configuration$/ }).last().click(); await sleep(1500);
+  const st = await page.evaluate(() => {
+    const line = document.querySelector(".fltl .flt-ask"), a = document.activeElement;
+    return {
+      tab: [...document.querySelectorAll(".seg button.on")].map((x) => x.textContent.trim()).find((t) => /^(Standard PIDs|Custom PIDs|Vehicle Specific|Raw Config)$/.test(t)) || "",
+      line: line && line.style.display !== "none" ? line.textContent : "",
+      rejected: [...document.querySelectorAll(".pidl-err:not(.flt-ask)")].filter((l) => l.style.display !== "none" && l.textContent).map((l) => l.textContent),
+      toasts: [...document.querySelectorAll(".toast")].map((t) => t.textContent),
+      cursor: a && a.classList.contains("fid") && a.closest(".pidrow") ? a.closest(".pidrow").querySelector(".fname").value : "",
+    };
+  });
+  await shot("p6_no_id");
+  check("p6: Add CAN filter left a row with no ID", !!blank && blank.id === "" && /^NewFilter/.test(blank.name), blank);
+  check("p6: Apply on Standard PIDs sends nothing to the unit, its table is as it was", puts === putsBefore && JSON.stringify(await getJ("/api/autopid/config")) === stored, { puts: puts - putsBefore });
+  check("p6: Custom PIDs opens with the cursor in that filter's ID field", st.tab === "Custom PIDs" && !!blank && st.cursor === blank.name, st);
+  check("p6: the line under the list names the filter and says what to do, the toast names the tab, nothing reads Rejected",
+    !!blank && st.line === "Not sent: the CAN filter " + blank.name + " has no CAN ID. Enter the ID of the frame it reads, or remove the filter, then Apply Configuration again." &&
+    st.toasts.some((t) => t.includes("Not sent: the CAN filter " + blank.name + " on Custom PIDs has no CAN ID")) && st.rejected.length === 0, st);
+  /* the row is taken out again: the table stays as the legs above made it */
+  await row().locator(".main button.danger").click(); await sleep(400);
+  check("p6: with the filter removed the line goes", (await page.evaluate(() => { const l = document.querySelector(".fltl .flt-ask"); return l && l.style.display !== "none" ? l.textContent : ""; })) === "" && (await rows()).length === 5,
+    (await rows()).length);
 } catch (e) {
   check("the page leg ran to its end", false, String(e && e.message || e).slice(0, 300));
   await shot("error");
 }
-check("p6: no page error", pageErrors.length === 0, pageErrors.slice(0, 3));
+check("p7: no page error", pageErrors.length === 0, pageErrors.slice(0, 3));
 await b.close();
 console.log(failed ? "PAGE LEG FAIL" : "PAGE LEG PASS");
 process.exit(failed ? 1 : 0);

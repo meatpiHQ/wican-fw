@@ -15,7 +15,9 @@
      Bench: Twin                1 PID, 1 filter whose parameter is named Speed
                                 (the mock's standard PID already has a Speed)
      Bench: Plain               1 PID, no filters
-   and its config starts with one hand-made filter (SOC_BMS, legacy shape).
+   and its config starts with one hand-made filter (SOC_BMS on 0x18DAF110, the
+   mock's own, in the shape a device stores since 2026-11-23: the mock refuses a
+   filter without a numeric frame_id as the firmware does, and so does the page).
 
    On the Vehicle Specific pane:
      A  pick the Leaf: the toast counts 2 PIDs and 3 CAN filters, the banner
@@ -80,7 +82,7 @@ const PLAIN = {
   pids: [{ pid: "2199", parameters: [{ name: "PlainOne", expression: "B3", unit: "" }] }],
 };
 const PROFILES = [LEAF, TWIN, PLAIN];
-const HAND = { id: "0x18DAF110", name: "SOC_BMS", expression: "B5/2", unit: "%", monitor_ms: 1000 };
+const HAND = { frame_id: 0x18DAF110, monitor_ms: 1000, parameters: [{ name: "SOC_BMS", expression: "B5/2", unit: "%" }] };
 const profileFilters = (cfg) => ((cfg && cfg.filters) || []).filter((f) => f.profile);
 const handFilters = (cfg) => ((cfg && cfg.filters) || []).filter((f) => !f.profile);
 

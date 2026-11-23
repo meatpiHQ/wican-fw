@@ -2400,7 +2400,9 @@
         { name: "Coolant", cmd: "01051", group: "default", period_ms: 5000, type: "std", parameters: [{ name: "Coolant", expression: "B2-40", unit: "°C", class: "temperature", min: -40, max: 215 }] },
         { name: "OilTemp", cmd: "2101AF1", group: "default", period_ms: 2000, type: "custom", parameters: [{ name: "OilTemp", expression: "B4-40", unit: "°C" }] },
       ],
-      filters: [{ id: "0x18DAF110", name: "SOC_BMS", expression: "B5/2", unit: "%", monitor_ms: 1000 }],
+      /* the shape a device stores (2026-11-23): until then this filter was a flat row with its ID as text under `id`,
+         a shape the firmware refuses, and the mock took it on a PUT, so no probe saw what a filter without an ID does */
+      filters: [{ frame_id: 0x18DAF110, monitor_ms: 1000, parameters: [{ name: "SOC_BMS", expression: "B5/2", unit: "%" }] }],
     },
     dash: { RPM: 843, Speed: 0, Coolant: 88, SOC_BMS: 71.5 },
     polls: 1200, groupOn: true,
@@ -3281,6 +3283,10 @@
         const word = storesWord(p.cmd) || storesWord(p.init);
         if (word && p.enabled !== false) return J({ error: "pid " + p.name + ": " + word + " is stored by the OBD chip; use the row's Bus" }, 400);
       }
+      /* as the firmware (autopid_config.c; in the mock since 2026-11-23): a filter whose frame_id is not a number from 1 up
+         refuses the whole table, named by its position alone */
+      const noId = ((body && body.filters) || []).findIndex((f) => typeof f.frame_id !== "number" || !(Math.trunc(f.frame_id) >= 1));
+      if (noId >= 0) return J({ error: "filter " + noId + ": frame_id required" }, 400);
       state.autopidCfg = body || state.autopidCfg; return J({ ok: true });
     }
     const q = new URLSearchParams((full || "").split("?")[1] || "");
@@ -7125,6 +7131,20 @@ PAGES.automate=async(view,sub)=>{
     let cfg=await api("/api/autopid/config");
     if(typeof cfg==="string"){try{cfg=JSON.parse(cfg);}catch{cfg={};}}
     cfg.pids=cfg.pids||[];cfg.groups=cfg.groups&&cfg.groups.length?cfg.groups:[{name:"default",enabled_default:true,period_ms:1000}];
+    /* a CAN filter without an ID stops Apply on the page (2026-11-23, a user's report:
+       "Rejected: filter 0: frame_id required" under Standard PIDs, after one click on
+       Add CAN filter on another tab). Apply sends the tables of every tab, the device
+       refuses them whole for such a filter and can name it by its position alone. The
+       page knows the row: nothing is sent, the row's tab opens with the row and the
+       cursor in its ID field, and the line under the list says what is missing.
+       Raw Config (raw === true) goes as typed: the device's words name the JSON. */
+    let fltAsk=null,curFlt=null; /* the filter Apply stopped at; the CAN filters list on the page */
+    function askFilterId(){
+      const kind=fltKind(fltAsk),veh=kind==="specific",nm=fltName(fltAsk);
+      /* a list that is on the page shows the row itself: its pane is not built again
+         (a staged profile's banner and its Discard live in the pane) */
+      if(curFlt&&curFlt.isConnected&&curFlt.kind===kind)curFlt.ask();else sel(veh?"veh":"cust");
+      toast("Not sent: "+(nm?"the CAN filter "+nm:"a CAN filter")+" on "+(veh?"Vehicle Specific":"Custom PIDs")+" has no CAN ID","err");}
     /* Apply Configuration = everything on this card (meatpi 2026-09-17): the
        PIDs go live, and the card's staged settings (group switches, init
        chains, vehicle profile) are SAVED as well, so a refresh keeps them; the
@@ -7132,7 +7152,10 @@ PAGES.automate=async(view,sub)=>{
        the same modal, "later" leaves the Restart pending notices. Before, they
        were only staged for Submit and a refresh after Apply emptied the
        Vehicle profile + init fields (Ali, 2026-09-17). */
-    async function saveCfg(){
+    async function saveCfg(raw){
+      fltAsk=(raw===true?null:(cfg.filters||[]).find(f=>!Number(f.frame_id)))||null;
+      if(fltAsk)return askFilterId();
+      if(curFlt)curFlt.paintAsk();
       try{await api("/api/autopid/config",{method:"PUT",body:cfg});}
       catch(e){setApplyMsg(e.message);toast("Config rejected: "+e.message,"err");return;}
       markDirty(false);
@@ -7469,8 +7492,18 @@ PAGES.automate=async(view,sub)=>{
       const open=new Set();let search="";
       const cells=new Map();
       const mine=()=>(cfg.filters||[]).filter(f=>fltKind(f)===type);
-      const matches=f=>{if(!search)return true;const s=search.toLowerCase();
+      const matches=f=>{if(!search||f===fltAsk)return true;const s=search.toLowerCase();
         return[fltName(f),fltHex(f.frame_id),...(f.parameters||[]).map(p=>p.name)].some(x=>String(x||"").toLowerCase().includes(s));};
+      /* the filter Apply stopped at (askFilterId): its row is opened and shown whatever
+         the search box holds, the cursor goes to its ID field, and this line stays
+         until the filter has an ID or is gone */
+      const askLine=h("div",{class:"help pidl-err flt-ask",style:"display:none"});
+      let askInp=null;
+      const paintAsk=()=>{
+        const f=fltAsk&&fltKind(fltAsk)===type&&(cfg.filters||[]).includes(fltAsk)&&!Number(fltAsk.frame_id)?fltAsk:null,nm=f?fltName(f):"";
+        askLine.style.display=f?"":"none";
+        askLine.textContent=f?"Not sent: "+(nm?"the CAN filter "+nm:"a CAN filter of this list")+" has no CAN ID. Enter the ID of the frame it reads, or remove the filter, then Apply Configuration again.":"";};
+      const focusAsk=()=>{if(askInp&&askInp.isConnected){askInp.focus();if(askInp.scrollIntoView)askInp.scrollIntoView({block:"center"});}};
       const groupRate=f=>{const g=(cfg.groups||[]).find(x=>x.name===(f.group||"default"));const p=g?(Number(g.period_ms)||0):1000;return p?p+" ms":"max rate";};
       const countChip=h("span",{class:"help"});
       const list=h("div",{class:"pidl-rows"});
@@ -7490,14 +7523,15 @@ PAGES.automate=async(view,sub)=>{
           else{const k=prms.filter(p=>fmtLive(p.name)!=null).length;el.textContent=k?k+" of "+n+" live":"no data";el.classList.toggle("none",!k);}});
         const idInp=h("input",{class:"mono fid"+(Number(f.frame_id)?"":" bad"),value:fltHex(f.frame_id),placeholder:"0x284 or 644",
           title:"The CAN ID of the frame: hex with 0x in front (0x284), or a plain number in decimal (644). An ID above 0x7FF is a 29-bit one.",
-          onchange:e=>{const id=fltParse(e.target.value);f.frame_id=id;if(id)e.target.value=fltHex(id);e.target.classList.toggle("bad",!id);markDirty();}});
+          onchange:e=>{const id=fltParse(e.target.value);f.frame_id=id;if(id)e.target.value=fltHex(id);e.target.classList.toggle("bad",!id);markDirty();paintAsk();}});
+        if(f===fltAsk)askInp=idInp;
         const monInp=h("input",{class:"mono fmon",type:"number",min:"50",max:"60000",step:"50",value:f.monitor_ms||1000,
           title:"Listen (ms): how long one window waits for the frame, 50 to 60000. The PIDs wait while it is open.",
           onchange:e=>{f.monitor_ms=Math.min(60000,Math.max(50,Math.round(Number(e.target.value)||0)||1000));e.target.value=f.monitor_ms;markDirty();}});
         const testBtn=h("button",{class:"btn sm gh",type:"button",title:"Listen once for this frame and show it with the decoded values: vehicle must be on"},"Test");
         testBtn.onclick=()=>{if(!Number(f.frame_id))return toast("Enter the CAN ID first","err");testFilter(f,testBtn);};
         row.append(h("div",{class:"main"},sw,
-          h("input",{class:"fname",value:fltName(f),placeholder:"Filter name",title:"A name for this row on this page",onchange:e=>{if(e.target.value)f.name=e.target.value;else delete f.name;markDirty();}}),
+          h("input",{class:"fname",value:fltName(f),placeholder:"Filter name",title:"A name for this row on this page",onchange:e=>{if(e.target.value)f.name=e.target.value;else delete f.name;markDirty();paintAsk();}}),
           idInp,monInp,
           h("div",{class:"vals"},caret,summary),
           h("div",{class:"acts"},testBtn,
@@ -7531,7 +7565,7 @@ PAGES.automate=async(view,sub)=>{
         }
         return row;};
       const rebuild=()=>{
-        cells.clear();
+        cells.clear();askInp=null;
         const all=mine(),shown=all.filter(matches);
         const nv=all.reduce((a,f)=>a+(Array.isArray(f.parameters)?f.parameters.length:0),0);
         countChip.textContent=all.length?all.length+" CAN filter"+(all.length===1?"":"s")+" · "+nv+" parameter"+(nv===1?"":"s")+(search?" · "+shown.length+" shown":""):"";
@@ -7539,9 +7573,14 @@ PAGES.automate=async(view,sub)=>{
           shown.length?h("div",{class:"pidl-head"},h("span",{}),h("span",{},"Name"),h("span",{},"CAN ID"),h("span",{},"Listen (ms)"),h("span",{},"Parameters"),h("span",{})):null,
           ...shown.map(fltRow),
           all.length?(shown.length?null:h("div",{class:"help"},"No CAN filter matches the search")):h("div",{class:"help"},"No CAN filters"));
-        refreshLive();};
-      tbl.append(h("div",{class:"pidl-tools"},h("b",{style:"font-size:13.5px"},"CAN filters"),infoBtn("About CAN filters","CAN filter",FLT_INFO[type]),h("span",{class:"grow"}),countChip),list);
+        paintAsk();refreshLive();};
+      tbl.append(h("div",{class:"pidl-tools"},h("b",{style:"font-size:13.5px"},"CAN filters"),infoBtn("About CAN filters","CAN filter",FLT_INFO[type]),h("span",{class:"grow"}),countChip),list,askLine);
+      /* built for the filter Apply stopped at (it was pressed on another tab) */
+      if(fltAsk&&mine().includes(fltAsk)){open.add(fltAsk);setTimeout(focusAsk,0);}
       rebuild();
+      tbl.kind=type;tbl.paintAsk=paintAsk;
+      tbl.ask=()=>{open.add(fltAsk);rebuild();focusAsk();};
+      curFlt=tbl;
       tbl.rebuild=rebuild;
       tbl.search=s=>{search=s;rebuild();};
       tbl.openAll=v=>{open.clear();if(v)mine().forEach(f=>open.add(f));rebuild();};
@@ -7743,7 +7782,7 @@ PAGES.automate=async(view,sub)=>{
         h("div",{class:"rowflex",style:"margin-top:10px"},h("span",{class:"grow"}),
           h("button",{class:"btn pri sm",onclick:async()=>{
             try{cfg=JSON.parse(ta.value);}catch{return toast("Invalid JSON","err");}
-            await saveCfg();paneEl.replaceChildren(cusPane());}},"Apply Configuration")),
+            await saveCfg(true);paneEl.replaceChildren(cusPane());}},"Apply Configuration")),
         note("","The full autopid configuration: groups, PIDs and passive CAN filters. Validated on apply; errors are reported."));
     }
     const panes={std:pidsPane,cust:custPane,veh:vehPane,cus:cusPane};
