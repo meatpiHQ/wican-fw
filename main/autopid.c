@@ -1582,9 +1582,16 @@ static void autopid_task(void *pvParameters)
 
         elm327_lock();
         xSemaphoreTake(all_pids->mutex, portMAX_DELAY);
-        
+
+        // Tracks the last per-PID init string sent during this locked pass, so
+        // consecutive PIDs sharing the same ATSH/ATCRA header don't resend it.
+        // Scoped to one lock acquisition (not static) so a client that grabs
+        // elm327_lock() between passes and changes the header can't leave this
+        // stale.
+        const char *last_pid_init_sent = NULL;
+
         // Loop through all PIDs
-        for(uint32_t i = 0; i < all_pids->pid_count; i++) 
+        for(uint32_t i = 0; i < all_pids->pid_count; i++)
         {
             pid_data2_t *curr_pid = &all_pids->pids[i];
             // Skip if PID type not enabled
@@ -1642,6 +1649,9 @@ static void autopid_task(void *pvParameters)
                         }
 
                         previous_pid_type = curr_pid->pid_type;
+                        // A type-level init can itself change the ECU header,
+                        // so any per-PID header memoized below is no longer valid.
+                        last_pid_init_sent = NULL;
                     }
 
                     ESP_LOGI(TAG, "Processing parameter: %s", param->name);
@@ -1653,11 +1663,13 @@ static void autopid_task(void *pvParameters)
                     {
                         twai_message_t tx_msg;
 
-                        if(curr_pid->pid_type == PID_CUSTOM || curr_pid->pid_type == PID_SPECIFIC) 
+                        if(curr_pid->pid_type == PID_CUSTOM || curr_pid->pid_type == PID_SPECIFIC)
                         {
-                            if(curr_pid->init != NULL && strlen(curr_pid->init) > 0)
+                            if(curr_pid->init != NULL && strlen(curr_pid->init) > 0 &&
+                               (last_pid_init_sent == NULL || strcmp(last_pid_init_sent, curr_pid->init) != 0))
                             {
                                 send_commands(curr_pid->init, 2);
+                                last_pid_init_sent = curr_pid->init;
                             }
                         }
 
