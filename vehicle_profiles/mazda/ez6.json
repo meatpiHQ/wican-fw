@@ -15,6 +15,13 @@
       "parameters": {
         "ODOMETER": "[B4:B7]/10"
       }
+    },
+    {
+      "pid": "22F25C",
+      "pid_init": "7A1;",
+      "parameters": {
+        "CHARGING": "B4"
+      }
     }
   ]
 }
