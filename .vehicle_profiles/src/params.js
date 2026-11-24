@@ -11,7 +11,7 @@ const PARAM_PATH_IN_SCHEMA =
 let params = null;
 
 export async function process_params() {
-  let params = await get_params();
+  params = await get_params();
   params = sortPackageJson(params);
   await writeFile(PARAMS_PATH, JSON.stringify(params, null, 2));
 
