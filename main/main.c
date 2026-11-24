@@ -155,6 +155,12 @@ void send_to_host(char* str, uint32_t len, QueueHandle_t *q)
 	{
 		xsend_buffer.usLen = len;
 	}
+	if(xsend_buffer.usLen > DEV_BUFFER_LENGTH)
+	{
+		ESP_LOGW(TAG, "send_to_host: truncating %lu-byte payload to %d bytes",
+			 (unsigned long)xsend_buffer.usLen, DEV_BUFFER_LENGTH);
+		xsend_buffer.usLen = DEV_BUFFER_LENGTH;
+	}
 	memcpy(xsend_buffer.ucElement, str, xsend_buffer.usLen);
 	xQueueSend( *q, ( void * ) &xsend_buffer, portMAX_DELAY );
 
