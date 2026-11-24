@@ -320,6 +320,10 @@ accept_socket:
 			setsockopt(sock, IPPROTO_TCP, TCP_KEEPIDLE, &keepIdle, sizeof(int));
 			setsockopt(sock, IPPROTO_TCP, TCP_KEEPINTVL, &keepInterval, sizeof(int));
 			setsockopt(sock, IPPROTO_TCP, TCP_KEEPCNT, &keepCount, sizeof(int));
+			// OBD traffic is small request/response exchanges where latency
+			// matters and there is nothing to coalesce across.
+			int nodelay = 1;
+			setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay));
 			// Convert ip address to string
 			if (source_addr.ss_family == PF_INET)
 			{
