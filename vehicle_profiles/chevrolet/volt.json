@@ -4,9 +4,131 @@
   "pids": [
     {
       "pid": "015B1",
-      "pid_init": "",
+      "pid_init": "ATSH7DF;",
       "parameters": {
         "SOC": "B3/2.55"
+      }
+    },
+    {
+      "pid": "012F1",
+      "pid_init": "ATSH7DF;",
+      "parameters": {
+        "FUEL": "B3/2.55"
+      }
+    },
+    {
+      "pid": "2283341",
+      "pid_init": "ATSH7E4;",
+      "parameters": {
+        "SOC_D": "B4/2.55"
+      }
+    },
+    {
+      "pid": "2243AF1",
+      "pid_init": "ATSH7E4;",
+      "parameters": {
+        "SOC_R": "[B4:B5]/655.35"
+      }
+    },
+    {
+      "pid": "2241A31",
+      "pid_init": "ATSH7E4;",
+      "parameters": {
+        "HV_CAPACITY": "[B4:B5]/10"
+      }
+    },
+    {
+      "pid": "22432D1",
+      "pid_init": "ATSH7E4;",
+      "parameters": {
+        "HV_V": "[B4:B5]*0.52"
+      }
+    },
+    {
+      "pid": "2240D41",
+      "pid_init": "ATSH7E7;",
+      "parameters": {
+        "HV_A": "[S4:S5]/20"
+      }
+    },
+    {
+      "pid": "22434F1",
+      "pid_init": "ATSH7E4;",
+      "parameters": {
+        "BATT_TEMP": "B4-40"
+      }
+    },
+    {
+      "pid": "2241A61",
+      "pid_init": "ATSH7E4;",
+      "parameters": {
+        "RANGE": "[B4:B5]/64"
+      }
+    },
+    {
+      "pid": "2243681",
+      "pid_init": "ATSH7E4;",
+      "parameters": {
+        "AC_C_V": "B4*2"
+      }
+    },
+    {
+      "pid": "2243691",
+      "pid_init": "ATSH7E4;",
+      "parameters": {
+        "AC_C_C": "B4/5"
+      }
+    },
+    {
+      "pid": "2240D71",
+      "pid_init": "ATSH7E7;",
+      "parameters": {
+        "HV_T_1": "B4-40"
+      }
+    },
+    {
+      "pid": "2240D91",
+      "pid_init": "ATSH7E7;",
+      "parameters": {
+        "HV_T_2": "B4-40"
+      }
+    },
+    {
+      "pid": "2240DB1",
+      "pid_init": "ATSH7E7;",
+      "parameters": {
+        "HV_T_3": "B4-40"
+      }
+    },
+    {
+      "pid": "2240DD1",
+      "pid_init": "ATSH7E7;",
+      "parameters": {
+        "HV_T_4": "B4-40"
+      }
+    },
+    {
+      "pid": "2240DF1",
+      "pid_init": "ATSH7E7;",
+      "parameters": {
+        "HV_T_5": "B4-40"
+      }
+    },
+    {
+      "pid": "2240E11",
+      "pid_init": "ATSH7E7;",
+      "parameters": {
+        "HV_T_6": "B4-40"
+      }
+    }
+  ],
+  "filters": [
+    {
+      "frame_id": "0x120",
+      "monitor_ms": 2000,
+      "period_ms": 60000,
+      "parameters": {
+        "ODOMETER": "[B0:B3]/64"
       }
     }
   ]
