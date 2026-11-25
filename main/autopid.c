@@ -72,10 +72,9 @@ static SemaphoreHandle_t autopid_values_mutex = NULL;
 
 //Helper functions
 // Custom printer function to format numbers with 2 decimal places
-char* formatNumberPrecision(double num) 
+static char* formatNumberPrecision(double num, char *buf, size_t buf_size) 
 {
-    static char buf[32];
-    snprintf(buf, sizeof(buf), "%.2f", num);
+    snprintf(buf, buf_size, "%.2f", num);
     
     // Remove trailing zeros after decimal point
     size_t len = strlen(buf);
@@ -469,7 +468,8 @@ void limitJsonDecimalPrecision(cJSON* item)
     // If current item is a number, modify its value
     if (cJSON_IsNumber(item))
     {
-        char* formatted = formatNumberPrecision(item->valuedouble);
+        char buf[32];
+        char* formatted = formatNumberPrecision(item->valuedouble, buf, sizeof(buf));
         item->valuedouble = atof(formatted);
         item->valuestring = NULL;  // Force cJSON to use valuedouble
     }
@@ -925,7 +925,9 @@ void autopid_request_data(void)
 
 char *autopid_data_read(void)
 {
-    static char *json_str = NULL;
+    // Not static: the caller owns and frees the returned string, and this
+    // runs from both the webhook task and the /autopid_data HTTP handler.
+    char *json_str = NULL;
     
     if (!autopid_values || !autopid_values_mutex) {
         ESP_LOGE(TAG, "Invalid autopid_values or mutex");
@@ -1028,7 +1030,7 @@ bool autopid_get_ecu_status(void)
 
 char* autopid_get_config(void)
 {
-    static char *response_str;
+    char *response_str = NULL;
 
     // Check if all_pids and mutex are valid
     if (!all_pids || !all_pids->mutex) {
