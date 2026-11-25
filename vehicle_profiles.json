@@ -597,7 +597,7 @@
       "pids": [
         {
           "pid": "015B1",
-          "pid_init": "",
+          "pid_init": "ATSH7DF;",
           "parameters": [
             {
               "name": "SOC",
@@ -606,6 +606,222 @@
               "class": "battery",
               "min": "0",
               "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "012F1",
+          "pid_init": "ATSH7DF;",
+          "parameters": [
+            {
+              "name": "FUEL",
+              "expression": "B3/2.55",
+              "unit": "%",
+              "class": "none"
+            }
+          ]
+        },
+        {
+          "pid": "2283341",
+          "pid_init": "ATSH7E4;",
+          "parameters": [
+            {
+              "name": "SOC_D",
+              "expression": "B4/2.55",
+              "unit": "%",
+              "class": "battery"
+            }
+          ]
+        },
+        {
+          "pid": "2243AF1",
+          "pid_init": "ATSH7E4;",
+          "parameters": [
+            {
+              "name": "SOC_R",
+              "expression": "[B4:B5]/655.35",
+              "unit": "%",
+              "class": "battery",
+              "min": "0",
+              "max": "100"
+            }
+          ]
+        },
+        {
+          "pid": "2241A31",
+          "pid_init": "ATSH7E4;",
+          "parameters": [
+            {
+              "name": "HV_CAPACITY",
+              "expression": "[B4:B5]/10",
+              "unit": "Ah",
+              "class": "battery"
+            }
+          ]
+        },
+        {
+          "pid": "22432D1",
+          "pid_init": "ATSH7E4;",
+          "parameters": [
+            {
+              "name": "HV_V",
+              "expression": "[B4:B5]*0.52",
+              "unit": "V",
+              "class": "voltage",
+              "min": "200",
+              "max": "480"
+            }
+          ]
+        },
+        {
+          "pid": "2240D41",
+          "pid_init": "ATSH7E7;",
+          "parameters": [
+            {
+              "name": "HV_A",
+              "expression": "[S4:S5]/20",
+              "unit": "A",
+              "class": "current"
+            }
+          ]
+        },
+        {
+          "pid": "22434F1",
+          "pid_init": "ATSH7E4;",
+          "parameters": [
+            {
+              "name": "BATT_TEMP",
+              "expression": "B4-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "80"
+            }
+          ]
+        },
+        {
+          "pid": "2241A61",
+          "pid_init": "ATSH7E4;",
+          "parameters": [
+            {
+              "name": "RANGE",
+              "expression": "[B4:B5]/64",
+              "unit": "km",
+              "class": "distance"
+            }
+          ]
+        },
+        {
+          "pid": "2243681",
+          "pid_init": "ATSH7E4;",
+          "parameters": [
+            {
+              "name": "AC_C_V",
+              "expression": "B4*2",
+              "unit": "V",
+              "class": "battery"
+            }
+          ]
+        },
+        {
+          "pid": "2243691",
+          "pid_init": "ATSH7E4;",
+          "parameters": [
+            {
+              "name": "AC_C_C",
+              "expression": "B4/5",
+              "unit": "A",
+              "class": "current"
+            }
+          ]
+        },
+        {
+          "pid": "2240D71",
+          "pid_init": "ATSH7E7;",
+          "parameters": [
+            {
+              "name": "HV_T_1",
+              "expression": "B4-40",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        },
+        {
+          "pid": "2240D91",
+          "pid_init": "ATSH7E7;",
+          "parameters": [
+            {
+              "name": "HV_T_2",
+              "expression": "B4-40",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        },
+        {
+          "pid": "2240DB1",
+          "pid_init": "ATSH7E7;",
+          "parameters": [
+            {
+              "name": "HV_T_3",
+              "expression": "B4-40",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        },
+        {
+          "pid": "2240DD1",
+          "pid_init": "ATSH7E7;",
+          "parameters": [
+            {
+              "name": "HV_T_4",
+              "expression": "B4-40",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        },
+        {
+          "pid": "2240DF1",
+          "pid_init": "ATSH7E7;",
+          "parameters": [
+            {
+              "name": "HV_T_5",
+              "expression": "B4-40",
+              "unit": "°C",
+              "class": "temperature"
+            }
+          ]
+        },
+        {
+          "pid": "2240E11",
+          "pid_init": "ATSH7E7;",
+          "parameters": [
+            {
+              "name": "HV_T_6",
+              "expression": "B4-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "80"
+            }
+          ]
+        }
+      ],
+      "filters": [
+        {
+          "frame_id": "0x120",
+          "monitor_ms": 2000,
+          "period_ms": 60000,
+          "parameters": [
+            {
+              "name": "ODOMETER",
+              "expression": "[B0:B3]/64",
+              "class": "distance",
+              "unit": "km",
+              "min": "0"
             }
           ]
         }

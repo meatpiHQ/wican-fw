@@ -369,6 +369,7 @@
                 "SOC_D",
                 "SOC_MAX",
                 "SOC_MIN",
+                "SOC_R",
                 "SOH",
                 "SPEED",
                 "STEER_ANGLE",
