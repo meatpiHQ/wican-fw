@@ -1,0 +1,56 @@
+{
+  "car_model": "Chrysler: Pacifica Hybrid 2018",
+  "init": "ATSP6;ATST96;",
+  "note": "Tested on a 2018 Pacifica Hybrid with WiCAN PRO 6.0.0-beta.7. Cylinder fuel-quantity units are inferred; no direct fuel-flow measurement.",
+  "pids": [
+    {
+      "pid": "015B2",
+      "pid_init": "ATCRA;ATSH7DF;ATAT1;",
+      "parameters": {
+        "SOC": "B3/2.55"
+      }
+    },
+    {
+      "pid": "22022A",
+      "pid_init": "ATCRA;ATSH7E0;ATAT1;ATCRA7E8;",
+      "parameters": {
+        "CHRYSLER_ENGINE_OIL_PRES": "(B4*0.580151)/((256-(B0^4))>>8)/((256-(B1^98))>>8)/((256-(B2^2))>>8)/((256-(B3^42))>>8)"
+      }
+    },
+    {
+      "pid": "22069E",
+      "pid_init": "ATCRA;ATSH7E0;ATAT1;ATCRA7E8;",
+      "parameters": {
+        "CHRYSLER_VVT_OIL_PRES": "(B4*4)/((256-(B0^4))>>8)/((256-(B1^98))>>8)/((256-(B2^6))>>8)/((256-(B3^158))>>8)"
+      }
+    },
+    {
+      "pid": "22069F",
+      "pid_init": "ATCRA;ATSH7E0;ATAT1;ATCRA7E8;",
+      "parameters": {
+        "CHRYSLER_VVT_OIL_TEMP": "(B4-64)/((256-(B0^4))>>8)/((256-(B1^98))>>8)/((256-(B2^6))>>8)/((256-(B3^159))>>8)"
+      }
+    },
+    {
+      "pid": "220234",
+      "pid_init": "ATCRA;ATSH7E0;ATAT1;ATCRA7E8;",
+      "parameters": {
+        "CHRYSLER_INJ_PW_CYL1": "([B4:B7]/1000)/((256-(B0^7))>>8)/((256-(B1^98))>>8)/((256-(B2^2))>>8)/((256-(B3^52))>>8)"
+      }
+    },
+    {
+      "pid": "220255",
+      "pid_init": "ATCRA;ATSH7E0;ATAT1;ATCRA7E8;",
+      "parameters": {
+        "CHRYSLER_FUEL_MASS_CYL1_EST": "([B4:B5]/64)/((256-(B0^5))>>8)/((256-(B1^98))>>8)/((256-(B2^2))>>8)/((256-(B3^85))>>8)"
+      }
+    },
+    {
+      "pid": "2202B2",
+      "pid_init": "ATCRA;ATSH7E0;ATAT1;ATCRA7E8;",
+      "parameters": {
+        "CHRYSLER_FUEL_CHARGE_CYL1_EST": "([B4:B5]/64)/((256-(B0^5))>>8)/((256-(B1^98))>>8)/((256-(B2^2))>>8)/((256-(B3^178))>>8)"
+      }
+    }
+  ]
+}
