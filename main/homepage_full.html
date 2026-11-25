@@ -1008,7 +1008,7 @@
                 <tr>
                     <td>Specific Initialisation:</td>
                     <td>
-                        <input type="text" id="specific_init" name="specific_init" oninput="enableAutoStoreButton()">
+                        <input type="text" id="specific_init" name="specific_init" oninput="markCarDataDirty();submit_enable();">
                     </td>
                 </tr>
             </table>
@@ -1275,6 +1275,8 @@
             document.getElementById("submit_button").disabled = true;
         });
 		let latest_car_models = null;
+        let autoPidDirty = false;
+        let carDataDirty = false;
         function loadCarModels(data) {
             const carModelSelect = document.getElementById("car_model");
             if (data && Array.isArray(data.supported)) {
@@ -1698,7 +1700,7 @@ function addCollapsibleRow(rowData = {}) {
     container.appendChild(entry);
 }
 
-function addSelectedPID(rowData = {}) {
+function addSelectedPID(rowData = {}, fromLoad = false) {
     const pidSelect = document.getElementById('available_pids');
     const selectedPID = rowData.Name || pidSelect.value;
     
@@ -1779,11 +1781,13 @@ function addSelectedPID(rowData = {}) {
         });
 
         container.appendChild(entry);
-        enableAutoStoreButton();
+        if (!fromLoad) {
+            enableAutoStoreButton();
+        }
     }
 }
 
-function addCarParameter(rowData = {}) {
+function addCarParameter(rowData = {}, fromLoad = false) {
     if (rowData.name) {
         const container = document.querySelector('.specific-pid-entries');
         const entry = document.createElement('div');
@@ -1867,7 +1871,8 @@ function addCarParameter(rowData = {}) {
 
         deleteBtn.addEventListener('click', () => {
             entry.remove();
-            enableAutoStoreButton();
+            markCarDataDirty();
+            submit_enable();
         });
 
         const toggleCollapse = (e) => {
@@ -1881,11 +1886,18 @@ function addCarParameter(rowData = {}) {
         collapseBtn.addEventListener('click', toggleCollapse);
 
         entry.querySelectorAll('input, select').forEach(input => {
-            input.addEventListener('input', enableAutoStoreButton);
+            const onCarFieldEdit = () => {
+                markCarDataDirty();
+                submit_enable();
+            };
+            input.addEventListener('input', onCarFieldEdit);
+            input.addEventListener('change', onCarFieldEdit);
         });
 
         container.appendChild(entry);
-        enableAutoStoreButton();
+        if (!fromLoad) {
+            markCarDataDirty();
+        }
     }
 }
 
@@ -1928,6 +1940,15 @@ function loadAutoTable(jsonData) {
             setElementValue("ecu_protocol", data.ecu_protocol, '6');
             setElementValue("group_dest_type", data.group_dest_type, 'Default');
             
+            const customEntriesContainer = document.querySelector('.pid-entries');
+            if (customEntriesContainer) {
+                customEntriesContainer.innerHTML = '';
+            }
+            const stdEntriesContainer = document.querySelector('.std-pid-entries');
+            if (stdEntriesContainer) {
+                stdEntriesContainer.innerHTML = '';
+            }
+
             if (data.pids && Array.isArray(data.pids)) {
                 data.pids.forEach((pidData, index) => {
                     console.log(`Loading PID ${index}:`, pidData);
@@ -1954,38 +1975,14 @@ function loadAutoTable(jsonData) {
                         Period: pidData.Period || '',
                         Type: pidData.Type || 'Default',
                         Send_to: pidData.Send_to || ''
-                    });
+                    }, true);
                 });
             }
 
-            // Update UI states after elements are created
+            // Update UI states without dispatching synthetic change events that
+            // would mark the Automate tab dirty or re-enable Store/Submit.
             requestAnimationFrame(() => {
                 try {
-                    const carSpecificElement = document.getElementById("car_specific");
-                    if (carSpecificElement) {
-                        carSpecificElement.dispatchEvent(new Event('change'));
-                    }
-
-                    const groupingElement = document.getElementById("grouping");
-                    if (groupingElement) {
-                        groupingElement.dispatchEvent(new Event('change'));
-                    }
-
-                    const groupDestTypeElement = document.getElementById("group_dest_type");
-                    if (groupDestTypeElement) {
-                        groupDestTypeElement.dispatchEvent(new Event('change'));
-                    }
-
-                    const ecuProtocolElement = document.getElementById("ecu_protocol");
-                    if (ecuProtocolElement) {
-                        ecuProtocolElement.dispatchEvent(new Event('change'));
-                    }
-
-                    const standardPidsElement = document.getElementById("standard_pids");
-                    if (standardPidsElement) {
-                        standardPidsElement.dispatchEvent(new Event('change'));
-                    }
-
                     if (typeof toggleCarModel === 'function') toggleCarModel();
                     if (typeof toggleDestinationAndCycle === 'function') toggleDestinationAndCycle();
                     if (typeof toggleSendToFields === 'function') toggleSendToFields();
@@ -2004,11 +2001,17 @@ function loadAutoTable(jsonData) {
 
 
     function enableAutoStoreButton() {
+        autoPidDirty = true;
         const storeButton = document.querySelector('button.store');
         if (storeButton) {
             storeButton.disabled = false;
         }
         document.getElementById("custom_pid_store").disabled = false;
+    }
+
+    function markCarDataDirty() {
+        carDataDirty = true;
+        enableAutoStoreButton();
     }
 		
     async function storeAutoTableData() {
@@ -2036,48 +2039,9 @@ function loadAutoTable(jsonData) {
             const standard_pidsValue = document.getElementById("standard_pids")?.value || 'disable';
             const ecu_protocolValue = document.getElementById("ecu_protocol")?.value || '6';
             const carModelValue = carModelField?.value || '';
-            if (carSpecificValue== "enable" && (!carModelValue || carModelValue.length === 0 || carModelValue === "Not Selected")) {
+            if (carSpecificValue == "enable" && (!carModelValue || carModelValue.length === 0 || carModelValue === "Not Selected")) {
                 throw new Error("Car model must be selected");
             }
-
-            let carData = {
-                car_model: carModelValue,
-                init: document.getElementById("specific_init").value,
-                pids: []
-            };
-
-            const specificPidEntries = document.querySelectorAll('.specific-pid-entry');
-            if (specificPidEntries.length > 0) {
-                carData.pids = Array.from(specificPidEntries).map(entry => {
-                    return {
-                        pid: entry.querySelector('.pid-input').value,
-                        pid_init: entry.querySelector('.pid-init-input').value,
-                        parameters: [{
-                            name: entry.querySelector('.name-input').value,
-                            expression: entry.querySelector('.expression-input').value,
-                            unit: entry.querySelector('.unit-input').value,
-                            class: entry.querySelector('.class-input').value,
-                            period: entry.querySelector('.period-input').value,
-                            min: entry.querySelector('.min-input').value,
-                            max: entry.querySelector('.max-input').value,
-                            type: entry.querySelector('.type-select').value,
-                            send_to: entry.querySelector('.send-to-input').value
-                        }]
-                    };
-                });
-            }
-            
-            fetch('/store_car_data', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ cars: [carData] })
-            }).then(response => response.text())
-            .then(data => console.log('Success:', data))
-            .catch(error => console.error('Error:', error));
-
-
 
             if (!cycleField.disabled && (!/^\d+$/.test(cycleValue) || parseInt(cycleValue) < 1000)) {
                 showNotification("Cycle must be a number greater than 1000", "red");
@@ -2139,7 +2103,58 @@ function loadAutoTable(jsonData) {
                     }
                     std_pid_data.push(stdPIDData);
                 });
-            }            
+            }
+
+            // Only upload car_data.json when the Vehicle Specific profile was actually modified,
+            // and await completion before proceeding to /store_auto_data or /store_config.
+            if (carDataDirty) {
+                let carData = {
+                    car_model: carModelValue,
+                    init: document.getElementById("specific_init").value,
+                    pids: []
+                };
+
+                const specificPidEntries = document.querySelectorAll('.specific-pid-entry');
+                if (specificPidEntries.length > 0) {
+                    const pidGroups = new Map();
+                    specificPidEntries.forEach(entry => {
+                        const pid = entry.querySelector('.pid-input').value;
+                        const pidInit = entry.querySelector('.pid-init-input').value;
+                        const key = `${pid}\0${pidInit}`;
+                        let group = pidGroups.get(key);
+                        if (!group) {
+                            group = { pid: pid, pid_init: pidInit, parameters: [] };
+                            pidGroups.set(key, group);
+                        }
+                        group.parameters.push({
+                            name: entry.querySelector('.name-input').value,
+                            expression: entry.querySelector('.expression-input').value,
+                            unit: entry.querySelector('.unit-input').value,
+                            class: entry.querySelector('.class-input').value,
+                            period: entry.querySelector('.period-input').value,
+                            min: entry.querySelector('.min-input').value,
+                            max: entry.querySelector('.max-input').value,
+                            type: entry.querySelector('.type-select').value,
+                            send_to: entry.querySelector('.send-to-input').value
+                        });
+                    });
+                    carData.pids = Array.from(pidGroups.values());
+                }
+
+                const carResponse = await fetch('/store_car_data', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ cars: [carData] })
+                });
+                if (!carResponse.ok) {
+                    throw new Error(`Failed to store car profile (HTTP ${carResponse.status})`);
+                }
+                const carResult = await carResponse.text();
+                console.log('Success:', carResult);
+                carDataDirty = false;
+            }
             
             // Prepare data object for sending
             const jsonData = {
@@ -2160,28 +2175,30 @@ function loadAutoTable(jsonData) {
             };
 
             // Send to server
-            await fetch('store_auto_data', {
+            const autoResponse = await fetch('/store_auto_data', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify(jsonData)
-            })
-            .then(response => response.text())
-            .then(result => {
-                showNotification("Settings saved successfully", "green");
-                document.querySelector(".store").disabled = true;
-                document.getElementById("custom_pid_store").disabled = true;
-            })
-            .catch(error => {
-                showNotification("Error saving settings: " + error.message, "red");
-                return false;
             });
+            if (!autoResponse.ok) {
+                throw new Error(`Failed to save AutoPID settings (HTTP ${autoResponse.status})`);
+            }
+            await autoResponse.text();
+
+            autoPidDirty = false;
+            showNotification("Settings saved successfully", "green");
+            const storeButton = document.querySelector(".store");
+            if (storeButton) {
+                storeButton.disabled = true;
+            }
+            document.getElementById("custom_pid_store").disabled = true;
 
             return true;
 
         } catch (error) {
-            showNotification(error.message, "red");
+            showNotification("Error saving settings: " + error.message, "red");
             return false;
         }
     }
@@ -2540,31 +2557,37 @@ function loadAutoTable(jsonData) {
             detailsEl.style.display = 'none';
         }
     }
-	function loadCANFLT() {
-		const xhttp = new XMLHttpRequest();
-		xhttp.onload = function() {
-            if (this.responseText === "NONE") {
+	async function loadCANFLT() {
+        try {
+            const response = await fetch("/load_canflt");
+            if (!response.ok) return;
+            const text = await response.text();
+            if (text === "NONE") {
                 return;
             }
-            var obj = JSON.parse(this.responseText);
-			if(this.responseText != "NONE") {
-				if(Array.isArray(obj.can_flt)) {
-					obj.can_flt.forEach((item) => {
-						restoreCANFLTRow(item["CANID"], item["Name"], item["PID"], item["PIDIndex"], item["StartBit"], item["BitLength"], item["Expression"], item["Cycle"]);
-					});
-				}
-			}
-		};
-		xhttp.open("GET", "/load_canflt");
-		xhttp.send();
+            const obj = JSON.parse(text);
+            if (Array.isArray(obj.can_flt)) {
+                obj.can_flt.forEach((item) => {
+                    restoreCANFLTRow(item["CANID"], item["Name"], item["PID"], item["PIDIndex"], item["StartBit"], item["BitLength"], item["Expression"], item["Cycle"]);
+                });
+            }
+        } catch (error) {
+            console.error("Error loading CAN filter:", error);
+        }
 	}
 
-    function loadautoPIDCarData() {
-        const xhttp = new XMLHttpRequest();
-        xhttp.onload = function() {
-            console.log("Car models:", this.responseText);
-            if(this.responseText != "NONE") {
-                var obj = JSON.parse(this.responseText);
+    async function loadautoPIDCarData() {
+        try {
+            const response = await fetch("/load_auto_pid_car_data");
+            if (!response.ok) return;
+            const text = await response.text();
+            console.log("Car models:", text);
+            if (text !== "NONE") {
+                const obj = JSON.parse(text);
+                const entriesContainer = document.querySelector('.specific-pid-entries');
+                if (entriesContainer) {
+                    entriesContainer.innerHTML = '';
+                }
                 // Create array of car models
                 const carModels = [];
                 if (obj && Array.isArray(obj.cars)) {
@@ -2575,7 +2598,7 @@ function loadAutoTable(jsonData) {
                         
                         // Load parameters for each PID
                         if (car.pids) {
-                            document.getElementById("specific_init").value = car.init;
+                            document.getElementById("specific_init").value = car.init || '';
                             car.pids.forEach(pid => {
 
                                 if (pid.parameters) {
@@ -2592,7 +2615,7 @@ function loadAutoTable(jsonData) {
                                             send_to: param.send_to,
                                             pid: pid.pid,
                                             pid_init: pid.pid_init
-                                        });
+                                        }, true);
                                     });
                                 }
                             });
@@ -2608,30 +2631,29 @@ function loadAutoTable(jsonData) {
                 toggleSendToFields();
                 toggleStandardPIDOptions();
             }
-        };
-        xhttp.open("GET", "/load_auto_pid_car_data");
-        xhttp.send();
+        } catch (error) {
+            console.error("Error loading auto PID car data:", error);
+        }
     }
 
 
-    function loadautoPID() {
+    async function loadautoPID() {
         console.log("Loading auto PID data..."); // Debug log
-        const xhttp = new XMLHttpRequest();
-        xhttp.onload = function() {
-            console.log("Server response:", this.responseText); // Debug log
-            if(this.responseText !== "NONE") {
-                const data = JSON.parse(this.responseText);
+        try {
+            const response = await fetch("/load_auto_pid");
+            if (!response.ok) return;
+            const text = await response.text();
+            console.log("Server response:", text); // Debug log
+            if (text !== "NONE") {
+                const data = JSON.parse(text);
                 loadAutoTable(data);
                 document.getElementById("custom_pid_store").disabled = true;
             } else {
                 console.log("No PID data found on server");
             }
-        };
-        xhttp.onerror = function(error) {
+        } catch (error) {
             console.error("Error loading auto PID:", error);
-        };
-        xhttp.open("GET", "/load_auto_pid");
-        xhttp.send();
+        }
     }
 
 	function postCANFLT() {
@@ -2649,11 +2671,16 @@ function loadAutoTable(jsonData) {
 
 	async function postConfig() {
 		var obj = {};
-        await new Promise(resolve => setTimeout(resolve, 1000)); // Add 1 second delay
-        
-        const storeResult = await storeAutoTableData();
-        if (!storeResult) {
-            return;
+        const submitButton = document.getElementById("submit_button");
+        submitButton.disabled = true;
+
+        // Only write AutoPID / car_data files when the user actually changed the Automate tab.
+        if (autoPidDirty || carDataDirty) {
+            const storeResult = await storeAutoTableData();
+            if (!storeResult) {
+                submitButton.disabled = false;
+                return;
+            }
         }
 		obj["wifi_mode"] = document.getElementById("wifi_mode").value;
         obj["webhook_en"] = document.getElementById("webhook_en").value;
@@ -2711,11 +2738,17 @@ function loadAutoTable(jsonData) {
 		var configJSON = JSON.stringify(obj);
 		const xhttp = new XMLHttpRequest();
 		xhttp.onload = function() {
-            showNotification(this.responseText, "green");
-            document.getElementById("submit_button").disabled = true;
+            if (this.status >= 200 && this.status < 300) {
+                showNotification(this.responseText, "green");
+                document.getElementById("submit_button").disabled = true;
+            } else {
+                showNotification("Failed to save configuration", "red");
+                document.getElementById("submit_button").disabled = false;
+            }
 		};
         xhttp.onerror = function() {
             showNotification("Failed to save configuration", "red");
+            document.getElementById("submit_button").disabled = false;
         };
 
 		xhttp.open("POST", "/store_config");
@@ -2818,11 +2851,12 @@ function loadAutoTable(jsonData) {
         const file = fileInput.files[0];
         if (!file) return;
 
+        // Upload config last because /store_config starts the 2 s reboot timer.
         const endpointMap = {
-            'config': '/store_config',
-            'auto_pid': '/store_auto_data',
             'auto_pid_car_data': '/store_car_data',
-            'canflt': '/store_canflt'
+            'auto_pid': '/store_auto_data',
+            'canflt': '/store_canflt',
+            'config': '/store_config'
         };
 
         const delay = 200;
@@ -2836,6 +2870,9 @@ function loadAutoTable(jsonData) {
                     let hasErrors = false;
 
                     for (const [key, endpoint] of Object.entries(endpointMap)) {
+                        if (key === 'config' && hasErrors) {
+                            break;
+                        }
                         if (jsonData[key]) {
                             try {
                                 const response = await fetch(endpoint, {
@@ -3048,37 +3085,50 @@ function loadAutoTable(jsonData) {
 			} else if(document.getElementById("mqtt_en").value == "disable") {
 				document.getElementById("mqtt_en_div").style.display = "none";
 			}
-			loadCANFLT();
-			loadautoPIDCarData();
-            loadautoPID();
-            loadWebhookConfig();
-            document.getElementById("car_model").addEventListener('change', function() {
-                // Clear existing entries
-                document.querySelector('.specific-pid-entries').innerHTML = '';
-                
-                const selectedModel = this.value;
-                if (latest_car_models && Array.isArray(latest_car_models.cars)) {
-                    const selectedCar = latest_car_models.cars.find(car => car.car_model === selectedModel);
-                    const specificInitElement = document.getElementById("specific_init");
-                    specificInitElement.value = selectedCar.init;
-                    if (selectedCar && selectedCar.pids) {
-                        selectedCar.pids.forEach(pid => {
-                            if (pid.parameters) {
-                                pid.parameters.forEach(param => {
-                                    addCarParameter({
-                                        ...param,
-                                        pid: pid.pid,
-                                        pid_init: pid.pid_init
-                                    });
-                                });
-                            }
-                        });
-                    }
-                }
-            });
+            autoPidDirty = false;
+            carDataDirty = false;
 			document.getElementById("store_canflt_button").disabled = true;
 			document.querySelector(".store").disabled = true;
             document.getElementById("submit_button").disabled = true;
+
+            document.getElementById("car_model").addEventListener('change', function() {
+                // Clear existing entries
+                document.querySelector('.specific-pid-entries').innerHTML = '';
+                markCarDataDirty();
+
+                const selectedModel = this.value;
+                const specificInitElement = document.getElementById("specific_init");
+                if (latest_car_models && Array.isArray(latest_car_models.cars)) {
+                    const selectedCar = latest_car_models.cars.find(car => car.car_model === selectedModel);
+                    if (selectedCar) {
+                        specificInitElement.value = selectedCar.init || '';
+                        if (selectedCar.pids) {
+                            selectedCar.pids.forEach(pid => {
+                                if (pid.parameters) {
+                                    pid.parameters.forEach(param => {
+                                        addCarParameter({
+                                            ...param,
+                                            pid: pid.pid,
+                                            pid_init: pid.pid_init
+                                        });
+                                    });
+                                }
+                            });
+                        }
+                    } else {
+                        specificInitElement.value = '';
+                    }
+                }
+            });
+
+            // Sequence secondary loads to avoid exhausting httpd sockets and ensure
+            // car_model options exist before loadAutoTable() selects the saved model.
+            (async () => {
+                await loadCANFLT();
+                await loadautoPIDCarData();
+                await loadautoPID();
+                loadWebhookConfig();
+            })();
 		};
 		checkStatus();
 		xhttp.open("GET", "/load_config");

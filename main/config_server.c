@@ -594,6 +594,8 @@ static esp_err_t load_pid_auto_config_handler(httpd_req_t *req)
         return ESP_OK;
     }
 
+    buf[read_len] = '\0';
+
     // Find the last closing brace and terminate the string there
     char *last_brace = strrchr(buf, '}');
     if (last_brace != NULL) {
@@ -686,20 +688,29 @@ static esp_err_t store_auto_data_handler(httpd_req_t *req)
     }
 
     // Receive data with timeout handling
-    int received = httpd_req_recv(req, buf, buf_size);
-    if (received <= 0)
-	{
-        ESP_LOGE(TAG, "Failed to receive data: %d", received);
-        ret = ESP_FAIL;
-        goto cleanup;
-    }
-
-    // Validate received data length
-    if (received != buf_size)
-	{
-        ESP_LOGE(TAG, "Incomplete data received: %d/%d", received, buf_size);
-        ret = ESP_FAIL;
-        goto cleanup;
+    size_t received = 0;
+    int timeouts = 0;
+    while (received < buf_size)
+    {
+        int chunk = httpd_req_recv(req, buf + received, buf_size - received);
+        if (chunk == HTTPD_SOCK_ERR_TIMEOUT)
+        {
+            if (++timeouts < 5)
+            {
+                continue;
+            }
+            ESP_LOGE(TAG, "Timed out receiving data: %zu/%zu", received, buf_size);
+            ret = ESP_FAIL;
+            goto cleanup;
+        }
+        if (chunk <= 0)
+        {
+            ESP_LOGE(TAG, "Failed to receive data: %d", chunk);
+            ret = ESP_FAIL;
+            goto cleanup;
+        }
+        timeouts = 0;
+        received += (size_t)chunk;
     }
 
     buf[received] = '\0';
@@ -716,8 +727,12 @@ static esp_err_t store_auto_data_handler(httpd_req_t *req)
 
     ESP_LOGI(TAG, "Auto Table json: %s", buf);
 
-    // Open file with error handling
-    FILE *f = fopen(FS_MOUNT_POINT"/auto_pid.json", "w");
+    const char *filepath = FS_MOUNT_POINT"/auto_pid.json";
+    const char *tmp_filepath = FS_MOUNT_POINT"/auto_pid.json.tmp";
+
+    // Write to a temporary file and rename atomically so an interrupted write
+    // cannot leave auto_pid.json truncated or empty.
+    FILE *f = fopen(tmp_filepath, "w");
     if (!f)
 	{
         ESP_LOGE(TAG, "Failed to open file for writing");
@@ -729,13 +744,28 @@ static esp_err_t store_auto_data_handler(httpd_req_t *req)
     size_t written = fwrite(buf, 1, received, f);
     if (written != received) 
 	{
-        ESP_LOGE(TAG, "File write failed: %d/%d bytes", written, received);
+        ESP_LOGE(TAG, "File write failed: %zu/%zu bytes", written, received);
         fclose(f);
+        unlink(tmp_filepath);
         ret = ESP_FAIL;
         goto cleanup;
     }
 
-    fclose(f);
+    if (fclose(f) != 0)
+    {
+        ESP_LOGE(TAG, "Failed to close temp file");
+        unlink(tmp_filepath);
+        ret = ESP_FAIL;
+        goto cleanup;
+    }
+
+    if (rename(tmp_filepath, filepath) != 0)
+    {
+        ESP_LOGE(TAG, "Failed to replace auto_pid.json");
+        unlink(tmp_filepath);
+        ret = ESP_FAIL;
+        goto cleanup;
+    }
 
     // Send success response
     const char *resp_str = "Auto PID table will take effect after submit.";
@@ -758,11 +788,19 @@ cleanup:
 
 static esp_err_t store_car_data_handler(httpd_req_t *req)
 {
-    int total_len = req->content_len;
-    int received = 0;
-	const char *filepath = FS_MOUNT_POINT"/car_data.json";
+    size_t total_len = req->content_len;
+    size_t received = 0;
+    const char *filepath = FS_MOUNT_POINT"/car_data.json";
+    const char *tmp_filepath = FS_MOUNT_POINT"/car_data.json.tmp";
 
-    FILE *file = fopen(filepath, "w");
+    if (total_len == 0 || total_len > MAX_FILE_SIZE)
+    {
+        ESP_LOGE(TAG, "Invalid content length: %zu", total_len);
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid content length");
+        return ESP_FAIL;
+    }
+
+    FILE *file = fopen(tmp_filepath, "w");
     if (!file)
     {
         ESP_LOGE(TAG, "Failed to open file for writing");
@@ -770,28 +808,65 @@ static esp_err_t store_car_data_handler(httpd_req_t *req)
         return ESP_FAIL;
     }
 
-    static char buffer[16];
+    static char buffer[512];
+    int timeouts = 0;
     while (received < total_len)
     {
-        int ret = httpd_req_recv(req, buffer, sizeof(buffer));
+        size_t to_read = total_len - received;
+        if (to_read > sizeof(buffer))
+        {
+            to_read = sizeof(buffer);
+        }
+
+        int ret = httpd_req_recv(req, buffer, to_read);
+        if (ret == HTTPD_SOCK_ERR_TIMEOUT)
+        {
+            if (++timeouts < 5)
+            {
+                continue;
+            }
+            ESP_LOGE(TAG, "Timed out receiving JSON data");
+            fclose(file);
+            unlink(tmp_filepath);
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Timed out receiving JSON data");
+            return ESP_FAIL;
+        }
         if (ret <= 0)
         {
             ESP_LOGE(TAG, "Failed to receive JSON data");
             fclose(file);
+            unlink(tmp_filepath);
             httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to receive JSON data");
             return ESP_FAIL;
         }
-        if (fwrite(buffer, 1, ret, file) != ret)
+        timeouts = 0;
+        if (fwrite(buffer, 1, (size_t)ret, file) != (size_t)ret)
         {
             ESP_LOGE(TAG, "Failed to write data to file");
             fclose(file);
+            unlink(tmp_filepath);
             httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to write data to file");
             return ESP_FAIL;
         }
-        received += ret;
+        received += (size_t)ret;
     }
 
-    fclose(file);
+    if (fclose(file) != 0)
+    {
+        ESP_LOGE(TAG, "Failed to close temp file");
+        unlink(tmp_filepath);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to write data to file");
+        return ESP_FAIL;
+    }
+
+    if (rename(tmp_filepath, filepath) != 0)
+    {
+        ESP_LOGE(TAG, "Failed to replace car_data.json");
+        unlink(tmp_filepath);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to store data");
+        return ESP_FAIL;
+    }
+
     ESP_LOGI(TAG, "JSON data successfully stored");
 
     httpd_resp_send(req, "Data stored successfully", HTTPD_RESP_USE_STRLEN);
