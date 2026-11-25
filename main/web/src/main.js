@@ -4094,6 +4094,9 @@ xhttp.onload = async function() {
             document.getElementById("log_storage").selectedIndex = "1";
         }
 
+        // the slider too, not only its label: Submit reads the slider
+        // (GitHub issue #1064: it stayed at the page's 60 and was saved)
+        document.getElementById('log_period').value = obj.log_period;
         document.getElementById('log_period_value').textContent = obj.log_period;
         
         // Load IMU threshold value and update display
