@@ -418,7 +418,7 @@ static void mqtt_task(void *pvParameters)
                         ESP_LOGI(TAG, "-----------");
                         ESP_LOGI(TAG, "can_data: %llx, mask: %llx, value: %llx\r\n", can_data, mask, value);
 
-                        if(evaluate_expression((uint8_t *)mqtt_canflt_values[found_index].expression, (uint8_t *)tx_frame.frame.data, (double)value, &expression_result) )
+                        if(evaluate_expression((uint8_t *)mqtt_canflt_values[found_index].expression, (uint8_t *)tx_frame.frame.data, sizeof(tx_frame.frame.data), (double)value, &expression_result) )
                         {
                             ESP_LOGI(TAG, "Expression result: %lf", expression_result);
 
