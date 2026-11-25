@@ -1,4 +1,12 @@
 {
+  "AC_CHARGE_COUNT": {
+    "description": "Number of AC (L1/L2) charges",
+    "settings": {
+      "unit": "",
+      "class": "none",
+      "min": "0"
+    }
+  },
   "AC_COMP": {
     "description": "AC Compressor (ON/OFF)",
     "settings": {
@@ -2746,6 +2754,14 @@
     "settings": {
       "unit": "kW",
       "class": "power"
+    }
+  },
+  "QC_COUNT": {
+    "description": "Number of DC quick charges",
+    "settings": {
+      "unit": "",
+      "class": "none",
+      "min": "0"
     }
   },
   "RANGE": {

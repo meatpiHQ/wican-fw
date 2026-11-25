@@ -11,7 +11,8 @@
         "HV_V": "[B25:B26]/100",
         "HV_A": "(0-[S11:S14])/1024",
         "LV_V": "[B27:B28]/1000",
-        "BATT_CAPACITY": "[B44:B46]/10000"
+        "BATT_CAPACITY": "[B44:B46]/10000",
+        "HV_W": "([B25:B26]/100)*((0-[S11:S14])/1024)"
       }
     },
     {
@@ -117,11 +118,12 @@
       }
     },
     {
-      "pid": "2103",
+      "pid": "21035",
       "pid_init": "ATSH79B;ATFCSH79B;ATCRA7BB;",
       "parameters": {
         "HV_C_V_MAX": "((B15*256)+B17)/1000",
-        "HV_C_V_MIN": "[B18:B19]/1000"
+        "HV_C_V_MIN": "[B18:B19]/1000",
+        "HV_C_DIFF": "(((B15*256)+B17)-[B18:B19])/1000"
       }
     },
     {
@@ -147,28 +149,33 @@
       "parameters": {
         "LV_A": "[S4:S5]/256"
       }
-    }
-  ],
-  "filters": [
+    },
     {
-      "frame_id": "0x284",
-      "monitor_ms": 500,
+      "pid": "2212031",
+      "pid_init": "ATSH797;ATFCSH797;ATCRA79A;",
       "parameters": {
-        "SPEED": "[B4:B5]/98"
+        "QC_COUNT": "[B4:B5]"
       }
     },
     {
-      "frame_id": "0x1DA",
-      "monitor_ms": 500,
+      "pid": "2212051",
+      "pid_init": "ATSH797;ATFCSH797;ATCRA79A;",
       "parameters": {
-        "DM_F_RPM": "[S4:S5]/2"
+        "AC_CHARGE_COUNT": "[B4:B5]"
       }
     },
     {
-      "frame_id": "0x5C5",
-      "monitor_ms": 500,
+      "pid": "22115D1",
+      "pid_init": "ATSH797;ATFCSH797;ATCRA79A;",
       "parameters": {
-        "ODOMETER": "[B1:B3]"
+        "OUTSIDE_TEMPERATURE": "(B4*0.5)-40.5"
+      }
+    },
+    {
+      "pid": "220E011",
+      "pid_init": "ATSH743;ATFCSH743;ATCRA763;",
+      "parameters": {
+        "ODOMETER": "[B4:B6]"
       }
     }
   ]
