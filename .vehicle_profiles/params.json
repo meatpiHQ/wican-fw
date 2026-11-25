@@ -2809,6 +2809,15 @@
       "class": "battery"
     }
   },
+  "SOC_R": {
+    "description": "Raw (BMS) State of Charge",
+    "settings": {
+      "unit": "%",
+      "class": "battery",
+      "min": "0",
+      "max": "100"
+    }
+  },
   "SOH": {
     "description": "EV Battery State of Health",
     "settings": {
