@@ -131,10 +131,13 @@ def convert(found_cfg, car):
             continue
         prm = [dict(x, name=uniq(x.get("name")), unit=fix_unit(x.get("unit")))
                for x in pf.get("parameters", [])]
-        cfg["filters"].append({
+        flt = {
             "frame_id": fid, "monitor_ms": pf.get("monitor_ms") or 1000,
             "period_ms": pf.get("period_ms") or 0, "group": "default",
-            "profile": True, "parameters": prm})
+            "profile": True, "parameters": prm}
+        if pf.get("name"):
+            flt["name"] = str(pf["name"])
+        cfg["filters"].append(flt)
     return cfg, renamed
 
 

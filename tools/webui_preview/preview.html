@@ -5939,7 +5939,7 @@ function profileToPids(car,keepPids,keepFilters){
   for(const pf of((car&&car.filters)||[])){
     const fid=Number(pf.frame_id);if(!fid)continue;
     const prm=(pf.parameters||[]).map(x=>({...x,name:uniq(String(x.name||"")),unit:fixUnit(x.unit),expression:String(x.expression||"")}));
-    filters.push({frame_id:fid,monitor_ms:pf.monitor_ms||1000,period_ms:pf.period_ms||0,group:"default",profile:true,parameters:prm});
+    filters.push({...(pf.name?{name:String(pf.name)}:{}),frame_id:fid,monitor_ms:pf.monitor_ms||1000,period_ms:pf.period_ms||0,group:"default",profile:true,parameters:prm});
   }
   return{pids,filters,renamed};
 }
