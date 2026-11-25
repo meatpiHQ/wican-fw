@@ -1,59 +1,198 @@
 {
-    "title": "WiCan Vehicle Profile",
-    "description": "Data about various models of cars and their settings",
-    "type": "object",
-    "properties": {
-        "car_model": {
-            "description": "Name of car model, should include Make and Model(s)",
+  "additionalProperties": false,
+  "description": "Data about various models of cars and their settings",
+  "properties": {
+    "car_model": {
+      "description": "Name of car model, should include Make and Model(s)",
+      "type": "string"
+    },
+    "note": {
+      "description": "Used for note on docs",
+      "type": "string"
+    },
+    "comment": {
+      "description": "Used for any internal notes/comments needed for profile",
+      "type": "string"
+    },
+    "add_to_docs": {
+      "description": "Can be set to false to not add to docs, typically for generic cars",
+      "type": "boolean"
+    },
+    "init": {
+      "description": "Init String, don't forget the final ;",
+      "type": "string"
+    },
+    "extends": {
+      "description": "Allows 1 profile to extend another",
+      "type": "string"
+    },
+    "bus": {
+      "description": "Auxiliary CAN bus for the profile (ms, sw, ch)",
+      "type": "string",
+      "enum": ["ms", "sw", "ch"]
+    },
+    "bus_kbps": {
+      "description": "Auxiliary CAN bus bit rate in kbps",
+      "type": "number"
+    },
+    "pids": {
+      "description": "Array of PID's and their parameters",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["pid"],
+        "properties": {
+          "pid": {
+            "description": "The PID for this group of parameters",
             "type": "string"
-        },
-        "init": {
-            "description": "Init String, don't forget the final ;",
+          },
+          "pid_init": {
+            "description": "PID-specific initialization commands",
             "type": "string"
-        },
-        "pids": {
-            "description": "Array of PID's and their parameters",
+          },
+          "bus": {
+            "description": "Auxiliary CAN bus for this PID (ms, sw, ch)",
+            "type": "string",
+            "enum": ["ms", "sw", "ch"]
+          },
+          "bus_kbps": {
+            "description": "Auxiliary CAN bus bit rate in kbps",
+            "type": "number"
+          },
+          "parameters": {
+            "description": "Array of Parameters for this PID",
             "type": "array",
             "minItems": 1,
             "items": {
-                "type": "object",
-                "required": ["pid"],
-                "properties": {
-                    "pid": {
-                        "description": "The PID for this group of parameters",
-                        "type": "string"
-                    },
-                    "parameters": {
-                        "description": "Array of Parameters for this PID",
-                        "type": "array",
-                        "minItems": 1,
-                        "items": {
-                            "type": "object",
-                            "required": ["name", "expression", "unit", "class"],
-                            "properties": {
-                                "name": {
-                                    "description": "Used in MQTT JSON, no spaces",
-                                    "type": "string"
-                                },
-                                "expression": {
-                                    "description": "Expression to calculate value",
-                                    "type": "string"
-                                },
-                                "unit": {
-                                    "description": "Unit for this  parameter",
-                                    "type": "string"
-                                },
-                                "class": {
-                                    "description": "Class of sensor, See Home Assistant sensor classes",
-                                    "type": "string"
-                                }
-                            }
-                        }
-                    }
+              "type": "object",
+              "required": ["name", "expression", "unit", "class"],
+              "properties": {
+                "name": {
+                  "description": "Used in MQTT JSON, no spaces",
+                  "type": "string"
+                },
+                "pid_init": {
+                  "description": "Legacy parameter-level PID initialization string",
+                  "type": "string"
+                },
+                "expression": {
+                  "description": "Expression to calculate value",
+                  "type": "string"
+                },
+                "unit": {
+                  "description": "Unit for this parameter",
+                  "type": "string"
+                },
+                "class": {
+                  "description": "Class of sensor, See Home Assistant sensor classes",
+                  "type": "string"
+                },
+                "period": {
+                  "description": "Custom polling period in ms",
+                  "anyOf": [{ "type": "string" }, { "type": "number" }]
+                },
+                "min": {
+                  "description": "Minimum valid value",
+                  "anyOf": [{ "type": "string" }, { "type": "number" }]
+                },
+                "max": {
+                  "description": "Maximum valid value",
+                  "anyOf": [{ "type": "string" }, { "type": "number" }]
+                },
+                "type": {
+                  "description": "Home Assistant entity type (e.g., binary_sensor)",
+                  "type": "string"
                 }
+              },
+              "additionalProperties": false
             }
-        }
+          }
+        },
+        "additionalProperties": false
+      }
     },
-    "additionalProperties": false,
-    "required": [ "car_model", "init", "pids"]
+    "filters": {
+      "description": "Array of passive broadcast CAN frame filters and their parameters",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["frame_id", "parameters"],
+        "properties": {
+          "name": {
+            "description": "Optional display name/label for this filter frame",
+            "type": "string"
+          },
+          "frame_id": {
+            "description": "Target CAN ID (e.g., '0x284' or numeric)",
+            "anyOf": [{ "type": "string" }, { "type": "number" }]
+          },
+          "monitor_ms": {
+            "description": "Duration in ms to listen for the frame during each cycle",
+            "type": "number"
+          },
+          "period_ms": {
+            "description": "Custom polling interval in ms",
+            "type": "number"
+          },
+          "parameters": {
+            "description": "Array of Parameters decoded from this broadcast frame",
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["name", "expression", "unit", "class"],
+              "properties": {
+                "name": {
+                  "description": "Used in MQTT JSON, no spaces",
+                  "type": "string"
+                },
+                "expression": {
+                  "description": "Expression to calculate value from frame data bytes",
+                  "type": "string"
+                },
+                "unit": {
+                  "description": "Unit for this parameter",
+                  "type": "string"
+                },
+                "class": {
+                  "description": "Class of sensor, See Home Assistant sensor classes",
+                  "type": "string"
+                },
+                "period": {
+                  "description": "Custom polling period in ms",
+                  "anyOf": [{ "type": "string" }, { "type": "number" }]
+                },
+                "min": {
+                  "description": "Minimum valid value",
+                  "anyOf": [{ "type": "string" }, { "type": "number" }]
+                },
+                "max": {
+                  "description": "Maximum valid value",
+                  "anyOf": [{ "type": "string" }, { "type": "number" }]
+                },
+                "type": {
+                  "description": "Home Assistant entity type (e.g., binary_sensor)",
+                  "type": "string"
+                },
+                "mux_expr": {
+                  "description": "Multiplexer selector expression",
+                  "type": "string"
+                },
+                "mux_val": {
+                  "description": "Multiplexer selector value",
+                  "type": "number"
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "title": "WiCan Vehicle Profile",
+  "type": "object"
 }

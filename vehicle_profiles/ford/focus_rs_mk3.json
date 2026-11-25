@@ -1,0 +1,234 @@
+{
+  "car_model": "Ford: Focus RS (MK3)",
+  "init": "ATE0;ATL0;ATH0;ATR1;ATST32;ATSP6;ATCAF1;",
+  "pids": [
+    {
+      "pid": "224028",
+      "pid_init": "ATSH000726;STCAFCP726,72E;",
+      "parameters": [
+        {
+          "name": "SOC",
+          "expression": "B4",
+          "unit": "%",
+          "class": "battery"
+        }
+      ]
+    },
+    {
+      "pid": "222813",
+      "pid_init": "ATSH000726;STCAFCP726,72E;",
+      "parameters": [
+        {
+          "name": "TYRE_P_FL",
+          "expression": "([B4:B5]/10)/2.036",
+          "unit": "psi",
+          "class": "pressure"
+        }
+      ]
+    },
+    {
+      "pid": "222816",
+      "pid_init": "ATSH000726;STCAFCP726,72E;",
+      "parameters": [
+        {
+          "name": "TYRE_P_RL",
+          "expression": "([B4:B5]/10)/2.036",
+          "unit": "psi",
+          "class": "pressure"
+        }
+      ]
+    },
+    {
+      "pid": "222814",
+      "pid_init": "ATSH000726;STCAFCP726,72E;",
+      "parameters": [
+        {
+          "name": "TYRE_P_FR",
+          "expression": "([B4:B5]/10)/2.036",
+          "unit": "psi",
+          "class": "pressure"
+        }
+      ]
+    },
+    {
+      "pid": "222815",
+      "pid_init": "ATSH000726;STCAFCP726,72E;",
+      "parameters": [
+        {
+          "name": "TYRE_P_RR",
+          "expression": "([B4:B5]/10)/2.036",
+          "unit": "psi",
+          "class": "pressure"
+        }
+      ]
+    },
+    {
+      "pid": "22F40F",
+      "pid_init": "ATSH7E0;STCAFCP7E0,7E8;",
+      "parameters": [
+        {
+          "name": "INTAKE_AIR_TMP",
+          "expression": "B4-40",
+          "unit": "°C",
+          "class": "temperature"
+        }
+      ]
+    },
+    {
+      "pid": "22dd01",
+      "pid_init": "ATSH000726;STCAFCP726,72E;",
+      "parameters": [
+        {
+          "name": "ODOMETER",
+          "expression": "[B4:B6]",
+          "unit": "km",
+          "class": "distance"
+        }
+      ]
+    },
+    {
+      "pid": "224029",
+      "pid_init": "ATSH000726;STCAFCP726,72E;",
+      "parameters": [
+        {
+          "name": "BATT_TEMP",
+          "expression": "B4-40",
+          "unit": "°C",
+          "class": "temperature"
+        }
+      ]
+    }
+  ],
+  "filters": [
+    {
+      "name": "ENGINE_RPM",
+      "frame_id": "0x090",
+      "monitor_ms": 100,
+      "period_ms": 500,
+      "parameters": [
+        {
+          "name": "ENGINE_RPM",
+          "expression": "((B4:0+B4:1*2+B4:2*4+B4:3*8)*256+B5)*2",
+          "unit": "rpm",
+          "class": "none"
+        }
+      ]
+    },
+    {
+      "name": "BOOST_PRESSURE",
+      "frame_id": "0x0F8",
+      "monitor_ms": 200,
+      "period_ms": 500,
+      "parameters": [
+        {
+          "name": "BOOST_PRESSURE",
+          "expression": "B5*0.145038",
+          "unit": "psi",
+          "class": "pressure"
+        }
+      ]
+    },
+    {
+      "name": "VEHICLE_SPEED",
+      "frame_id": "0x130",
+      "monitor_ms": 100,
+      "period_ms": 500,
+      "parameters": [
+        {
+          "name": "VEHICLE_SPEED",
+          "expression": "[B6:B7]/100",
+          "unit": "km/h",
+          "class": "speed"
+        }
+      ]
+    },
+    {
+      "name": "ESC_MODE",
+      "frame_id": "0x1C0",
+      "monitor_ms": 200,
+      "period_ms": 2000,
+      "parameters": [
+        {
+          "name": "ESC_MODE",
+          "expression": "B1:4+B1:5*2",
+          "unit": "",
+          "class": "none"
+        }
+      ]
+    },
+    {
+      "name": "ENGINE_TEMPS",
+      "frame_id": "0x2F0",
+      "monitor_ms": 500,
+      "period_ms": 5000,
+      "parameters": [
+        {
+          "name": "COOLANT_TMP",
+          "expression": "B5-60",
+          "unit": "°C",
+          "class": "temperature"
+        },
+        {
+          "name": "INTAKE_AIR_TEMP_2",
+          "expression": "B7-40",
+          "unit": "°C",
+          "class": "temperature"
+        }
+      ]
+    },
+    {
+      "name": "CABIN_TEMP",
+      "frame_id": "0x340",
+      "monitor_ms": 1000,
+      "period_ms": 10000,
+      "parameters": [
+        {
+          "name": "T_CAB",
+          "expression": "B7*0.5",
+          "unit": "°C",
+          "class": "temperature"
+        }
+      ]
+    },
+    {
+      "name": "FUEL_LEVEL",
+      "frame_id": "0x380",
+      "monitor_ms": 1000,
+      "period_ms": 10000,
+      "parameters": [
+        {
+          "name": "FUEL",
+          "expression": "(B2:1*512+B2:0*256+B3)*0.2",
+          "unit": "%",
+          "class": "none"
+        }
+      ]
+    },
+    {
+      "name": "DRIVE_MODES",
+      "frame_id": "0x420",
+      "monitor_ms": 1000,
+      "period_ms": 2000,
+      "parameters": [
+        {
+          "name": "AWD_MODE",
+          "expression": "B6:0+B6:1*2",
+          "unit": "",
+          "class": "none"
+        },
+        {
+          "name": "STEERING_MODE",
+          "expression": "B7:3",
+          "unit": "",
+          "class": "none"
+        },
+        {
+          "name": "SUSPENSION_MODE",
+          "expression": "B7:0",
+          "unit": "",
+          "class": "none"
+        }
+      ]
+    }
+  ]
+}
