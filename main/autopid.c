@@ -1430,6 +1430,10 @@ static void send_commands(char *commands, uint32_t delay_ms)
     while ((cmd_end = strchr(cmd_start, '\r')) != NULL) 
     {
         size_t cmd_len = cmd_end - cmd_start + 1; // +1 to include '\r'
+        if (cmd_len <= 1) {
+            cmd_start = cmd_end + 1;
+            continue;
+        }
         char str_send[cmd_len + 1]; // +1 for null terminator
         strncpy(str_send, cmd_start, cmd_len);
         str_send[cmd_len] = '\0'; // Null-terminate the command string
@@ -1438,7 +1442,12 @@ static void send_commands(char *commands, uint32_t delay_ms)
             (strstr(str_send, "ate1") == NULL && strstr(str_send, "ATE1") == NULL && strstr(str_send, "at e1") == NULL && strstr(str_send, "AT E1") == NULL))
         {
             elm327_process_cmd((uint8_t *)str_send, cmd_len, &tx_msg, &autopidQueue);
-            while ((xQueueReceive(autopidQueue, &elm327_response, pdMS_TO_TICKS(10)) == pdPASS));
+            // elm327_process_cmd queues every response synchronously before
+            // returning, so the drain never needs to wait; a per-item
+            // timeout only added 10 ms of dead time to its final (empty)
+            // iteration. With a 3-6-command pid_init on every PID that was
+            // ~70 ms of pure overhead per PID.
+            while ((xQueueReceive(autopidQueue, &elm327_response, 0) == pdPASS));
         }
         
         cmd_start = cmd_end + 1; // Move to the start of the next command
