@@ -15,7 +15,7 @@
 # land in test-reports\logs\<run>\ (gitignored).
 #
 param(
-    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'bleoverload', 'blephy', 'blethru', 'bleram', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'profilee2e', 'slcan', 'canmax', 'mqttbatch', 'canbusoff', 'logtail', 'usbobd', 'httpauth', 'uploadconfirm', 'j2534auto', 'j2534std', 'j2534vbat', 'j2534vpw', 'j2534tp20', 'j2534fc', 'j2534session', 'j2534ext', 'multibus', 'cansend', 'groupdefault', 'appchip', 'kline', 'precan', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'wgcycle', 'tspublic', 'tlschain', 'tlsbyip', 'pushfail', 'rulepost', 'pushreply', 'habackfill', 'hadrive', 'garage', 'espnleasy', 'espnlapn', 'usbgps', 'usbdetach', 'abrp', 'backup', 'fwupdate', 'espnlota', 'logclock', 'sdformat', 'obdfw', 'chipprompt', 'chipguard', 'carname', 'canfilters', 'destnets', 'canselftest', 'attpstore', 'obdbringup', 'sleepword', 'sleeptrig', 'chipwake', 'connections', 'stackaudit', 'dwc2', 'logsinks', 'release', 'all', 'list')]
+    [Parameter(Mandatory = $true, Position = 0)][ValidateSet('check', 'host', 'target', 'hil', 'live', 'perf', 'usbeth', 'espnetlink', 'blesec', 'blehttp', 'blej2534', 'blecanraw', 'bleoverload', 'blephy', 'blethru', 'bleram', 'sleep', 'sleepmatrix', 'conserve', 'autobaud', 'profilee2e', 'slcan', 'canmax', 'mqttbatch', 'canbusoff', 'logtail', 'usbobd', 'httpauth', 'uploadconfirm', 'j2534auto', 'j2534std', 'j2534vbat', 'j2534vpw', 'j2534tp20', 'j2534fc', 'j2534session', 'j2534ext', 'multibus', 'cansend', 'groupdefault', 'appchip', 'udsconsole', 'kline', 'precan', 'wwh', 'eutruck', 'j1939', 'crashnote', 'vpnpause', 'vpnroutes', 'wgcycle', 'tspublic', 'tlschain', 'tlsbyip', 'pushfail', 'rulepost', 'pushreply', 'habackfill', 'hadrive', 'garage', 'espnleasy', 'espnlapn', 'usbgps', 'usbdetach', 'abrp', 'backup', 'fwupdate', 'espnlota', 'logclock', 'sdformat', 'obdfw', 'chipprompt', 'chipguard', 'carname', 'canfilters', 'destnets', 'canselftest', 'attpstore', 'obdbringup', 'sleepword', 'sleeptrig', 'chipwake', 'connections', 'stackaudit', 'dwc2', 'logsinks', 'release', 'all', 'list')]
     [string]$What,
     [Parameter(Position = 1)][string]$Component,
     [ValidateSet('6.0.2', '6.1')][string]$Idf = '6.1',  # the ESP-IDF the build stages use (6.1 since 6.0.0-beta.5, 2026-10-27; 6.0.2 stays installed; build.ps1 -Idf has the same table)
@@ -82,6 +82,7 @@ param(
                               # re-association (2026-10-31)
     [switch]$SkipPrecan,      # cansend stage: drop the leg on a car before CAN
     [switch]$SkipCap,         # appchip stage: drop the two minute cap leg
+    [switch]$SkipChip,        # udsconsole stage: drop the OBD chip leg (no restart)
                               # (the simulator a J1850 VPW car, then an ISO
                               # 9141-2 car; three planned restarts fewer)
     [switch]$SkipSleep,       # obdfw stage: drop the sleep-waits leg (no
@@ -1165,6 +1166,7 @@ function Show-Inventory {
     Write-Host '  cansend    - can.send, a raw frame on any bus of the OBD connector (2026-11-21, issue #1072): POST /api/can/send, the rule action and the script binding; one frame on each bus through the OBD chip with 11 and 29 bit ids, read by ECU sim v2 on that bus exactly as given, WiCAN''s own CAN controller, a sequence with gaps, nobody on the bus, the single-wire wake mode against the simulator''s sleeping transceiver, an app on the chip, a car before CAN (J1850 VPW, ISO 9141-2; -SkipPrecan drops it), sends in the middle of the polling; the chip''s store the same before and after (needs: ECU sim v2 with every bus; prints CAN SEND PASS; about 5 min, up to six planned restarts, three with -SkipPrecan; the settings and the simulator are put back)'
     Write-Host '  groupdefault - an Automate group stored off stays off (2026-11-25, GitHub issue #1058, meatpi-components pull request #17): four groups with one row each, "enabled_default": false (what the web UI''s word is), "enabled": false, "enabled_default": true and neither word; the groups'' state and which rows were asked after a PUT of the tables, after a switch at runtime and the same PUT again, and from the first answer after a restart; no E line (~2.5 min, 1 planned restart; needs the ECU simulator answering 7DF)'
     Write-Host '  appchip    - an app on the OBD chip beside AutoPID (2026-11-25, GitHub issue #1078, meatpi-components pull request #14): a table of rows that set a header and a receive filter, asked back to back; an app''s first command on TCP 35000 is answered and costs the poller no poll, ATZ and ATD as the first command clean the chip (every marked frame in the monitor behind them, the car''s protocol, 0100 from 7E8), 25 s of ATMA with no STOPPED while can.send through the chip and the test route answer 409, the app that closes in the middle of its monitor on TCP and on /ws/obd (the poller back in seconds, not at the two minutes), a connected and silent app that receives nothing of the poller''s, the two minute cap; no E line (~6 min, -SkipCap leaves the cap out: ~3.5 min; no restart; needs the ECU simulator answering 7E0 and 7E2 and the unit''s CAN controller on the bus)'
+    Write-Host '  udsconsole - a long UDS answer whole, on every path (2026-11-26, the report "the uds command cuts the response at about 80 bytes"): the same request through POST /api/uds/request and the uds console command over /ws/cli, answers of 7 to 4095 bytes from the simulator''s memory compared to the byte, the line''s [transport, ms] end and the console''s output counters; the request as typed (7 and 64 bytes with every byte a word, 0x words, one : word; 65 bytes and a 70-byte word refused with nothing sent); the OBD chip behind a row whose init moved the flow control (ATFCSH7E4;ATFCSD300000;ATFCSM1, polled every 250 ms): 20 multi-frame reads with the poller writing to the chip in front of each, answers of 20 to 4095 bytes at the start of a conversation, the console command (~3 min, 2 planned restarts, 4 when Automate was off; -SkipChip leaves the chip leg out: no restart; needs the ECU simulator answering 7E0 with UDS on and the unit''s cli bridge to /ws/cli)'
     Write-Host '  kline      - a K-line car through the firmware''s own paths (GitHub issue #1045, 2026-11-12): ECU sim v2 as an ISO 9141-2 car alone; the Test call with ATSP3 as its init on a unit whose own car is CAN (the bus started once for three calls, the protocol''s own request header behind the init, 800 rpm from the three byte header, a call behind 6.5 s of silence starts the bus again), std_protocol takes 3, three rows polled with it pinned and no restart of the bus between two requests, the ignition off and on under the poll, a ten second period kept alive by the poller''s one short request, the same rows with std_protocol 2 on a J1850 VPW car, and the same Test call on ISO 14230-4 (fast and 5 baud init) and SAE J1850 VPW and PWM; the chip''s memory compared before and after (nothing written). -Detect adds Detect my vehicle on the K-line car and the way back (the car''s protocol is saved in the OBD chip: one write there, one back, one more restart) (3 planned restarts, ~6 min)'
     Write-Host '  precan     - a pre-CAN car found without being asked for (2026-11-13): ECU sim v2 as an ISO 9141-2 car alone at start-up (the stored CAN protocol stays silent, the walk goes on behind CAN and finds the car on protocol 3, the rows are answered), a CAN vehicle that answers nothing standard (traffic on the CAN pins: SAE J1850 and the K-line are left alone), nobody there at all (the walk goes round with a growing gap), a J1850 VPW car that turns up in that boot (found on protocol 2), a CAN car on 250 kbit/s that says nothing until asked (ten requests of the Test route with Automate off, and found on protocol 8 when it wakes up behind a boot with nobody there: the chip''s own requests, which the unit''s own CAN node acknowledges, do not name the bus), and the unit''s own CAN car again; the chip''s memory compared before and after (nothing written). -Detect adds a car never seen (a J1850 VPW one, found and stored at start-up by a detection nobody asked for), Detect my vehicle on an ISO 14230-4 car and the way back (the car''s protocol is saved in the OBD chip: three writes, three more restarts) (7 planned restarts, ~8 min)'
     Write-Host '  vpnpause   - the VPN pauses on networks marked Pause VPN (issue #976): the bench AP marked / unmarked, away on the dongle AP, home again; wg-bench on the Pi, the console for the away leg (~12 min)'
@@ -2081,6 +2083,39 @@ try {
                     $out = & $py -u "$repo\tools\testbench\obd\app_chip_bench.py" @benchArgs 2>&1 | ForEach-Object { Write-Host $_; $_ }
                     Save-StageLog 'app_chip' $out
                     if (-not ($out | Select-String -Quiet '^APP CHIP PASS')) { throw 'no APP CHIP PASS (the ECU simulator answering 7E0 and 7E2? the DUT on the bench AP with TCP 35000 and /ws/obd bridged to the chip? the unit''s CAN controller on the bus?)' }
+                } finally {
+                    if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
+                }
+            }
+        }
+        'udsconsole' {
+            # A long UDS answer whole, on every path (2026-11-26, the report
+            # "the uds command cuts the response at about 80 bytes"). Seven
+            # faults stood behind a long answer: the console command's line
+            # ended after the 84th byte; the console dropped the words of a
+            # line behind the eleventh, so a request typed as bytes went out
+            # short; on the native path an answer that took longer than P2
+            # to arrive was a timeout; on the OBD chip an AutoPID row's flow
+            # control stayed in effect under the UDS setup, a cut answer was
+            # asked for again while the ECU still sent the rest of it, the
+            # reply buffer held about 2290 bytes of answer, and the parser
+            # refused the one message of 4095 bytes. The
+            # simulator's memory gives an answer of any size, checked to the
+            # byte, and its WriteMemoryByAddress answers only a request that
+            # arrived whole. The tables, the exclusive switch and the UDS
+            # settings are put back. Two planned restarts (the chip leg), no
+            # console port, no PCAN.
+            Invoke-Stage 'a long UDS answer whole: the route, the console command, the OBD chip' {
+                $py = $script:BenchPy
+                $tunnel = Start-Process -FilePath 'ssh' -PassThru -WindowStyle Hidden -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "18081:${DutIp}:80", $BenchHost)
+                try {
+                    Start-Sleep -Seconds 3
+                    if ($tunnel.HasExited) { throw "no tunnel to the DUT through $BenchHost (port 18081 busy?)" }
+                    $benchArgs = @('--dut', 'localhost:18081')
+                    if ($SkipChip) { $benchArgs += '--skip-chip' }
+                    $out = & $py -u "$repo\tools\testbench\obd\uds_console_bench.py" @benchArgs 2>&1 | ForEach-Object { Write-Host $_; $_ }
+                    Save-StageLog 'uds_console' $out
+                    if (-not ($out | Select-String -Quiet '^UDS CONSOLE PASS')) { throw 'no UDS CONSOLE PASS (the ECU simulator answering 7E0 with UDS on? the DUT on the bench AP with its cli bridge to /ws/cli? a firmware whose uds command prints the whole answer?)' }
                 } finally {
                     if (-not $tunnel.HasExited) { Stop-Process -Id $tunnel.Id -Force -Confirm:$false }
                 }
