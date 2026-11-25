@@ -1,0 +1,21 @@
+{
+  "car_model": "MG: MG4 Electric (2022-2024)",
+  "note": "Requests are sent functionally (7DF), the battery management (7ED) answers. Polling the OBD port while the car is locked triggers the anti-theft alarm: set Low-Voltage Behavior to \"Pause PID polling only (Custom Voltage)\" at about 13.4 V, so polling stops after the car is switched off. HV_A is positive when discharging and negative when charging; HV_V * HV_A / 1000 gives the battery power in kW.",
+  "init": "ATSP6;ATST64;ATSH7DF;ATCRA7ED;",
+  "pids": [
+    { "pid": "22B0421", "parameters": { "HV_V": "[B4:B5]*0.25" } },
+    { "pid": "22B0431", "parameters": { "HV_A": "([B4:B5]-40000)*0.025" } },
+    { "pid": "010D1", "parameters": { "SPEED": "B3" } },
+    { "pid": "015B1", "parameters": { "SOC": "B3*100/255" } },
+    { "pid": "22B0461", "parameters": { "SOC_D": "[B4:B5]*1.035/10" } },
+    { "pid": "01421", "parameters": { "LV_V": "[B3:B4]/1000" } },
+    { "pid": "22B0581", "parameters": { "HV_C_V_MAX": "[B4:B5]/1000" } },
+    { "pid": "22B0591", "parameters": { "HV_C_V_MIN": "[B4:B5]/1000" } },
+    { "pid": "01A61", "parameters": { "ODOMETER": "[B3:B6]/10" } },
+    { "pid": "22B0561", "parameters": { "HV_T_MAX": "(B4/2)-40" } },
+    { "pid": "22B0571", "parameters": { "HV_T_MIN": "(B4/2)-40" } },
+    { "pid": "22B05C1", "parameters": { "HV_T_I": "(B4/2)-40" } },
+    { "pid": "01461", "parameters": { "TMP_A": "B3-40" } },
+    { "pid": "22B0611", "parameters": { "SOH": "[B4:B5]/100" } }
+  ]
+}
