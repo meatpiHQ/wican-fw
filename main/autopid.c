@@ -1207,6 +1207,28 @@ char* autopid_get_config(void)
 //     }
 // }
 
+// Returns true if this frame's a UDS "response pending" negative response
+static bool frame_is_response_pending(const char *data_hex) {
+    uint8_t bytes[8];
+    int n = 0;
+    const char *p = data_hex;
+    while (p != NULL && *p != '\0' && n < (int)sizeof(bytes)) {
+        if (*p == ' ') { p++; continue; }
+        if (strlen(p) < 2) break;
+        char b[3] = { p[0], p[1], 0 };
+        bytes[n++] = (uint8_t)strtol(b, NULL, 16);
+        p += 2;
+    }
+    // Look for 0x7F <service> 0x78 near the start of the frame
+    // Bounded to the first few bytes to avoid matching real payload data
+    for (int i = 0; i + 2 < n && i < 4; i++) {
+        if (bytes[i] == 0x7F && bytes[i + 2] == 0x78) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void parse_elm327_response(char *buffer, response_t *response) {
     ESP_LOGI(TAG, "Starting to parse ELM327 response. Input buffer: %s", buffer);
     
@@ -1259,6 +1281,14 @@ void parse_elm327_response(char *buffer, response_t *response) {
             }
 
             data_start++;
+
+            // Skip UDS "response pending" (7F xx 78) frames. 
+            if (frame_is_response_pending(data_start)) {
+                ESP_LOGI(TAG, "Skipping response-pending (7F xx 78) frame");
+                frame_count--;  // don't let it affect frame-count
+                frame = strtok(NULL, "\r\n");
+                continue;
+            }
 
             // Handle different header formats
             switch (header_length) {
