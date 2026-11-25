@@ -10,7 +10,9 @@ ISO 15765-2 (single frame, or first frame + flow control wait + consecutive
 frames, honouring the block size and the separation time the tester asks
 for) and sends the broadcasts at their period. Everything else on the bus
 (the simulator's 7DF / 7E0..7E7 traffic) is counted as a witness and left
-alone.
+alone; when the profile itself asks on the functional id 7DF, only its own
+requests are answered there (on 7E8) and every other 7DF request is left
+to the simulator.
 
 script.json:
   {"ecus": [{"req_id": "0x79B", "resp_id": "0x7BB", "fc_from": "0x79B",
@@ -162,6 +164,16 @@ class ProfileEcu:
 
     def handle_request(self, ecu, req):
         key = req.hex().upper()
+        if ecu.req_id == 0x7DF and key not in ecu.responses:
+            # the functional address is everybody's (2026-11-25, the
+            # Chevrolet Volt profile asks 015B and 012F there): a request
+            # the profile does not send is another ECU's to answer (the
+            # simulator's, for the standard rows found on the device), and
+            # an ECU says nothing to a functional request it does not
+            # support. Answered with a negative response here, every
+            # standard row of the device failed beside the profile
+            self.witness["func_7df"] += 1
+            return
         self.requests[key] = self.requests.get(key, 0) + 1
         self.note("REQ %7.3f %03X %s" % (time.time() - self.t0, ecu.req_id,
                                          key))

@@ -333,18 +333,23 @@ def build_ecu(car, seed):
     skipped = []
     for pid in car.get("pids", []):
         ids = chain_ids(pid.get("pid_init", ""), dict(ids))
-        if ids["resp"] is None and ids["req"] is not None and ids["req"] <= 0x7FF:
+        resp = ids["resp"]
+        if resp is None and ids["req"] is not None and ids["req"] <= 0x7FF:
             # no receive filter named (the Hyundai / Kia profiles: `ATSH7E4`
-            # alone): ISO 15765-4's physical reply id, request + 8 (7EC)
-            ids["resp"] = ids["req"] + 8
-        if ids["req"] is None or ids["resp"] is None:
+            # alone): ISO 15765-4's reply id, request + 8 for a physical
+            # request (7E4 -> 7EC) and the first ECU's 7E8 for the functional
+            # one (7DF). Worked out for each row and not kept for the next:
+            # a profile that changes the header from row to row (Chevrolet
+            # Volt, 2026-11-25: 7DF, 7E4 and 7E7) has a reply id per row
+            resp = 0x7E8 if ids["req"] == 0x7DF else ids["req"] + 8
+        if ids["req"] is None or resp is None:
             skipped.append("%s: no ATSH/ATCRA in its init chain (11-bit only)" % pid["pid"])
             continue
         rep = build_reply(pid, seed)
-        rep["req_id"], rep["resp_id"] = ids["req"], ids["resp"]
+        rep["req_id"], rep["resp_id"] = ids["req"], resp
         replies.append(rep)
         e = ecus.setdefault(ids["req"], {"req_id": "0x%03X" % ids["req"],
-                                          "resp_id": "0x%03X" % ids["resp"],
+                                          "resp_id": "0x%03X" % resp,
                                           "fc_from": "0x%03X" % (ids["fc"] or ids["req"]),
                                           "responses": {}})
         e["responses"][rep["key"]] = rep["payload"]
@@ -607,6 +612,17 @@ def main():
         c.add("poller running", (ap or {}).get("stats", {}).get("running") is True,
               json.dumps({k: (ap or {}).get("stats", {}).get(k) for k in
                           ("running", "paused_voltage", "paused_bus", "paused_client")}))
+        # what the actor counted before the import took effect: the tables
+        # go in live, the profile's init with the restart behind them, so a
+        # multi-frame row asked in the seconds between the two gets no flow
+        # control the ECU accepts (2026-11-25, the Leaf run: the first 2101,
+        # 7 s before the next, timed out). The watch counts from here.
+        fc_before = 0
+        try:
+            with open(summary_path) as f:
+                fc_before = json.load(f).get("fc_timeout", 0)
+        except (OSError, ValueError):
+            pass
 
         # ---- L3 the poll -------------------------------------------------
         print("L3 the poll: %.0f s after the first profile value" % watch_s)
@@ -677,8 +693,9 @@ def main():
               "requests %s" % json.dumps(summ.get("requests")) +
               ("; unanswered: " + ", ".join(unanswered) if unanswered else ""))
         c.add("no flow-control timeout on the multi-frame replies",
-              summ.get("fc_timeout", 1) == 0,
-              "fc_ok %s fc_timeout %s" % (summ.get("fc_ok"), summ.get("fc_timeout")))
+              summ.get("fc_timeout", fc_before + 1) - fc_before == 0,
+              "fc_ok %s fc_timeout %s (%d of them before the import took effect, "
+              "not counted)" % (summ.get("fc_ok"), summ.get("fc_timeout"), fc_before))
         c.add("the filter frames were broadcast",
               not filters or all(v > 0 for v in summ.get("broadcast_sent", {}).values()),
               json.dumps(summ.get("broadcast_sent")))
