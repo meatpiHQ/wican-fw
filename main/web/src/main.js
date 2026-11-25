@@ -25,12 +25,19 @@ async function checkFirmwareUpdate() {
             const currentVersion = extractVersion(currentRaw);
             if (!currentVersion) return;
 
-            const response = await fetch('https://api.github.com/repos/meatpiHQ/wican-fw/releases');
+            // Stable releases only (GitHub issue #1036): betas and alphas are
+            // marked as pre-releases, and the tag of a 6.0 beta
+            // ("v6.0.0p-beta.7") was offered here as "v6.0.0". per_page=100:
+            // with pre-releases in between, the newest stable one can be
+            // further down than the first page of 30.
+            const response = await fetch('https://api.github.com/repos/meatpiHQ/wican-fw/releases?per_page=100');
             if (!response.ok) return;
             const releases = await response.json();
             const proRelease = releases.find(rel =>
-                (rel?.name && rel.name.toUpperCase().includes('PRO')) ||
-                (rel?.tag_name && rel.tag_name.toUpperCase().includes('P'))
+                !rel?.prerelease && !rel?.draft && (
+                    (rel?.name && rel.name.toUpperCase().includes('PRO')) ||
+                    (rel?.tag_name && rel.tag_name.toUpperCase().includes('P'))
+                )
             );
             if (!proRelease) return;
 
