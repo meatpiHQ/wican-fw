@@ -10,6 +10,20 @@ Host **unit** suites (`components/*/host_test`, 526 tests across 44 components a
 
 **Pi offline:** `bash tools/testbench/host_gcc_wsl.sh <vpn_manager|config_backup>` from WSL compiles that PURE suite with the system gcc + Unity under ASan/UBSan (no IDF build; 2026-10-16, issues #985 to #989: `vpn_manager` 11, `config_backup` 24; add a case per IDF-free suite)
 
+**2026-11-25 12:49, `.\test.ps1 host autopid`: PASS, 201 tests (2 new)**
+(`test-reports/2026-11-25_1249_host_autopid.md`), components pull request 17 (overkillthemighty,
+GitHub issue #1058); the device half and its records are in [groupdefault.md](groupdefault.md).
+His two, in `test_group_default.c`: `test_group_default_words` (a group parsed with
+`"enabled_default": false` is off, with `true` on; `"enabled"` the same, as before; with neither
+word on; with both, one of them `false`, off whichever it is; a word that is no bool is ignored, as
+a row's `enabled` is; the `default` group the parser adds is on) and
+`test_group_default_through_the_scheduler` (what a boot and every PUT do, `ap_sched_reset`: the
+group off and its row not due; `ap_sched_group_set` turns it on and the row is due;
+`ap_sched_group_restore`, a rule's undo, puts the stored state back: off; the next reset leaves it
+off). Against the parser of before both fail (`Expected FALSE Was TRUE`, his record; on the unit
+the same six checks of the bench were red on beta.15). On top of his commit the public header
+`include/autopid.h` says what a group's configured state is read from.
+
 **2026-11-23 08:19, `.\test.ps1 host autopid`: PASS, 199 tests (3 new)**
 (`test-reports/2026-11-23_0819_host_autopid.md`), components pull request 7 (joe-meyer, GitHub issue
 #1077) and what went on top of it; the device half and its records are in
