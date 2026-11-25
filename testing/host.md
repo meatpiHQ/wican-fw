@@ -10,6 +10,27 @@ Host **unit** suites (`components/*/host_test`, 526 tests across 44 components a
 
 **Pi offline:** `bash tools/testbench/host_gcc_wsl.sh <vpn_manager|config_backup>` from WSL compiles that PURE suite with the system gcc + Unity under ASan/UBSan (no IDF build; 2026-10-16, issues #985 to #989: `vpn_manager` 11, `config_backup` 24; add a case per IDF-free suite)
 
+**2026-11-25 23:55, `.\test.ps1 host obd_chip`: PASS, 80 tests (13 new); `host bridge_manager`:
+PASS, 27 tests (4 new); `host autopid`: PASS, 203 tests (2 new)**
+(`test-reports/2026-11-25_2355_host_obd_chip.md`, `2026-11-25_2356_host_bridge_manager.md`,
+`2026-11-25_2356_host_autopid.md`), components pull request 14 (overkillthemighty, GitHub issue
+#1078) and what was built on top of it; the device half and its records are in
+[appchip.md](appchip.md). His, in obd_chip's `test_client.c` (6 cases: the clock as before, a
+monitor held to the cap, ended by the app's next byte and by the chip's prompt, the monitor words
+and what opens none, a bare CR) and in autopid's `test_test_hold.c` (2 cases: the test route waits
+for an app's hold as the poller does, a J1939 group's test does not, the 409's sentence). Ours, in
+obd_chip's `test_client_turn.c` (7 cases: the connection that wrote last and has gone ends its
+monitor's hold, another connection's leaving and an unnamed one change nothing, a connection gone
+with no monitor open; the poller's turn refused while an app drives the chip by its last byte or by
+its monitor; a write during a turn sees it, is not yet the app's command for the mute, and keeps the
+next pass off; the mute, and its exception while an app's own command is under way up to the
+prompt) and in bridge_manager's `test_peers.c` (4 cases: the source named for an endpoint that
+asks and `send()` for one that does not, an end that empties reported once per time, a bridge
+written either way round, an end that cannot count never reported). The first cut of the mute
+marked an app's command as under way when its bytes arrived, not when they went out; the bench
+found it (the tail of the poller's answer in front of the app's) and the case
+`test_client_a_write_during_a_turn_sees_it_and_keeps_the_next_one_off` holds it now.
+
 **2026-11-25 12:49, `.\test.ps1 host autopid`: PASS, 201 tests (2 new)**
 (`test-reports/2026-11-25_1249_host_autopid.md`), components pull request 17 (overkillthemighty,
 GitHub issue #1058); the device half and its records are in [groupdefault.md](groupdefault.md).
