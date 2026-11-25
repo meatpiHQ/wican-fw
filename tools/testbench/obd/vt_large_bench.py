@@ -34,6 +34,7 @@ import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 import benchlib as bl  # noqa: E402
+import chip_free  # noqa: E402  (no app on the chip before a Test call)
 import sim_net  # noqa: E402  (where ECU sim v2 answers)
 
 DUT = "localhost:8081"
@@ -282,6 +283,7 @@ def main():
                  "--txid", "0x" + RXID, "--secs", "30"],
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
             time.sleep(2.0)
+        chip_free.wait(DUT)  # no app on the chip (lib/chip_free.py: the test route answers 409 otherwise)
         st, r = api("/api/autopid/test", "POST",
                     {"cmd": cmd,
                      "init": f"ATSH{TXID};ATCRA{RXID};ATCAF1;ATST64"})

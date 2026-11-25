@@ -77,6 +77,7 @@ import urllib.request
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "lib"))
 import bench_bus  # noqa: E402  (the simulator's id format; installs sim_net)
+import chip_free  # noqa: E402  (no app on the chip before a Test call)
 import wsmin      # noqa: E402  (the /ws/obd bridge)
 
 ARGS = sys.argv[1:]
@@ -288,6 +289,7 @@ def restore_store(e, as_found, label, covered=False):
 def test_switch(other):
     """the engine's switch: POST /api/autopid/test with the profile's own
     words (ATSP<other>, which the guard sends as ATTP<other>) and 0100"""
+    chip_free.wait(DUT_HP)  # no app on the chip (lib/chip_free.py: the test route answers 409 otherwise)
     st, r = http(DUT, "/api/autopid/test", "POST", {"cmd": "0100", "init": "ATSP" + other}, timeout=30)
     tr = r.get("transcript", "") if isinstance(r, dict) else ""
     lines = [ln for ln in str(tr).replace("\r", "\n").split("\n") if ln.strip()]
@@ -298,6 +300,7 @@ def test_switch(other):
 
 def test_call(body):
     """one test-a-PID call: the status, the answer and the transcript's lines"""
+    chip_free.wait(DUT_HP)  # no app on the chip (lib/chip_free.py: the test route answers 409 otherwise)
     st, r = http(DUT, "/api/autopid/test", "POST", body, timeout=30)
     tr = r.get("transcript", "") if isinstance(r, dict) else ""
     lines = [ln.strip() for ln in str(tr).replace("\r", "\n").split("\n") if ln.strip()]

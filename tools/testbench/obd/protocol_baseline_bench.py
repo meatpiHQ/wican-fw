@@ -54,6 +54,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "lib"))
 sys.path.insert(0, HERE)
 import bench_bus  # noqa: E402  (the simulator's settings; installs sim_net)
+import chip_free  # noqa: E402  (no app on the chip before a Test call)
 import chip_nvm   # noqa: E402  (the chip's stored cells)
 
 ARGS = sys.argv[1:]
@@ -263,6 +264,7 @@ def app_path(bus, pre, preset):
 def test_pid(bus, init, cmd="010C", label="firmware: test-a-PID"):
     out = []
     for n in (1, 2):
+        chip_free.wait(DUT_HP)  # no app on the chip (lib/chip_free.py: the test route answers 409 otherwise)
         t0 = time.time()
         st, r = http("/api/autopid/test", "POST", {"cmd": cmd, "init": init, "expressions": ["[B3:B4]*0.25"]}, timeout=40)
         wall = int((time.time() - t0) * 1000)
@@ -285,6 +287,7 @@ def issue_1045(bus, found):
     """GitHub issue #1045 on the bench's ISO 9141-2 car: the report's own calls"""
     print("-- issue #1045 on %s --" % bus, flush=True)
     for n in (1, 2, 3):
+        chip_free.wait(DUT_HP)  # no app on the chip (lib/chip_free.py: the test route answers 409 otherwise)
         t0 = time.time()
         st, r = http("/api/autopid/test", "POST", {"cmd": "010C1", "init": "ATSP3;"}, timeout=40)
         r = r if isinstance(r, dict) else {"error": str(r)}

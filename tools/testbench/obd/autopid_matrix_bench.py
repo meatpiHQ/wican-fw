@@ -58,6 +58,7 @@ import urllib.error
 import urllib.request
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "lib"))
+import chip_free  # noqa: E402  (no app on the chip before a Test call)
 import sim_net  # noqa: E402  (the simulator's own link on any LAN)
 
 sim_net.install()
@@ -389,6 +390,7 @@ def main():
     check("leg0 device reachable", wait_device(60))
     _, info = api("/api/info")
     print("device:", info.get("device_id"), info.get("fw_version"))
+    chip_free.wait(DUT)  # no app on the chip (lib/chip_free.py: the test route answers 409 otherwise)
     code, r = api("/api/autopid/test", "POST", {"cmd": "0100"})
     raw0 = str(r.get("raw", "")) if isinstance(r, dict) else ""
     check("leg0 chip chain: 0100 answered by the simulator",
@@ -488,6 +490,7 @@ def main():
     got = wait_values(list(EXP_SPEC), 20)
     for n, v in EXP_SPEC.items():
         check(f"leg3 specific {n} == {v}", near(got.get(n), v), got.get(n))
+    chip_free.wait(DUT)  # no app on the chip (lib/chip_free.py: the test route answers 409 otherwise)
     code, r = api("/api/autopid/test", "POST",
                   {"cmd": "22F190", "init": "ATSH7E0", "rxheader": "7E8"})
     vin_lines = [l for l in str(r.get("raw", "")).split("\r") if l.strip()] if isinstance(r, dict) else []

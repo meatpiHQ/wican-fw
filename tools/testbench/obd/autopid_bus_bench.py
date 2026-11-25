@@ -107,6 +107,7 @@ sys.path.insert(0, os.path.join(HERE, "..", "lib"))
 sys.path.insert(0, HERE)
 import bench_bus  # noqa: E402
 import bench_psu  # noqa: E402
+import chip_free  # noqa: E402
 import chip_nvm   # noqa: E402
 
 ARGS = sys.argv[1:]
@@ -252,6 +253,7 @@ def test_call(bus=None, kbps=None, cmd="010C1", init=None, kind="custom"):
         body["bus_kbps"] = kbps
     if init is not None:
         body["init"] = init
+    chip_free.wait(DUT_HP)  # no app on the chip (lib/chip_free.py: the test route answers 409 otherwise)
     return http("/api/autopid/test", "POST", body)
 
 

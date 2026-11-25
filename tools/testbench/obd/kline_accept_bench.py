@@ -89,6 +89,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "lib"))
 sys.path.insert(0, HERE)
 import bench_bus  # noqa: E402
+import chip_free  # noqa: E402
 import chip_nvm   # noqa: E402
 
 ARGS = sys.argv[1:]
@@ -216,6 +217,7 @@ def stats():
 
 
 def test_call(proto="3"):
+    chip_free.wait(DUT_HP)  # no app on the chip (lib/chip_free.py: the test route answers 409 otherwise)
     t0 = time.time()
     st, r = http("/api/autopid/test", "POST", {"cmd": "010C1", "init": "ATSP%s;" % proto, "expressions": [RPM]})
     r = r if isinstance(r, dict) else {"error": str(r)}
@@ -232,6 +234,7 @@ def answered(c):
 
 def test_raw(cmd, proto):
     """a request through the Test route: the chip's message lines, and the bytes of the payload the firmware made of them"""
+    chip_free.wait(DUT_HP)  # no app on the chip (lib/chip_free.py: the test route answers 409 otherwise)
     st, r = http("/api/autopid/test", "POST", {"cmd": cmd, "init": "ATSP%s;" % proto, "expressions": ["B0"]})
     r = r if isinstance(r, dict) else {}
     lines = [ln.strip() for ln in str(r.get("raw", "")).replace("\r", "\n").split("\n") if ln.strip() and "BUS INIT" not in ln]
