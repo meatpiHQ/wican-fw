@@ -356,53 +356,99 @@ static esp_err_t index_handler(httpd_req_t *req)
 }
 
 
-static esp_err_t store_config_handler(httpd_req_t *req)
+// Receive a JSON body in full, check that it parses, and only then replace
+// the file at `path`. One httpd_req_recv() call returns only what has
+// arrived so far: a body longer than one TCP segment (the settings page's
+// config, with long passwords or MQTT URLs) came in two parts, and the
+// file was written with the second part missing. config.json then failed
+// to parse at the next boot and the device went back to factory defaults
+// (issue #381). The body is written to a temporary file and renamed over
+// the old one, so a failed save or a power cut leaves the old file intact.
+// On failure an error response has been sent.
+static esp_err_t config_server_store_json(httpd_req_t *req, const char *path)
 {
-    char *buf = NULL;
     size_t buf_size = req->content_len;
+    char tmp_path[FILE_PATH_MAX];
+    size_t received = 0;
+    int timeouts = 0;
+    char *buf = NULL;
+    cJSON *json = NULL;
+    FILE *f = NULL;
+    bool ok = false;
 
-    if (buf_size <= 0)
+    if (buf_size == 0 || buf_size > MAX_FILE_SIZE)
     {
-        return ESP_FAIL; // Invalid content length
+        ESP_LOGE(TAG, "Invalid content length: %d", (int)buf_size);
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid content length");
+        return ESP_FAIL;
     }
 
-    buf = (char *)malloc(buf_size);
+    buf = (char *)malloc(buf_size + 1);
     if (!buf)
     {
-        return ESP_ERR_NO_MEM; // Memory allocation failure
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Out of memory");
+        return ESP_ERR_NO_MEM;
     }
 
-    int ret = httpd_req_recv(req, buf, buf_size);
-
-    if (ret <= 0)
+    while (received < buf_size)
     {
-        if (ret == HTTPD_SOCK_ERR_TIMEOUT)
+        int ret = httpd_req_recv(req, buf + received, buf_size - received);
+        if (ret == HTTPD_SOCK_ERR_TIMEOUT && ++timeouts <= 3)
         {
-            // Retry receiving if timeout occurred
+            continue;
+        }
+        if (ret <= 0)
+        {
+            ESP_LOGE(TAG, "Body receive failed: %d (%d/%d bytes)", ret,
+                     (int)received, (int)buf_size);
+            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Incomplete request body");
             free(buf);
             return ESP_FAIL;
         }
-        // Handle read error
+        received += ret;
+    }
+    buf[received] = '\0';
+
+    json = cJSON_Parse(buf);
+    if (!json)
+    {
+        ESP_LOGE(TAG, "Not saved, invalid JSON for %s", path);
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON, not saved");
         free(buf);
         return ESP_FAIL;
     }
+    cJSON_Delete(json);
 
-    FILE *f = fopen(FS_MOUNT_POINT"/config.json", "w");
+    snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", path);
+    f = fopen(tmp_path, "w");
     if (f)
     {
-        // Write the received data into the file
-        fwrite(buf, 1, buf_size, f);
-        fclose(f);
+        ok = (fwrite(buf, 1, received, f) == received);
+        ok = (fclose(f) == 0) && ok;
     }
-    else
+    free(buf);
+    if (ok && rename(tmp_path, path) != 0)
     {
-        // Handle file open error
-        free(buf);
+        // Not every filesystem replaces an existing file on rename
+        unlink(path);
+        ok = (rename(tmp_path, path) == 0);
+    }
+    if (!ok)
+    {
+        ESP_LOGE(TAG, "Failed to save %s", path);
+        unlink(tmp_path);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to save file");
         return ESP_FAIL;
     }
+    return ESP_OK;
+}
 
-    // Free dynamically allocated memory
-    free(buf);
+static esp_err_t store_config_handler(httpd_req_t *req)
+{
+    if (config_server_store_json(req, FS_MOUNT_POINT"/config.json") != ESP_OK)
+    {
+        return ESP_FAIL;
+    }
 
     const char *resp_str = "Configuration saved! Rebooting...";
     httpd_resp_send(req, resp_str, HTTPD_RESP_USE_STRLEN);
@@ -413,51 +459,10 @@ static esp_err_t store_config_handler(httpd_req_t *req)
 
 static esp_err_t store_canflt_handler(httpd_req_t *req)
 {
-    char *buf = NULL;
-    size_t buf_size = req->content_len;
-
-    if (buf_size <= 0)
+    if (config_server_store_json(req, FS_MOUNT_POINT"/mqtt_canfilt.json") != ESP_OK)
     {
-        return ESP_FAIL; // Invalid content length
-    }
-
-    buf = (char *)malloc(buf_size);
-    if (!buf)
-    {
-        return ESP_ERR_NO_MEM; // Memory allocation failure
-    }
-
-    int ret = httpd_req_recv(req, buf, buf_size);
-
-    if (ret <= 0)
-    {
-        if (ret == HTTPD_SOCK_ERR_TIMEOUT)
-        {
-            // Retry receiving if timeout occurred
-            free(buf);
-            return ESP_FAIL;
-        }
-        // Handle read error
-        free(buf);
         return ESP_FAIL;
     }
-
-    FILE *f = fopen(FS_MOUNT_POINT"/mqtt_canfilt.json", "w");
-    if (f)
-    {
-        // Write the received data into the file
-        fwrite(buf, 1, buf_size, f);
-        fclose(f);
-    }
-    else
-    {
-        // Handle file open error
-        free(buf);
-        return ESP_FAIL;
-    }
-
-    // Free dynamically allocated memory
-    free(buf);
 
 	free(mqtt_canflt_file);
 	mqtt_canflt_file = NULL;
@@ -2731,7 +2736,8 @@ void config_server_set_ble_config(uint8_t b)
 	FILE* f = fopen(FS_MOUNT_POINT"/config.json", "w");
 	if (f != NULL)
 	{
-		fprintf(f, resp_str);
+		// fputs, not fprintf: a '%' in a password is not a format
+		fputs(resp_str, f);
 		fclose(f);
 	}
 	xTimerStart( xrestartTimer, 0 );
