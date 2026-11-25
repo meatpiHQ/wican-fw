@@ -1,0 +1,31 @@
+{
+  "car_model": "Chrysler: Pacifica Hybrid 2018",
+  "note": "Verified on a 2018 Pacifica Hybrid with WiCAN PRO 4.51 and 6.0.0-beta.7. Energy-counter reset/rollover behavior is unverified.",
+  "comment": "Hybrid-specific battery readings; other model years and the gasoline-only Pacifica have not been tested. Energy expressions decode the observed 16-bit counter words at 0.1 kWh/count. The existing generic 015B signal is retained without claiming dashboard SOC scaling.",
+  "init": "ATSP6;ATST96;",
+  "pids": [
+    {
+      "pid": "015B2",
+      "pid_init": "ATCRA;ATSH7DF;",
+      "parameters": {
+        "SOC": "B3/2.55"
+      }
+    },
+    {
+      "pid": "22A001",
+      "pid_init": "ATCRA;ATSH7E7;ATAT1;ATAL;",
+      "parameters": {
+        "KWH_DISCHARGED": "(B17*256+B18)/10/((256-(B2^98))>>8)/((256-(B4^1))>>8)/((256-(B8^33))>>8)/((256-(B16^34))>>8)",
+        "KWH_CHARGED": "(B20*256+B21)/10/((256-(B2^98))>>8)/((256-(B4^1))>>8)/((256-(B8^33))>>8)/((256-(B16^34))>>8)"
+      }
+    },
+    {
+      "pid": "22A0212",
+      "pid_init": "ATCRA;ATSH7E7;ATAT1;ATAL;",
+      "parameters": {
+        "HV_COOLANT_INLET_TMP": "(B5-50)/((256-(B2^98))>>8)/((256-(B4^33))>>8)",
+        "HV_COOLANT_OUTLET_TMP": "(B7-50)/((256-(B2^98))>>8)/((256-(B4^33))>>8)"
+      }
+    }
+  ]
+}
