@@ -1,0 +1,1859 @@
+{
+  "cars": [
+    {
+      "car_model": "Jaecoo: J5 EV (MY26)",
+      "note": "Continuously polling OBD-II PIDs while the car is locked causes the BMS and MCU to stay awake, which will degrade the 12V AGM battery. While charging, the pack holds full voltage around 14 V. To protect the battery, set Sleep voltage to 12.0 V (Power Saving > Sleep Mode), and set Low-Voltage Behavior to \"Pause PID polling only (Custom Voltage)\" (Automate > Settings) and the \"Pause below (V)\" voltage to 12.7 V, so polling stops after the car is switched off.",
+      "init": "ATSP6;ATST96;ATAT1;ATFCSM0;",
+      "pids": [
+        {
+          "pid": "2210381",
+          "pid_init": "ATFCSM0;ATSH7E5;ATCRA7ED;",
+          "parameters": [
+            {
+              "name": "SOC_R",
+              "expression": "[B4:B5]/100",
+              "unit": "%",
+              "class": "battery",
+              "min": "0",
+              "max": "100",
+              "period": "5000"
+            }
+          ]
+        },
+        {
+          "pid": "2210481",
+          "pid_init": "ATFCSM0;ATSH7E5;ATCRA7ED;",
+          "parameters": [
+            {
+              "name": "SOH",
+              "expression": "[B4:B5]",
+              "unit": "%",
+              "class": "battery",
+              "min": "0",
+              "max": "100",
+              "period": "60000"
+            }
+          ]
+        },
+        {
+          "pid": "2244021",
+          "pid_init": "ATFCSM0;ATSH7E5;ATCRA7ED;",
+          "parameters": [
+            {
+              "name": "ODOMETER",
+              "expression": "[B4:B7]/10",
+              "unit": "km",
+              "class": "distance",
+              "min": "0",
+              "max": "",
+              "period": "60000"
+            }
+          ]
+        },
+        {
+          "pid": "2244041",
+          "pid_init": "ATFCSM0;ATSH7E5;ATCRA7ED;",
+          "parameters": [
+            {
+              "name": "HV_V",
+              "expression": "[B4:B5]/10",
+              "unit": "V",
+              "class": "voltage",
+              "min": "200",
+              "max": "500",
+              "period": "5000"
+            }
+          ]
+        },
+        {
+          "pid": "22440C1",
+          "pid_init": "ATFCSM0;ATSH7E5;ATCRA7ED;",
+          "parameters": [
+            {
+              "name": "HV_CAPACITY_R",
+              "expression": "[B4:B5]/10",
+              "unit": "kWh",
+              "class": "energy",
+              "min": "0",
+              "max": "70",
+              "period": "10000"
+            }
+          ]
+        },
+        {
+          "pid": "2244111",
+          "pid_init": "ATFCSM0;ATSH7E5;ATCRA7ED;",
+          "parameters": [
+            {
+              "name": "BMS_CELL_VOLTAGE_SUM",
+              "expression": "[B4:B5]/10",
+              "unit": "V",
+              "class": "voltage",
+              "min": "200",
+              "max": "500",
+              "period": "10000"
+            }
+          ]
+        },
+        {
+          "pid": "22441E3",
+          "pid_init": "ATFCSM0;ATSH7E5;ATCRA7ED;",
+          "parameters": [
+            {
+              "name": "SOC",
+              "expression": "[B5:B6]/100",
+              "unit": "%",
+              "class": "battery",
+              "min": "0",
+              "max": "100",
+              "period": "5000"
+            },
+            {
+              "name": "SOC_MAX",
+              "expression": "(B7*256+B9)/100",
+              "unit": "%",
+              "class": "battery",
+              "min": "0",
+              "max": "100",
+              "period": "5000"
+            },
+            {
+              "name": "SOC_MIN",
+              "expression": "[B10:B11]/100",
+              "unit": "%",
+              "class": "battery",
+              "min": "0",
+              "max": "100",
+              "period": "5000"
+            },
+            {
+              "name": "SOC_D",
+              "expression": "[B12:B13]/100",
+              "unit": "%",
+              "class": "battery",
+              "min": "0",
+              "max": "100",
+              "period": "5000"
+            }
+          ]
+        },
+        {
+          "pid": "2244243",
+          "pid_init": "ATFCSM0;ATSH7E5;ATCRA7ED;",
+          "parameters": [
+            {
+              "name": "HV_T_1",
+              "expression": "B5-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "100",
+              "period": "30000"
+            },
+            {
+              "name": "HV_T_2",
+              "expression": "B6-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "100",
+              "period": "30000"
+            },
+            {
+              "name": "HV_T_3",
+              "expression": "B7-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "100",
+              "period": "30000"
+            },
+            {
+              "name": "HV_T_4",
+              "expression": "B9-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "100",
+              "period": "30000"
+            },
+            {
+              "name": "HV_T_5",
+              "expression": "B10-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "100",
+              "period": "30000"
+            },
+            {
+              "name": "HV_T_6",
+              "expression": "B11-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "100",
+              "period": "30000"
+            },
+            {
+              "name": "HV_T_7",
+              "expression": "B12-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "100",
+              "period": "30000"
+            },
+            {
+              "name": "HV_T_8",
+              "expression": "B13-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "100",
+              "period": "30000"
+            },
+            {
+              "name": "HV_T_9",
+              "expression": "B14-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "100",
+              "period": "30000"
+            },
+            {
+              "name": "HV_T_10",
+              "expression": "B15-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "100",
+              "period": "30000"
+            },
+            {
+              "name": "HV_T_11",
+              "expression": "B17-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "100",
+              "period": "30000"
+            },
+            {
+              "name": "HV_T_12",
+              "expression": "B18-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "100",
+              "period": "30000"
+            }
+          ]
+        },
+        {
+          "pid": "2244271",
+          "pid_init": "ATFCSM0;ATSH7E5;ATCRA7ED;",
+          "parameters": [
+            {
+              "name": "BMS_CHARGE_REQUEST_VOLTAGE",
+              "expression": "[B4:B5]/10",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "500",
+              "period": "10000"
+            },
+            {
+              "name": "CHARGING_R_A",
+              "expression": "([B6:B7]-10240)/10",
+              "unit": "A",
+              "class": "current",
+              "min": "0",
+              "max": "300",
+              "period": "10000"
+            }
+          ]
+        },
+        {
+          "pid": "2242031",
+          "pid_init": "ATFCSM0;ATSH7E3;ATCRA7EB;",
+          "parameters": [
+            {
+              "name": "DM_F_RPM",
+              "expression": "[B4:B5]-32767",
+              "unit": "rpm",
+              "class": "none",
+              "min": "-20000",
+              "max": "20000",
+              "period": "2000"
+            }
+          ]
+        },
+        {
+          "pid": "22420A1",
+          "pid_init": "ATFCSM0;ATSH7E3;ATCRA7EB;",
+          "parameters": [
+            {
+              "name": "MCU_STATOR_TEMP",
+              "expression": "[B4:B5]-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "200",
+              "period": "10000"
+            }
+          ]
+        },
+        {
+          "pid": "22420B1",
+          "pid_init": "ATFCSM0;ATSH7E3;ATCRA7EB;",
+          "parameters": [
+            {
+              "name": "MCU_ROTOR_TEMP",
+              "expression": "[B4:B5]-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "200",
+              "period": "10000"
+            }
+          ]
+        },
+        {
+          "pid": "22420C1",
+          "pid_init": "ATFCSM0;ATSH7E3;ATCRA7EB;",
+          "parameters": [
+            {
+              "name": "MCU_INVERTER_TEMP",
+              "expression": "B4-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "200",
+              "period": "10000"
+            }
+          ]
+        },
+        {
+          "pid": "22420D1",
+          "pid_init": "ATFCSM0;ATSH7E3;ATCRA7EB;",
+          "parameters": [
+            {
+              "name": "COOLANT_TMP",
+              "expression": "B4-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "150",
+              "period": "10000"
+            }
+          ]
+        },
+        {
+          "pid": "2242101",
+          "pid_init": "ATFCSM0;ATSH7E3;ATCRA7EB;",
+          "parameters": [
+            {
+              "name": "MCU_MAX_TORQUE",
+              "expression": "[B4:B5]/4",
+              "unit": "N·m",
+              "class": "none",
+              "min": "0",
+              "max": "1000",
+              "period": "60000"
+            }
+          ]
+        },
+        {
+          "pid": "2268011",
+          "pid_init": "ATFCSM0;ATSH74B;ATFCSH74B;ATFCSD300000;ATFCSM1;ATCRA75B;",
+          "parameters": [
+            {
+              "name": "CABIN_TEMPERATURE",
+              "expression": "B4/2-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "100",
+              "period": "10000"
+            }
+          ]
+        },
+        {
+          "pid": "2268021",
+          "pid_init": "ATFCSM0;ATSH74B;ATFCSH74B;ATFCSD300000;ATFCSM1;ATCRA75B;",
+          "parameters": [
+            {
+              "name": "OUTSIDE_TEMPERATURE",
+              "expression": "B4/2-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "100",
+              "period": "10000"
+            }
+          ]
+        },
+        {
+          "pid": "2268031",
+          "pid_init": "ATFCSM0;ATSH74B;ATFCSH74B;ATFCSD300000;ATFCSM1;ATCRA75B;",
+          "parameters": [
+            {
+              "name": "HVAC_EVAPORATOR_TEMP",
+              "expression": "B4/2-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "100",
+              "period": "10000"
+            }
+          ]
+        },
+        {
+          "pid": "2268071",
+          "pid_init": "ATFCSM0;ATSH74B;ATFCSH74B;ATFCSD300000;ATFCSM1;ATCRA75B;",
+          "parameters": [
+            {
+              "name": "HVAC_MODE_MOTOR_STEP",
+              "expression": "B4",
+              "unit": "%",
+              "class": "none",
+              "min": "0",
+              "max": "100",
+              "period": "10000"
+            }
+          ]
+        },
+        {
+          "pid": "2268091",
+          "pid_init": "ATFCSM0;ATSH74B;ATFCSH74B;ATFCSD300000;ATFCSM1;ATCRA75B;",
+          "parameters": [
+            {
+              "name": "HVAC_LEFT_MIX_FLAP",
+              "expression": "B4",
+              "unit": "%",
+              "class": "none",
+              "min": "0",
+              "max": "100",
+              "period": "10000"
+            }
+          ]
+        },
+        {
+          "pid": "22680A1",
+          "pid_init": "ATFCSM0;ATSH74B;ATFCSH74B;ATFCSD300000;ATFCSM1;ATCRA75B;",
+          "parameters": [
+            {
+              "name": "HVAC_RIGHT_MIX_FLAP",
+              "expression": "B4",
+              "unit": "%",
+              "class": "none",
+              "min": "0",
+              "max": "100",
+              "period": "10000"
+            }
+          ]
+        },
+        {
+          "pid": "2268081",
+          "pid_init": "ATFCSM0;ATSH74B;ATFCSH74B;ATFCSD300000;ATFCSM1;ATCRA75B;",
+          "parameters": [
+            {
+              "name": "HVAC_RECIRCULATION_STEP",
+              "expression": "B4",
+              "unit": "%",
+              "class": "none",
+              "min": "0",
+              "max": "100",
+              "period": "10000"
+            }
+          ]
+        },
+        {
+          "pid": "2268131",
+          "pid_init": "ATFCSM0;ATSH74B;ATFCSH74B;ATFCSD300000;ATFCSM1;ATCRA75B;",
+          "parameters": [
+            {
+              "name": "HVAC_BLOWER_PWM",
+              "expression": "B4",
+              "unit": "%",
+              "class": "none",
+              "min": "0",
+              "max": "100",
+              "period": "10000"
+            }
+          ]
+        },
+        {
+          "pid": "2244061",
+          "pid_init": "ATFCSM0;ATSH7E5;ATCRA7ED;",
+          "parameters": [
+            {
+              "name": "HV_A",
+              "expression": "[B4:B5]/10-2047",
+              "unit": "A",
+              "class": "current",
+              "min": "-300",
+              "max": "300",
+              "period": "5000"
+            }
+          ]
+        },
+        {
+          "pid": "2244142",
+          "pid_init": "ATFCSM0;ATSH7E5;ATCRA7ED;",
+          "parameters": [
+            {
+              "name": "BMS_DC_SOCKET_POS_TEMP",
+              "expression": "B7-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "120",
+              "period": "30000"
+            },
+            {
+              "name": "BMS_DC_SOCKET_NEG_TEMP",
+              "expression": "B9-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "120",
+              "period": "30000"
+            },
+            {
+              "name": "BMS_FAST_CHARGE_REQUEST_VOLTAGE",
+              "expression": "[B11:B12]/10",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "500",
+              "period": "30000"
+            },
+            {
+              "name": "BMS_FAST_CHARGE_REQUEST_CURRENT",
+              "expression": "([B13:B14]-10240)/10",
+              "unit": "A",
+              "class": "current",
+              "min": "-300",
+              "max": "300",
+              "period": "30000"
+            }
+          ]
+        },
+        {
+          "pid": "22441F2",
+          "pid_init": "ATFCSM0;ATSH7E5;ATCRA7ED;",
+          "parameters": [
+            {
+              "name": "HV_T_I",
+              "expression": "B5-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "120",
+              "period": "30000"
+            },
+            {
+              "name": "BMS_COOLANT_OUT_TEMP",
+              "expression": "B6-40",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "120",
+              "period": "30000"
+            }
+          ]
+        },
+        {
+          "pid": "2244251",
+          "pid_init": "ATFCSM0;ATSH7E5;ATCRA7ED;",
+          "parameters": [
+            {
+              "name": "LV_V",
+              "expression": "B4/10",
+              "unit": "V",
+              "class": "voltage",
+              "min": "8",
+              "max": "16",
+              "period": "30000"
+            }
+          ]
+        },
+        {
+          "pid": "2230251",
+          "pid_init": "ATFCSM0;ATSH720;ATFCSH720;ATFCSD300000;ATFCSM1;ATCRA730;",
+          "parameters": [
+            {
+              "name": "ABS_LEFT_BRAKE_TEMP",
+              "expression": "[B4:B5]",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "500",
+              "period": "60000"
+            }
+          ]
+        },
+        {
+          "pid": "2230261",
+          "pid_init": "ATFCSM0;ATSH720;ATFCSH720;ATFCSD300000;ATFCSM1;ATCRA730;",
+          "parameters": [
+            {
+              "name": "ABS_RIGHT_BRAKE_TEMP",
+              "expression": "[B4:B5]",
+              "unit": "°C",
+              "class": "temperature",
+              "min": "-40",
+              "max": "500",
+              "period": "60000"
+            }
+          ]
+        },
+        {
+          "pid": "2230291",
+          "pid_init": "ATFCSM0;ATSH720;ATFCSH720;ATFCSD300000;ATFCSM1;ATCRA730;",
+          "parameters": [
+            {
+              "name": "ABS_LEFT_CLAMPING_FORCE_RAW",
+              "expression": "[B4:B5]",
+              "unit": "",
+              "class": "none",
+              "min": "0",
+              "max": "65534",
+              "period": "60000"
+            }
+          ]
+        },
+        {
+          "pid": "22302A1",
+          "pid_init": "ATFCSM0;ATSH720;ATFCSH720;ATFCSD300000;ATFCSM1;ATCRA730;",
+          "parameters": [
+            {
+              "name": "ABS_RIGHT_CLAMPING_FORCE_RAW",
+              "expression": "[B4:B5]",
+              "unit": "",
+              "class": "none",
+              "min": "0",
+              "max": "65534",
+              "period": "60000"
+            }
+          ]
+        },
+        {
+          "pid": "22300C1",
+          "pid_init": "ATFCSM0;ATSH720;ATFCSH720;ATFCSD300000;ATFCSM1;ATCRA730;",
+          "parameters": [
+            {
+              "name": "STEER_ANGLE",
+              "expression": "[S4:S5]/10",
+              "unit": "deg",
+              "class": "none",
+              "min": "-720",
+              "max": "720",
+              "period": "1000"
+            }
+          ]
+        },
+        {
+          "pid": "2230101",
+          "pid_init": "ATFCSM0;ATSH720;ATFCSH720;ATFCSD300000;ATFCSM1;ATCRA730;",
+          "parameters": [
+            {
+              "name": "ABS_MASTER_CYLINDER_PRESSURE_RAW",
+              "expression": "[B4:B5]",
+              "unit": "",
+              "class": "none",
+              "min": "0",
+              "max": "65534",
+              "period": "1000"
+            }
+          ]
+        },
+        {
+          "pid": "22300D1",
+          "pid_init": "ATFCSM0;ATSH720;ATFCSH720;ATFCSD300000;ATFCSM1;ATCRA730;",
+          "parameters": [
+            {
+              "name": "ABS_LATERAL_ACCELERATION",
+              "expression": "[S4:S5]*0.027/9.80665",
+              "unit": "g",
+              "class": "none",
+              "min": "-20",
+              "max": "20",
+              "period": "2000"
+            }
+          ]
+        },
+        {
+          "pid": "22300E1",
+          "pid_init": "ATFCSM0;ATSH720;ATFCSH720;ATFCSD300000;ATFCSM1;ATCRA730;",
+          "parameters": [
+            {
+              "name": "ABS_LONGITUDINAL_ACCELERATION",
+              "expression": "[S4:S5]*0.027/9.80665",
+              "unit": "g",
+              "class": "none",
+              "min": "-20",
+              "max": "20",
+              "period": "2000"
+            }
+          ]
+        },
+        {
+          "pid": "22420F1",
+          "pid_init": "ATFCSM0;ATSH7E3;ATCRA7EB;",
+          "parameters": [
+            {
+              "name": "MCU_ACTUAL_TORQUE",
+              "expression": "[B4:B5]/4-350",
+              "unit": "N·m",
+              "class": "none",
+              "min": "-1000",
+              "max": "1000",
+              "period": "2000"
+            }
+          ]
+        },
+        {
+          "pid": "2230031",
+          "pid_init": "ATFCSM0;ATSH720;ATFCSH720;ATFCSD300000;ATFCSM1;ATCRA730;",
+          "parameters": [
+            {
+              "name": "ABS_FRONT_LEFT_WHEEL_SPEED_RAW",
+              "expression": "[B4:B5]",
+              "unit": "",
+              "class": "none",
+              "min": "0",
+              "max": "65534",
+              "period": "2000"
+            }
+          ]
+        },
+        {
+          "pid": "2230041",
+          "pid_init": "ATFCSM0;ATSH720;ATFCSH720;ATFCSD300000;ATFCSM1;ATCRA730;",
+          "parameters": [
+            {
+              "name": "ABS_FRONT_RIGHT_WHEEL_SPEED_RAW",
+              "expression": "[B4:B5]",
+              "unit": "",
+              "class": "none",
+              "min": "0",
+              "max": "65534",
+              "period": "2000"
+            }
+          ]
+        },
+        {
+          "pid": "2230051",
+          "pid_init": "ATFCSM0;ATSH720;ATFCSH720;ATFCSD300000;ATFCSM1;ATCRA730;",
+          "parameters": [
+            {
+              "name": "ABS_REAR_LEFT_WHEEL_SPEED_RAW",
+              "expression": "[B4:B5]",
+              "unit": "",
+              "class": "none",
+              "min": "0",
+              "max": "65534",
+              "period": "2000"
+            }
+          ]
+        },
+        {
+          "pid": "2230061",
+          "pid_init": "ATFCSM0;ATSH720;ATFCSH720;ATFCSD300000;ATFCSM1;ATCRA730;",
+          "parameters": [
+            {
+              "name": "ABS_REAR_RIGHT_WHEEL_SPEED_RAW",
+              "expression": "[B4:B5]",
+              "unit": "",
+              "class": "none",
+              "min": "0",
+              "max": "65534",
+              "period": "2000"
+            }
+          ]
+        },
+        {
+          "pid": "2242011",
+          "pid_init": "ATFCSM0;ATSH7E3;ATCRA7EB;",
+          "parameters": [
+            {
+              "name": "MCU_VEHICLE_SPEED_RAW",
+              "expression": "[B4:B5]",
+              "unit": "",
+              "class": "none",
+              "min": "0",
+              "max": "65534",
+              "period": "2000"
+            }
+          ]
+        },
+        {
+          "pid": "2244011",
+          "pid_init": "ATFCSM0;ATSH7E5;ATCRA7ED;",
+          "parameters": [
+            {
+              "name": "BMS_VEHICLE_SPEED_RAW",
+              "expression": "[B4:B5]",
+              "unit": "",
+              "class": "none",
+              "min": "0",
+              "max": "65534",
+              "period": "2000"
+            }
+          ]
+        },
+        {
+          "pid": "22442F",
+          "pid_init": "ATFCSM0;ATSH7E5;ATCRA7ED;",
+          "parameters": [
+            {
+              "name": "HV_C_V_001",
+              "expression": "[B5:B6]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_002",
+              "expression": "(B7*256+B9)/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_003",
+              "expression": "[B10:B11]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_004",
+              "expression": "[B12:B13]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_005",
+              "expression": "[B14:B15]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_006",
+              "expression": "[B17:B18]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_007",
+              "expression": "[B19:B20]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_008",
+              "expression": "[B21:B22]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_009",
+              "expression": "(B23*256+B25)/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_010",
+              "expression": "[B26:B27]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_011",
+              "expression": "[B28:B29]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_012",
+              "expression": "[B30:B31]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_013",
+              "expression": "[B33:B34]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_014",
+              "expression": "[B35:B36]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_015",
+              "expression": "[B37:B38]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_016",
+              "expression": "(B39*256+B41)/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_017",
+              "expression": "[B42:B43]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_018",
+              "expression": "[B44:B45]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_019",
+              "expression": "[B46:B47]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_020",
+              "expression": "[B49:B50]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_021",
+              "expression": "[B51:B52]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_022",
+              "expression": "[B53:B54]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_023",
+              "expression": "(B55*256+B57)/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_024",
+              "expression": "[B58:B59]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_025",
+              "expression": "[B60:B61]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_026",
+              "expression": "[B62:B63]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_027",
+              "expression": "[B65:B66]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_028",
+              "expression": "[B67:B68]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_029",
+              "expression": "[B69:B70]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_030",
+              "expression": "(B71*256+B73)/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_031",
+              "expression": "[B74:B75]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_032",
+              "expression": "[B76:B77]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_033",
+              "expression": "[B78:B79]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_034",
+              "expression": "[B81:B82]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_035",
+              "expression": "[B83:B84]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_036",
+              "expression": "[B85:B86]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_037",
+              "expression": "(B87*256+B89)/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_038",
+              "expression": "[B90:B91]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_039",
+              "expression": "[B92:B93]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_040",
+              "expression": "[B94:B95]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_041",
+              "expression": "[B97:B98]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_042",
+              "expression": "[B99:B100]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_043",
+              "expression": "[B101:B102]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_044",
+              "expression": "(B103*256+B105)/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_045",
+              "expression": "[B106:B107]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_046",
+              "expression": "[B108:B109]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_047",
+              "expression": "[B110:B111]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_048",
+              "expression": "[B113:B114]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_049",
+              "expression": "[B115:B116]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_050",
+              "expression": "[B117:B118]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_051",
+              "expression": "(B119*256+B121)/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_052",
+              "expression": "[B122:B123]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_053",
+              "expression": "[B124:B125]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_054",
+              "expression": "[B126:B127]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_055",
+              "expression": "[B129:B130]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_056",
+              "expression": "[B131:B132]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_057",
+              "expression": "[B133:B134]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_058",
+              "expression": "(B135*256+B137)/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_059",
+              "expression": "[B138:B139]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_060",
+              "expression": "[B140:B141]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_061",
+              "expression": "[B142:B143]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_062",
+              "expression": "[B145:B146]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_063",
+              "expression": "[B147:B148]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_064",
+              "expression": "[B149:B150]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_065",
+              "expression": "(B151*256+B153)/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_066",
+              "expression": "[B154:B155]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_067",
+              "expression": "[B156:B157]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_068",
+              "expression": "[B158:B159]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_069",
+              "expression": "[B161:B162]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_070",
+              "expression": "[B163:B164]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_071",
+              "expression": "[B165:B166]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_072",
+              "expression": "(B167*256+B169)/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_073",
+              "expression": "[B170:B171]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_074",
+              "expression": "[B172:B173]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_075",
+              "expression": "[B174:B175]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_076",
+              "expression": "[B177:B178]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_077",
+              "expression": "[B179:B180]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_078",
+              "expression": "[B181:B182]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_079",
+              "expression": "(B183*256+B185)/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_080",
+              "expression": "[B186:B187]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_081",
+              "expression": "[B188:B189]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_082",
+              "expression": "[B190:B191]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_083",
+              "expression": "[B193:B194]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_084",
+              "expression": "[B195:B196]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_085",
+              "expression": "[B197:B198]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_086",
+              "expression": "(B199*256+B201)/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_087",
+              "expression": "[B202:B203]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_088",
+              "expression": "[B204:B205]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_089",
+              "expression": "[B206:B207]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_090",
+              "expression": "[B209:B210]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_091",
+              "expression": "[B211:B212]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_092",
+              "expression": "[B213:B214]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_093",
+              "expression": "(B215*256+B217)/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_094",
+              "expression": "[B218:B219]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_095",
+              "expression": "[B220:B221]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_096",
+              "expression": "[B222:B223]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_097",
+              "expression": "[B225:B226]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_098",
+              "expression": "[B227:B228]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_099",
+              "expression": "[B229:B230]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_100",
+              "expression": "(B231*256+B233)/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_101",
+              "expression": "[B234:B235]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_102",
+              "expression": "[B236:B237]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_103",
+              "expression": "[B238:B239]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_104",
+              "expression": "[B241:B242]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_105",
+              "expression": "[B243:B244]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_106",
+              "expression": "[B245:B246]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_107",
+              "expression": "(B247*256+B249)/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_108",
+              "expression": "[B250:B251]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_109",
+              "expression": "[B252:B253]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_110",
+              "expression": "[B254:B255]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_111",
+              "expression": "[B257:B258]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_112",
+              "expression": "[B259:B260]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_113",
+              "expression": "[B261:B262]/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            },
+            {
+              "name": "HV_C_V_114",
+              "expression": "(B263*256+B265)/1000",
+              "unit": "V",
+              "class": "voltage",
+              "min": "0",
+              "max": "5",
+              "period": "60000"
+            }
+          ]
+        },
+        {
+          "pid": "22440444062",
+          "pid_init": "ATFCSM0;ATSH7E5;ATCRA7ED;",
+          "parameters": [
+            {
+              "name": "HV_W",
+              "expression": "([B5:B6]/10)*([B10:B11]/10-2047)",
+              "unit": "W",
+              "class": "power",
+              "min": "-500000",
+              "max": "500000",
+              "period": "5000"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
