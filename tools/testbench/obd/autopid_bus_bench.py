@@ -583,9 +583,10 @@ def leg_listen():
     psu = None
     v0 = None
     try:
-        # the simulator's frames on the three buses, none on the car's own. Its single-wire transceiver must be
-        # awake from its start: at its default (asleep) the broadcast starts on a sleeping transceiver, the
-        # single-wire controller goes bus-off and does not come back (testing/autopid_bus_bench.md, the traps)
+        # the simulator's frames on the three buses, none on the car's own. Its single-wire transceiver awake
+        # from its start: at its default (asleep) the broadcast starts on a sleeping transceiver and the
+        # single-wire controller goes bus-off. A simulator before its firmware of 2026-11-27 never came back from
+        # that; a newer one is back about a second behind the wake (testing/autopid_bus_bench.md, the traps)
         cur = bench_bus.sim_get("ecu_sim")
         want = {"broadcast_enabled": True, "hs_broadcast": False, "ms_broadcast": True, "sw_broadcast": True, "ch_broadcast": True}
         groups = {"ecu_sim": {k: v for k, v in want.items() if cur.get(k) != v}, "tester_io": {"swcan_mode": "normal"}}

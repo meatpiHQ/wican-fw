@@ -53,6 +53,8 @@ Regression on the same image: `RELEASE TEST PASS` (72 checks, `test-reports/2026
 - **A first run that evening (23:40) failed one check, and not for the firmware:** `no E line in the unit's log` saw three lines of the HTTP client (`esp-tls: ... delayed connect error: Connection reset by peer`). A run of the history backfill bench before it had left the Home Assistant push registered on the unit, and with the bench Home Assistant stopped every push writes those lines. With the push setting as found: the run above.
 
 
+**2026-11-27 00:45, `.\test.ps1 cansend -DeviceId 14c19f457fd9`: `CAN SEND PASS`, 131 checks, 0 failed, 6 planned restarts, 266 s** (`test-reports/2026-11-27_0045_cansend.md`), on components pull request 15 (a CAN filter listens on its bus) with our part on top, image sha256 `24c65fc1`, and against ECU sim v2's firmware of that night: its controllers on single-wire and CH CAN are asked to recover from bus-off for as long as it lasts (before, once). The wake leg's witness is unchanged by that: it is the controller's error state short of bus-off, which still goes one way without traffic.
+
 ## Traps
 
 - **ECU sim v2's receive log leaves out its newest frames when its ring is full.** The ring holds 64 frames and a read lists the oldest 60 (its JSON buffer ends there), so on a quiet bus a frame just sent does not show until four more arrive. The first run of this bench read "nothing on the bus" for every frame the chip had sent and the simulator had acknowledged. The bench clears the log (`DELETE /api/ecu/rxlog`) before every frame it expects; a busy bus hides the gap (the frame shows a second later).
