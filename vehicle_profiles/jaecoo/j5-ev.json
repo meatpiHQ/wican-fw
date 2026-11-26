@@ -670,21 +670,6 @@
           ]
         },
         {
-          "pid": "2230101",
-          "pid_init": "ATFCSM0;ATSH720;ATFCSH720;ATFCSD300000;ATFCSM1;ATCRA730;",
-          "parameters": [
-            {
-              "name": "ABS_MASTER_CYLINDER_PRESSURE_RAW",
-              "expression": "[B4:B5]",
-              "unit": "",
-              "class": "none",
-              "min": "0",
-              "max": "65534",
-              "period": "1000"
-            }
-          ]
-        },
-        {
           "pid": "22300D1",
           "pid_init": "ATFCSM0;ATSH720;ATFCSH720;ATFCSD300000;ATFCSM1;ATCRA730;",
           "parameters": [
