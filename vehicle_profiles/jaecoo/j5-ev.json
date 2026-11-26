@@ -51,6 +51,19 @@
           ]
         },
         {
+          "pid": "2244011",
+          "pid_init": "ATFCSM0;ATSH7E5;ATCRA7ED;",
+          "parameters": [
+            {
+              "name": "SPEED",
+              "expression": "[B4:B5]",
+              "unit": "km/h",
+              "class": "speed",
+              "period": "2000"
+            }
+          ]
+        },
+        {
           "pid": "2244041",
           "pid_init": "ATFCSM0;ATSH7E5;ATCRA7ED;",
           "parameters": [
@@ -782,21 +795,6 @@
           "parameters": [
             {
               "name": "MCU_VEHICLE_SPEED_RAW",
-              "expression": "[B4:B5]",
-              "unit": "",
-              "class": "none",
-              "min": "0",
-              "max": "65534",
-              "period": "2000"
-            }
-          ]
-        },
-        {
-          "pid": "2244011",
-          "pid_init": "ATFCSM0;ATSH7E5;ATCRA7ED;",
-          "parameters": [
-            {
-              "name": "BMS_VEHICLE_SPEED_RAW",
               "expression": "[B4:B5]",
               "unit": "",
               "class": "none",
