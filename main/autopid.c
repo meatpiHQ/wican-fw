@@ -2240,7 +2240,10 @@ all_pids_t* load_all_pids(void){
                                     curr_pid->parameters[param_index].max = (max_item && strlen(max_item->valuestring) > 0) ?  atof(max_item->valuestring) : FLT_MAX;
 
                                     cJSON* period_item = cJSON_GetObjectItem(param, "period");
-                                    curr_pid->parameters[param_index].period = period_item ? atof(period_item->valuestring) : FLT_MAX;
+                                    // Vehicle profiles normally have no per-parameter period: poll with the
+                                    // configured cycle (FLT_MAX ended up as ~49 days, i.e. one poll after boot).
+                                    curr_pid->parameters[param_index].period = (period_item && period_item->valuestring && atof(period_item->valuestring) > 0) ?
+                                        atof(period_item->valuestring) : (all_pids->cycle ? all_pids->cycle : 10000);
 
                                     cJSON* send_to_item = cJSON_GetObjectItem(param, "send_to");
                                     curr_pid->parameters[param_index].destination = send_to_item ? strdup(send_to_item->valuestring) : strdup("none");
