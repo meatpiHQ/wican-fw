@@ -5288,7 +5288,7 @@ const HELP={
   periodic_wakeup:"Wake briefly at a fixed interval while sleeping (for example to report position).",
   pause_below_mv:"Polling stops below this battery voltage and resumes 0.3 V above it. 0 = no fixed threshold.",
   pause_follow_sleep:"With no fixed threshold, pause PID requests whenever the battery is below the Power Saving sleep voltage; they resume above its wake-up voltage.",
-  pause_mode:"What a voltage pause stops. Pause requests only: the J1939 rows, read from WiCAN's own CAN listener and transmitting nothing, keep running. Pause everything: those stop too.",
+  pause_mode:"What a voltage pause stops. Pause requests only: what transmits nothing keeps running (the J1939 rows, read from WiCAN's own CAN listener, and the CAN filters on MS, single-wire or CH CAN). Pause everything: those stop too.",
   std_init:"AT command chain sent once before standard-PID polling starts: optional, ';'-separated. No protocol preset or link word (STP, VTP, ATLNK): the OBD chip stores those every time they are sent.",
   custom_init:"AT command chain sent once before custom-PID polling starts: optional, ';'-separated. No protocol preset or link word (STP, VTP, ATLNK): the OBD chip stores those every time they are sent. For a PID on MS, single-wire or CH CAN choose its Bus.",
   specific_init:"AT command chain sent once before vehicle-specific polling starts, ahead of the per-PID inits: optional, ';'-separated. No protocol preset or link word (STP, VTP, ATLNK): the OBD chip stores those every time they are sent. For a PID on MS, single-wire or CH CAN choose its Bus.",
@@ -5906,8 +5906,11 @@ const PROFILES_URL="https://raw.githubusercontent.com/meatpiHQ/wican-fw/main/veh
    filter indexes the frame data, B0 = first data byte, in both frames of
    reference). The repeat check covers keepFilters' parameters too. Ported
    here 2026-10-27: the edit had sat in a stale clone since 2026-10-21, so
-   builds up to 6.0.0-beta.4 imported the PIDs alone. Returns
-   {pids, filters, renamed}. */
+   builds up to 6.0.0-beta.4 imported the PIDs alone. A filter's own `bus`
+   and `bus_kbps` come with it (2026-11-26, components pull request 15: a
+   filter listens on its bus); the car's `bus` says where its PIDs are
+   asked and is not taken for a filter, whose frame may be on any bus.
+   Returns {pids, filters, renamed}. */
 /* a row's bus and speed as the firmware takes them (autopid_bus.h): nothing for
    the car's OBD protocol */
 function busArgs(pd){
@@ -5939,7 +5942,7 @@ function profileToPids(car,keepPids,keepFilters){
   for(const pf of((car&&car.filters)||[])){
     const fid=Number(pf.frame_id);if(!fid)continue;
     const prm=(pf.parameters||[]).map(x=>({...x,name:uniq(String(x.name||"")),unit:fixUnit(x.unit),expression:String(x.expression||"")}));
-    filters.push({frame_id:fid,monitor_ms:pf.monitor_ms||1000,period_ms:pf.period_ms||0,group:"default",profile:true,parameters:prm});
+    filters.push({frame_id:fid,monitor_ms:pf.monitor_ms||1000,period_ms:pf.period_ms||0,group:"default",profile:true,parameters:prm,...busArgs(pf)});
   }
   return{pids,filters,renamed};
 }
@@ -7253,13 +7256,22 @@ PAGES.automate=async(view,sub)=>{
             h("span",{class:"help"},r0.unit)))):null),
         actions:[{label:"Close",kind:"pri"}]});
     }
+    /* the buses of the OBD connector (autopid_bus.h, mockup board 8): the car's OBD
+       protocol, or one of the buses only the OBD chip reaches. A PID row and, since
+       2026-11-26, a CAN filter choose one */
+    const BUSES=[["obd","The car's OBD protocol","pins 6 and 14"],["ms","MS CAN","125 kbit/s, pins 3 and 11"],
+      ["sw","Single-wire CAN","33.3 kbit/s, pin 1"],["ch","CH CAN","500 kbit/s, pins 12 and 13"]];
+    const BUS_OWN={ms:125,sw:33.3,ch:500};
+    const BUS_SPEEDS=[500,250,125,100,95.2,83.3,50,33.3];
+    const BUS_NAME={ms:"MS CAN",sw:"single-wire CAN",ch:"CH CAN"};
     /* a CAN filter's Test (2026-11-14): the device listens once for the frame, as a
-       poll of the filter does, and answers with the frame and the values */
+       poll of the filter does, and answers with the frame and the values; on the
+       filter's bus (2026-11-26) */
     async function testFilter(f,btn){
       const params=(f.parameters||[]).filter(pr=>pr&&pr.expression);
       btn.disabled=true;const was=btn.textContent;btn.textContent="Listening…";
       try{
-        const r=await api("/api/autopid/test",{method:"POST",body:{filter:{frame_id:Number(f.frame_id)||0,monitor_ms:Number(f.monitor_ms)||1000,
+        const r=await api("/api/autopid/test",{method:"POST",body:{filter:{frame_id:Number(f.frame_id)||0,monitor_ms:Number(f.monitor_ms)||1000,...busArgs(f),
           parameters:params.map(pr=>({expression:pr.expression,...(pr.mux_expr?{mux_expr:pr.mux_expr,mux_val:Number(pr.mux_val)||0}:{})}))}}});
         const vals=Array.isArray(r.values)?r.values:[];
         const lines=String(r.transcript||"").split("\n").filter(Boolean).map(l=>h("div",{class:l[0]===">"?"in":""},l));
@@ -7309,14 +7321,8 @@ PAGES.automate=async(view,sub)=>{
       const cells=new Map(); /* live cells -> refresh fn */
       const paramNames=pd=>(pd.parameters||[]).map(p=>p.name).filter(Boolean);
       const groupRate=pd=>{const g=(cfg.groups||[]).find(x=>x.name===(pd.group||"default"));const p=g?(Number(g.period_ms)||0):1000;return p?p+" ms":"max rate";};
-      /* a row's bus (autopid_bus.h, mockup board 8): the car's OBD protocol, or one of
-         the buses only the OBD chip reaches. A standard PID is the car's OBD protocol
-         by definition, and a J1939 group is heard, not asked: neither has the field */
-      const BUSES=[["obd","The car's OBD protocol","pins 6 and 14"],["ms","MS CAN","125 kbit/s, pins 3 and 11"],
-        ["sw","Single-wire CAN","33.3 kbit/s, pin 1"],["ch","CH CAN","500 kbit/s, pins 12 and 13"]];
-      const BUS_OWN={ms:125,sw:33.3,ch:500};
-      const BUS_SPEEDS=[500,250,125,100,95.2,83.3,50,33.3];
-      const BUS_NAME={ms:"MS CAN",sw:"single-wire CAN",ch:"CH CAN"};
+      /* a row's bus (BUSES above): a standard PID is the car's OBD protocol by
+         definition, and a J1939 group is heard, not asked: neither has the field */
       const busRow=pd=>!isPgn(pd)&&pidType(pd)!=="std";
       const busOf=pd=>(busRow(pd)&&BUS_NAME[pd.bus])?pd.bus:"obd";
       const mine=()=>cfg.pids.filter(pd=>pidType(pd)===type);
@@ -7485,8 +7491,8 @@ PAGES.automate=async(view,sub)=>{
       return n>=1&&n<=0x1FFFFFFF?n:0;};
     const fltName=f=>f.name||((f.parameters||[]).length===1&&f.parameters[0].name)||fltHex(f.frame_id)||"";
     const FLT_INFO={
-      custom:"Reads a frame the car sends by itself: nothing is asked. Enter the frame's CAN ID as 0x284 (hex) or 644 (decimal); an ID above 0x7FF is a 29-bit one. Once per cycle WiCAN listens for the frame, until it comes or the Listen time is over, and the PIDs wait meanwhile. In an expression B0 is the first data byte of the frame. These filters follow the Poll custom PIDs switch.",
-      specific:"Reads a frame the car sends by itself: nothing is asked. Enter the frame's CAN ID as 0x284 (hex) or 644 (decimal); an ID above 0x7FF is a 29-bit one. Once per cycle WiCAN listens for the frame, until it comes or the Listen time is over, and the PIDs wait meanwhile. In an expression B0 is the first data byte of the frame. These filters belong to the vehicle: they follow the Poll vehicle-specific PIDs switch, and choosing another profile replaces them."};
+      custom:"Reads a frame the car sends by itself: nothing is asked. Enter the frame's CAN ID as 0x284 (hex) or 644 (decimal); an ID above 0x7FF is a 29-bit one. Once per cycle WiCAN listens for the frame, until it comes or the Listen time is over, and the PIDs wait meanwhile. In an expression B0 is the first data byte of the frame. A frame on MS CAN, single-wire CAN or CH CAN: open the filter and choose its Bus; such a filter also listens while a voltage pause holds the PIDs, unless Pause mode is Pause everything. These filters follow the Poll custom PIDs switch.",
+      specific:"Reads a frame the car sends by itself: nothing is asked. Enter the frame's CAN ID as 0x284 (hex) or 644 (decimal); an ID above 0x7FF is a 29-bit one. Once per cycle WiCAN listens for the frame, until it comes or the Listen time is over, and the PIDs wait meanwhile. In an expression B0 is the first data byte of the frame. A frame on MS CAN, single-wire CAN or CH CAN: open the filter and choose its Bus; such a filter also listens while a voltage pause holds the PIDs, unless Pause mode is Pause everything. These filters belong to the vehicle: they follow the Poll vehicle-specific PIDs switch, and choosing another profile replaces them."};
     function filterTable(type){
       const tbl=h("div",{class:"pidl fltl",style:"--pidcols:40px minmax(110px,1.3fr) minmax(84px,1fr) 90px minmax(140px,1.2fr) 88px;margin-top:18px;border-top:1px solid var(--border);padding-top:14px"});
       const open=new Set();let search="";
@@ -7538,10 +7544,18 @@ PAGES.automate=async(view,sub)=>{
             h("button",{class:"btn sm gh danger",type:"button",title:"Remove this filter and all its parameters",onclick:()=>{cfg.filters.splice(cfg.filters.indexOf(f),1);markDirty();rebuild();}},ic("trash")))));
         if(isOpen){
           const fld=(label,ctl)=>h("div",{},h("label",{},label),ctl);
+          const fbus=BUS_NAME[f.bus]?f.bus:"obd";
           const fields=h("div",{class:"fields"},
             fld("Group",h("input",{value:f.group||"default",onchange:e=>{f.group=e.target.value||"default";markDirty();}})),
             fld("Cycle (ms)",h("input",{class:"mono",type:"number",min:"0",value:f.period_ms||"",placeholder:"group: "+groupRate(f),title:"How often the frame is read. Empty = the group's rate, "+groupRate(f)+".",onchange:e=>{f.period_ms=Number(e.target.value)||0;markDirty();}})),
-            h("div",{}));
+            /* the filter's bus (2026-11-26, components pull request 15): as a PID row's */
+            fld("Bus",h("select",{class:"fbus",title:"Where this frame is listened for: on the car's OBD protocol, or on one of the other CAN buses of the OBD connector. Nothing is stored in the OBD chip for it.",
+              onchange:e=>{delete f.bus_kbps;if(e.target.value==="obd")delete f.bus;else f.bus=e.target.value;markDirty();rebuild();}},
+              ...BUSES.map(([v,l,d])=>h("option",{value:v,selected:v===fbus},l+" ("+d+")")))),
+            ...(fbus!=="obd"?[fld("Bus speed",h("select",{class:"fkbps",title:"For a car whose "+BUS_NAME[fbus]+" does not run at the usual speed",
+              onchange:e=>{const k=Number(e.target.value)||0;if(k)f.bus_kbps=k;else delete f.bus_kbps;markDirty();}},
+              h("option",{value:"0",selected:!Number(f.bus_kbps)},"Usual ("+BUS_OWN[fbus]+" kbit/s)"),
+              ...BUS_SPEEDS.filter(k=>k!==BUS_OWN[fbus]).map(k=>h("option",{value:String(k),selected:Number(f.bus_kbps)===k},k+" kbit/s"))))]:[]));
           const prmHead=h("div",{class:"prm prm-head"},h("span",{}),h("span",{},"Parameter"),h("span",{},"Expression"),h("span",{},"Unit"),h("span",{class:"r"},"Live"),h("span",{}));
           const prmRows=prms.map(pr=>{
             const pon=pr.enabled!==false;

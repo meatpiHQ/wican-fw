@@ -53,6 +53,8 @@ All on the bench unit 14c19f457fd9, 2026-11-25, through the runner (`.\test.ps1 
 
 The other stages on that image (2026-11-26, 00:11 to 00:31): `multibus` 135 checks (its leg with an ELM app in the middle of the polling), `cansend` 131 (its leg with an app on the chip), `groupdefault` 47, `profilee2e` 40 (the Leaf), `canfilters` 64 (the poller's filter windows, which now end when an app comes). All PASS; `multibus` after its bench learned to wait for the chip (the trap below).
 
+**2026-11-27 00:07, components pull request 15 (a filter listens on its bus) with our part on top, image `24c65fc1`: PASS, 52 of 52**, 349 s (`test-reports/2026-11-27_0007_appchip.md`); on the pull request's image alone (`743608a3`, 2026-11-26 22:53): PASS, 52 of 52, 348 s (`2026-11-26_2253_appchip.md`). That change sits beside the handover in the poller (the baseline that goes back behind an app is owed to a filter that listens through the voltage pause); the stage's tables have no such filter, so this is the regression, not a test of an app meeting one.
+
 Not on a bench: the Bluetooth jack's `peers` (one line in the glue, `ble_manager_is_connected()`), and the USB serial jack, which has none and keeps the two minutes.
 
 ## Traps

@@ -10,6 +10,20 @@ Host **unit** suites (`components/*/host_test`, 526 tests across 44 components a
 
 **Pi offline:** `bash tools/testbench/host_gcc_wsl.sh <vpn_manager|config_backup>` from WSL compiles that PURE suite with the system gcc + Unity under ASan/UBSan (no IDF build; 2026-10-16, issues #985 to #989: `vpn_manager` 11, `config_backup` 24; add a case per IDF-free suite)
 
+**2026-11-26 23:57, `.\test.ps1 host autopid`: PASS, 204 tests (1 more)**
+(`test-reports/2026-11-26_2357_host_autopid.md`), components pull request 15 (overkillthemighty,
+GitHub issue #1078: a filter listens on its bus) with our part on top; the device half and its
+records are in [autopid_bus_bench.md](autopid_bus_bench.md). His, in `test_filter_type.c`:
+`test_filter_on_its_bus` in place of pull request 11's case (a filter with `bus` `sw`, `ms`, `ch`
+and a speed parsed into its bus and rate, a 29-bit ID with the slot of its width, the scheduler's
+bus and class for it, a word that is no bus and a speed without a bus refused while the filter is
+on and kept while it is off, the loader's repair once) and `test_filter_listens_through_the_pause`
+(the class that the voltage pause leaves on under `requests_only`, the pick of such a filter there
+and on its bus, nothing picked under `all`). Ours added no case: what we changed is the chip half
+(the test of such a filter brings the chip home), which the bench holds (the leg `listen`), and the
+page, which `probe_filter_bus.mjs` holds. The pull request's head alone and `main` before it, on
+the Pi from a bundle: 204 and 203.
+
 **2026-11-25 23:55, `.\test.ps1 host obd_chip`: PASS, 80 tests (13 new); `host bridge_manager`:
 PASS, 27 tests (4 new); `host autopid`: PASS, 203 tests (2 new)**
 (`test-reports/2026-11-25_2355_host_obd_chip.md`, `2026-11-25_2356_host_bridge_manager.md`,

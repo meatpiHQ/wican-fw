@@ -98,6 +98,17 @@ row of the unit's own tables decides what the chip is on.
 
 ## Records
 
+**2026-11-27 00:04, `.\test.ps1 canfilters -DeviceId 14c19f457fd9`: `CAN
+FILTERS PASS`, 64 checks, four planned restarts, 146 s** (report
+`test-reports/2026-11-27_0004_canfilters.md`), on components pull request 15
+(a filter listens on its bus) with our part on top, image sha256 `24c65fc1`.
+The same on the pull request's image alone (`743608a3`, 2026-11-26 22:50,
+`test-reports/2026-11-26_2250_canfilters.md`): 64 checks, 145 s. The stage's
+filters are all on the car's own bus, which that change leaves as it was; a
+filter on MS, single-wire or CH CAN is the leg `listen` of
+[autopid_bus_bench.md](autopid_bus_bench.md), and the Bus field of a filter
+on the page is `tools/webui_preview/probe_filter_bus.mjs` (28 checks).
+
 **2026-11-23 10:29, `.\test.ps1 canfilters -DeviceId 14c19f457fd9`: `CAN
 FILTERS PASS`, 64 checks, four planned restarts, 144 s** (report
 `test-reports/2026-11-23_1029_canfilters.md`), on the build with the page's

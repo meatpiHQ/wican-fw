@@ -26,17 +26,19 @@ interfaces answer the same OBD requests):
             table of AutoPID is saved: a row that is switched on, the Test
             route, a car's own init. A row that is switched off may keep one
             (a file an earlier build stored loads that way)
-  filter    a filter listens on the car's own bus (components pull request
-            11, GitHub issue #1078: until then a filter's `bus` was read by
-            nobody, a filter of a single-wire frame was accepted and never
-            filled): one that is on with `ms`, `sw`, `ch` or a word that is
-            no bus is refused with the filter and the way out, the tables
-            unchanged; switched off it is accepted and keeps its bus; `obd`
-            or no bus is accepted. Then tables as an earlier build stored
-            them (the filter on, bus `sw`), written as the file: at the
-            next start the loader switches that filter off, keeps its bus,
-            says so in one W line and loads the rest; a second start finds
-            nothing to repair
+  filter    a filter names its bus as a row does (components pull request
+            15, GitHub issue #1078; from pull request 11 until then one with
+            another bus than the car's was refused): one that is on with
+            `ms`, `sw` or `ch`, with or without a speed, is taken and keeps
+            its bus; a word that is no bus, a speed without a bus and a speed
+            the chip cannot make are refused with the filter and the reason,
+            the tables unchanged; switched off it is accepted and keeps its
+            word. Then tables as an earlier build stored them (a filter with
+            a speed and no bus, one with a word that is no bus, both on),
+            written as the file: at the next start the loader switches those
+            two off, keeps what they carried, says so in one W line and
+            loads the rest, the single-wire filter beside them still on; a
+            second start finds nothing to repair
   hold      a type init in the settings with such a word (`custom_init`
             `STP53;ATSH726`, as an earlier build stored it): accepted and
             kept as typed across a restart, never sent, and the rows of that
@@ -81,17 +83,29 @@ interfaces answer the same OBD requests):
             init) that is asked right behind a raw row of its type is still
             answered. Every row answered in every round, no failure; a
             standard PID behind it finds the chip formatting again
+  listen    a filter listens on its bus (components pull request 15): the
+            simulator streams a frame on MS, single-wire and CH CAN and not
+            on the car's own bus. A Test of a filter on each bus catches it
+            (11-bit and 29-bit IDs, the slot defined for the ID's width),
+            the chip home again behind the window; the same ID on the car's
+            own bus is not caught. Polled beside the seven rows, every filter
+            and every row is published in every round. Under the voltage
+            pause the rows of every bus wait (no request, no frame on the
+            car's bus) and the filters are still published in every round:
+            a filter sends nothing. And behind a Test of such a filter in
+            the pause the chip is on the car's protocol
   the chip  chip_nvm's snapshot the same before and after, no protocol
             save, the stored protocol as found; with Automate off the chip
             reads the car's protocol and the link table as found
 
 The unit's tables, its Automate settings and the simulator are put back as
 found (planned restarts: two for the stored filter, Automate on with the held
-init, the init as found, Automate back). AutoPID must be off at the start.
+init, the init as found, Automate back; the simulator restarts twice more for
+the leg listen). AutoPID must be off at the start.
 
-usage: autopid_bus_bench.py [--dut localhost:18081] [--only test,speed,store,filter,hold,poll,guard,park,pause,app,raw]
+usage: autopid_bus_bench.py [--dut localhost:18081] [--only test,speed,store,filter,hold,poll,guard,park,pause,app,raw,listen]
   the DUT through an ssh tunnel (`ssh -N -L 18081:<dut>:80 rpi001`), ECU sim
-  v2 at its own address (it is the unit's supply too). About 8 min.
+  v2 at its own address (it is the unit's supply too). About 9 min.
 """
 import json
 import os
@@ -119,7 +133,7 @@ def arg(name, default):
 
 DUT_HP = arg("--dut", "localhost:18081")
 DUT = "http://" + DUT_HP
-ONLY = [x for x in arg("--only", "test,speed,store,filter,hold,poll,guard,park,pause,app,raw").split(",") if x]
+ONLY = [x for x in arg("--only", "test,speed,store,filter,hold,poll,guard,park,pause,app,raw,listen").split(",") if x]
 SIM_GROUPS = ("ecu_sim", "kline", "j1850")
 PERIOD_MS = 2000
 RPM = "[B3:B4]/4"
@@ -382,10 +396,13 @@ def leg_store():
 
 
 #: where the tables are stored (autopid_config_file.c), the single-wire frame
-#: of GitHub issue #1078, and the parser's sentence for it
+#: of GitHub issue #1078, and the parser's sentences for a filter's bus
 CONFIG_PATH = "/data/autopid/config.json"
 FLT_ID = 0x1026C0CB
-FLT_SAID = "filter 1026C0CB: a filter listens on bus obd only (ms, sw, ch: not yet); switch it off"
+FLT_NO_BUS = "filter 1026C0CB: unknown bus (obd, ms, sw or ch)"
+FLT_NO_SPEED = "bus_kbps needs a bus other than obd and a speed the chip can make"
+#: the loader's line for a stored filter it switched off
+FLT_REPAIRED = "with a bus or a bus speed this firmware cannot use"
 
 
 def restart_unit():
@@ -420,53 +437,76 @@ def repair_lines():
             if int(m.group(1)) < last:
                 start = i
             last = int(m.group(1))
-    return [ln.strip() for ln in lines[start:] if "with a bus other than obd switched off" in ln]
+    return [ln.strip() for ln in lines[start:] if FLT_REPAIRED in ln]
+
+
+def flt_row(frame_id, bus, name, enabled=True, kbps=None, monitor_ms=200, period_ms=5000):
+    flt = {"frame_id": frame_id, "monitor_ms": monitor_ms, "period_ms": period_ms, "group": "default", "enabled": enabled,
+           "parameters": [{"name": name, "expression": "B0", "unit": ""}]}
+    if bus is not None:
+        flt["bus"] = bus
+    if kbps is not None:
+        flt["bus_kbps"] = kbps
+    return flt
 
 
 def leg_filter():
-    """a filter listens on the car's own bus: another one refused while it is on, a stored one switched off once"""
-    def with_filter(bus, enabled=True):
+    """a filter names its bus as a row does: taken on ms, sw and ch, a word that is no bus and a speed without a
+    bus refused while it is on, a stored one switched off once"""
+    def with_filters(*flts):
         t = tables()
-        flt = {"frame_id": FLT_ID, "monitor_ms": 200, "period_ms": 5000, "group": "default", "enabled": enabled,
-               "parameters": [{"name": "bus_flt", "expression": "B0", "unit": ""}]}
-        if bus is not None:
-            flt["bus"] = bus
-        t["filters"] = [flt]
+        t["filters"] = list(flts)
         return t
 
     def said(got):
         return got[1] if isinstance(got[1], str) else json.dumps(got[1])
 
-    def flt_of(cfg):
-        return next((f for f in (cfg.get("filters") or []) if f.get("frame_id") == FLT_ID), {}) if isinstance(cfg, dict) else {}
+    def flt_of(cfg, frame_id=FLT_ID):
+        return next((f for f in (cfg.get("filters") or []) if f.get("frame_id") == frame_id), {}) if isinstance(cfg, dict) else {}
 
+    for bus in ("sw", "ms", "ch"):
+        got = http("/api/autopid/config", "PUT", with_filters(flt_row(FLT_ID, bus, "bus_flt")))
+        st, kept = http("/api/autopid/config")
+        check("filter: a filter that is on with bus %s is taken and keeps its bus" % bus,
+              got[0] == 200 and flt_of(kept).get("bus") == bus and flt_of(kept).get("enabled") is not False, (got[0], said(got)[:140]))
+    got = http("/api/autopid/config", "PUT", with_filters(flt_row(FLT_ID, "ch", "bus_flt", kbps=250)))
     st, before = http("/api/autopid/config")
-    for bus in ("sw", "ms", "ch", "hs"):
-        got = http("/api/autopid/config", "PUT", with_filter(bus))
-        check("filter: a filter that is on with bus %s is refused, with the filter and the way out" % bus,
-              got[0] == 400 and FLT_SAID in said(got), (got[0], said(got)[:140]))
+    check("filter: with a speed for its bus (CH CAN at 250 kbit/s) it is taken", got[0] == 200 and flt_of(before).get("bus_kbps") == 250, (got[0], flt_of(before)))
+    for what, flt, sentence in (("a word that is no bus (hs)", flt_row(FLT_ID, "hs", "bus_flt"), FLT_NO_BUS),
+                                ("a speed and no bus", flt_row(FLT_ID, None, "bus_flt", kbps=250), FLT_NO_SPEED),
+                                ("a speed the chip cannot make (MS CAN at 300 kbit/s)", flt_row(FLT_ID, "ms", "bus_flt", kbps=300), FLT_NO_SPEED)):
+        got = http("/api/autopid/config", "PUT", with_filters(flt))
+        check("filter: a filter that is on with %s is refused, with the filter and the reason" % what,
+              got[0] == 400 and sentence in said(got) and "1026C0CB" in said(got), (got[0], said(got)[:140]))
     st, after = http("/api/autopid/config")
     check("filter: the refused tables changed nothing", after == before)
-    got = http("/api/autopid/config", "PUT", with_filter("sw", False))
+    got = http("/api/autopid/config", "PUT", with_filters(flt_row(FLT_ID, "hs", "bus_flt", enabled=False)))
     st, kept = http("/api/autopid/config")
-    check("filter: the same filter switched off is accepted and keeps its bus",
-          got[0] == 200 and flt_of(kept).get("bus") == "sw" and flt_of(kept).get("enabled") is False, (got[0], flt_of(kept)))
+    check("filter: switched off, the filter with the word that is no bus is accepted and keeps it",
+          got[0] == 200 and flt_of(kept).get("bus") == "hs" and flt_of(kept).get("enabled") is False, (got[0], flt_of(kept)))
     for bus in ("obd", None):
-        got = http("/api/autopid/config", "PUT", with_filter(bus))
+        got = http("/api/autopid/config", "PUT", with_filters(flt_row(FLT_ID, bus, "bus_flt")))
         check("filter: with %s it is accepted" % ("bus obd" if bus else "no bus"), got[0] == 200, got)
-    # tables as an earlier build stored them: the route refuses them now, so
-    # they are written as the file itself
-    stored = with_filter("sw")
+    # tables as an earlier build stored them: a filter with a speed and no bus was taken until this build,
+    # and a word no build knows stands for a file from somewhere else. The route refuses both now, so the
+    # tables are written as the file itself; the single-wire filter beside them must stay on
+    stored = with_filters(flt_row(FLT_ID, "sw", "bus_flt"), flt_row(0x120, None, "bus_flt_kbps", kbps=250),
+                          flt_row(0x121, "hs", "bus_flt_hs"))
     got = http("/api/fs/upload?path=" + CONFIG_PATH, "POST", stored)
-    if not check("filter: tables as an earlier build stored them (the filter on, bus sw) written as the file", got[0] == 200, got):
+    if not check("filter: tables as an earlier build stored them (a filter with a speed and no bus, one with a word that "
+                 "is no bus, both on) written as the file", got[0] == 200, got):
         return
     if not check("filter: the unit started on that file (a planned restart)", restart_unit()):
         return
     st, loaded = http("/api/autopid/config")
     lines = repair_lines()
-    check("filter: the loader switched that filter off and kept its bus, and one W line of this start says so",
-          flt_of(loaded).get("enabled") is False and flt_of(loaded).get("bus") == "sw" and len(lines) == 1 and "W (" in lines[0][:16],
-          (flt_of(loaded), lines[-1][-150:] if lines else "no line"))
+    check("filter: the loader switched those two off and kept what they carried, and one W line of this start says so",
+          flt_of(loaded, 0x120).get("enabled") is False and flt_of(loaded, 0x120).get("bus_kbps") == 250 and
+          flt_of(loaded, 0x121).get("enabled") is False and flt_of(loaded, 0x121).get("bus") == "hs" and
+          len(lines) == 1 and "W (" in lines[0][:16] and "2 filters" in lines[0],
+          (flt_of(loaded, 0x120), flt_of(loaded, 0x121), lines[-1][-150:] if lines else "no line"))
+    check("filter: the single-wire filter beside them is still on, with its bus",
+          flt_of(loaded).get("bus") == "sw" and flt_of(loaded).get("enabled") is not False, flt_of(loaded))
     check("filter: the rest of the tables loaded as written (%d rows, their group)" % len(stored["pids"]),
           isinstance(loaded, dict) and loaded.get("pids") == stored["pids"] and loaded.get("groups") == stored["groups"],
           "%d rows" % len(loaded.get("pids") or []) if isinstance(loaded, dict) else loaded)
@@ -475,6 +515,194 @@ def leg_filter():
     lines2 = repair_lines()
     check("filter: a second start finds nothing to repair (no such line of that start, the tables the same)",
           again and not lines2 and loaded2 == loaded, lines2[-1:])
+
+
+#: the simulator's broadcast frames (its profile's): the name, the id, 29-bit, the first data byte
+SIM_FRAMES = {"rpm_stream": (0x0C0, False, 0x0C), "speed_stream": (0x1A0, False, None), "status_29b": (0x18FEF100, True, 0xFF)}
+#: the slot's definition for 29-bit ids on each bus (the option without its bit 7)
+SLOT29 = {"ms": "VTSET_CAN B,01,", "ch": "VTSET_CAN C,01,", "sw": "VTSET_CAN F,01,"}
+
+
+def sim_frames(on):
+    """the simulator's broadcast frames that are sent: nobody acknowledges them while the chip only listens, so
+    the simulator repeats the first frame of its queue and ONE id is on the wire of a bus at a time"""
+    for name in SIM_FRAMES:
+        bench_bus._http(bench_bus.SIM_URL + "/api/ecu/broadcast", "POST", {"name": name, "enabled": name in on})
+
+
+def sim_queue_on():
+    """a request of a row on each bus: the chip is a normal node meanwhile and acknowledges, so the simulator's
+    queue moves on to the frame that is switched on now"""
+    for bus in OTHER:
+        for _ in range(3):
+            test_call(bus)
+    time.sleep(1.0)
+
+
+def sim_can_state():
+    st = bench_bus.sim_status()
+    return {b: (st.get(b + "_can") or {}).get("bridge_state", "own controller") for b in OTHER}
+
+
+def flt_test(frame_id, bus, monitor_ms=1500):
+    body = {"filter": {"frame_id": frame_id, "monitor_ms": monitor_ms, "parameters": [{"expression": "B0"}]}}
+    if bus is not None:
+        body["filter"]["bus"] = bus
+    chip_free.wait(DUT_HP)
+    return http("/api/autopid/test", "POST", body, timeout=monitor_ms / 1000.0 + 30)
+
+
+def pubs_over(names, seconds):
+    """how often each parameter was published over a stretch (the stamp of its value moved), one look every 0.3 s;
+    with it the bus counters' delta, the changes of bus and where the chip was found"""
+    count = {n: 0 for n in names}
+    last = {p.get("name"): p.get("ts_us") for p in (stats().get("params") or [])}
+    b0 = buses()
+    seen = []
+    t0 = time.time()
+    while time.time() - t0 < seconds:
+        time.sleep(0.3)
+        a = stats()
+        seen.append(((a.get("stats") or {}).get("buses") or {}).get("now"))
+        for p in a.get("params") or []:
+            n = p.get("name")
+            if n in count and p.get("ts_us") is not None and p.get("ts_us") != last.get(n):
+                count[n] += 1
+                last[n] = p.get("ts_us")
+    b1 = buses()
+    delta = {b: {k: (b1.get(b) or {}).get(k, 0) - (b0.get(b) or {}).get(k, 0) for k in ("ok", "failed")} for b in ("obd",) + OTHER}
+    return count, delta, seen
+
+
+def leg_listen():
+    """a filter listens on its bus (components pull request 15, GitHub issue #1078): MS, single-wire and CH CAN,
+    11-bit and 29-bit ids, by the Test route and polled, awake and through the voltage pause"""
+    ap, sl = settings("autopid"), settings("sleep_manager")
+    below = ap.get("pause_below_mv") or (sl.get("sleep_mv") if ap.get("pause_follow_sleep") else 0) or 0
+    previous = {}
+    psu = None
+    v0 = None
+    try:
+        # the simulator's frames on the three buses, none on the car's own. Its single-wire transceiver must be
+        # awake from its start: at its default (asleep) the broadcast starts on a sleeping transceiver, the
+        # single-wire controller goes bus-off and does not come back (testing/autopid_bus_bench.md, the traps)
+        cur = bench_bus.sim_get("ecu_sim")
+        want = {"broadcast_enabled": True, "hs_broadcast": False, "ms_broadcast": True, "sw_broadcast": True, "ch_broadcast": True}
+        groups = {"ecu_sim": {k: v for k, v in want.items() if cur.get(k) != v}, "tester_io": {"swcan_mode": "normal"}}
+        previous, _ = bench_bus.sim_patch({g: ch for g, ch in groups.items() if ch})
+        sim_frames(["rpm_stream"])
+        time.sleep(9)
+        state = sim_can_state()
+        if not check("listen: the simulator sends on MS, single-wire and CH CAN and none of its controllers is off the bus",
+                     all(state.get(b) in ("own controller", "active", "warning", "passive") for b in OTHER), state):
+            return
+        # the Test route: the 11-bit frame on each bus, the window on the bus that is named
+        ident, _, first = SIM_FRAMES["rpm_stream"]
+        for bus in OTHER:
+            st, r = flt_test(ident, bus)
+            tr = (r.get("transcript") or "") if isinstance(r, dict) else ""
+            slot, where = SLOT[bus]
+            check("listen: a Test of a filter on %s catches the simulator's frame (0x%X, first byte %02X)" % (bus, ident, first),
+                  st == 200 and isinstance(r, dict) and r.get("ok") and str(r.get("payload", "")).startswith("%02X" % first),
+                  r if not isinstance(r, dict) else (r.get("payload"), r.get("error")))
+            check("listen: %s: the slot defined, then chosen, then the window (ATCRA, ATCAF0, ATMA), no stored word" % bus,
+                  ("VTSET_CAN %s,81," % slot) in tr and where in tr and
+                  -1 < tr.find("VTSET_CAN %s," % slot) < tr.find("> ATTP%s" % slot) < tr.find("> ATCRA0C0") < tr.find("> ATMA") and
+                  "> ATCAF0" in tr and not any(w in tr for w in ("> STP", "> VTP", "> ATLNK", "> ATSP", "> VTCFG")),
+                  tr.replace("\n", " | ")[:260])
+            behind = tr[tr.find("> ATMA"):]
+            check("listen: %s: behind the window the chip is taken home (the car's protocol) and the slot's definition taken back" % bus,
+                  "> ATTP" in behind and -1 < behind.find("> ATTP") < behind.find("> VTSET_CAN %s\n" % slot) and buses().get("now") == "obd",
+                  (buses().get("now"), behind.replace("\n", " | ")[:220]))
+        for bus in ("obd", None):
+            st, r = flt_test(ident, bus, 800)
+            check("listen: the same ID %s is not caught: the frame is not on the car's own bus" % ("on bus obd" if bus else "without a bus"),
+                  st == 200 and isinstance(r, dict) and not r.get("ok") and "VTSET_CAN" not in (r.get("transcript") or ""),
+                  r if not isinstance(r, dict) else (r.get("payload"), r.get("error")))
+        for name, got in (("a word that is no bus", flt_test(ident, "hs", 300)),):
+            check("listen: a Test of a filter with %s is refused with 400" % name, got[0] == 400, got)
+        # the 29-bit frame: the slot is defined for the id's width
+        ident29, _, first29 = SIM_FRAMES["status_29b"]
+        sim_frames(["status_29b"])
+        sim_queue_on()
+        for bus in OTHER:
+            st, r = flt_test(ident29, bus)
+            tr = (r.get("transcript") or "") if isinstance(r, dict) else ""
+            check("listen: a Test of a filter on %s catches the 29-bit frame (0x%X), the slot defined for 29-bit IDs" % (bus, ident29),
+                  st == 200 and isinstance(r, dict) and r.get("ok") and str(r.get("payload", "")).startswith("%02X" % first29) and SLOT29[bus] in tr,
+                  r if not isinstance(r, dict) else (r.get("payload"), r.get("error"), tr.replace("\n", " | ")[:160]))
+        # polled: the seven rows and a filter on each of the three buses
+        sim_frames(["rpm_stream"])
+        sim_queue_on()
+        names = ["flt_%s" % b for b in OTHER]
+        t = tables()
+        t["filters"] = [flt_row(ident, b, "flt_%s" % b, monitor_ms=400, period_ms=0) for b in OTHER]
+        st, r = http("/api/autopid/config", "PUT", t)
+        if not check("listen: the tables with a filter on each of the three buses beside the seven rows are accepted", st == 200, r):
+            return
+        time.sleep(2 * PERIOD_MS / 1000.0 + 1)
+        rows = [row[0] for row in ROWS]
+        rounds = 6
+        count, delta, seen = pubs_over(names + rows, rounds * PERIOD_MS / 1000.0)
+        vals = values()
+        check("listen: every filter is published in every round, with the frame's byte (%d)" % first,
+              all(count[n] >= rounds - 1 and vals.get(n) == first for n in names), ({n: count[n] for n in names}, {n: vals.get(n) for n in names}))
+        check("listen: the rows of every bus are still answered in every round, no bus counts a failure",
+              all(count[n] >= rounds - 1 for n in rows) and all(delta[b]["failed"] == 0 for b in ("obd",) + OTHER), ({n: count[n] for n in rows}, delta))
+        say("FACT polled: where the chip was found %s" % {k: seen.count(k) for k in set(seen)})
+        # through the voltage pause: the rows wait, a filter on another bus listens on (it sends nothing)
+        if not check("listen: a voltage pause is in effect under the supply, it stops requests only, and the unit would not go to sleep within the leg",
+                     below > 0 and ap.get("pause_mode") == "requests_only" and not (sl.get("enabled") and (sl.get("sleep_delay_min") or 0) < 3),
+                     "pause under %s mV, pause_mode %s, sleep %s after %s min" % (below, ap.get("pause_mode"), sl.get("enabled"), sl.get("sleep_delay_min"))):
+            return
+        psu = bench_psu.open_psu(None, verbose=False)
+        v0 = psu.voltage_setpoint()
+        psu.set_voltage(below / 1000.0 - 0.6)
+        t0 = time.time()
+        paused = False
+        while time.time() - t0 < 40 and not paused:
+            time.sleep(1)
+            paused = bool((stats().get("stats") or {}).get("paused_voltage"))
+        check("listen: with the supply at %.1f V the poller pauses" % (below / 1000.0 - 0.6), paused, "%.0f s" % (time.time() - t0))
+        time.sleep(2)
+        s2 = bench_bus.sim_status()
+        count, delta, seen = pubs_over(names + rows, rounds * PERIOD_MS / 1000.0)
+        s3 = bench_bus.sim_status()
+        check("listen: under the pause no row of any bus is asked: none published, the simulator counts no request and no frame on the car's bus",
+              all(count[n] == 0 for n in rows) and delta["obd"] == {"ok": 0, "failed": 0} and s3.get("requests") == s2.get("requests") and
+              (s3.get("hs_can") or {}).get("rx_frames") == (s2.get("hs_can") or {}).get("rx_frames"),
+              ({n: count[n] for n in rows}, delta["obd"], "requests %s -> %s" % (s2.get("requests"), s3.get("requests"))))
+        check("listen: under the pause every filter is still published in every round",
+              all(count[n] >= rounds - 1 for n in names) and all(delta[b]["failed"] == 0 for b in OTHER), ({n: count[n] for n in names}, delta))
+        # a Test in the pause with nothing of the poller's on another bus: the chip must not stay there
+        http("/api/autopid/config", "PUT", tables())
+        time.sleep(3)
+        for bus in ("sw", "ch"):
+            st, r = flt_test(ident, bus, 800)
+            found = []
+            for _ in range(12):
+                found.append(buses().get("now"))
+                time.sleep(0.3)
+            check("listen: under the pause, behind a Test of a filter on %s the chip is on the car's protocol in every look" % bus,
+                  st == 200 and set(found) == {"obd"}, {k: found.count(k) for k in set(found)})
+    finally:
+        if psu is not None:
+            psu.set_voltage(v0)
+            psu.close()
+        http("/api/autopid/config", "PUT", tables())
+        if previous:
+            bench_bus.sim_patch(previous)          # one restart of the simulator: its frames and transceiver as found
+        bench_bus.sim_tester(swcan="normal")       # the rows on single-wire CAN behind this leg
+    t1 = time.time()
+    paused = True
+    while time.time() - t1 < 60 and paused:
+        time.sleep(1)
+        paused = bool((stats().get("stats") or {}).get("paused_voltage"))
+    check("listen: with the supply back the poller goes on", not paused, "%.0f s" % (time.time() - t1))
+    time.sleep(2 * PERIOD_MS / 1000.0 * 4 + 1)     # a row that went unanswered while the simulator restarted had backed off
+    delta, _, _ = watch(3 * PERIOD_MS / 1000.0)
+    for bus in ("obd",) + OTHER:
+        check("listen: the rows on %s are answered again" % bus, delta[bus]["ok"] >= 1 and delta[bus]["failed"] == 0, delta[bus])
 
 
 def leg_hold():
@@ -791,7 +1019,7 @@ def main():
         if "filter" in ONLY:
             leg_filter()
         held = "hold" in ONLY and leg_hold()
-        if any(x in ONLY for x in ("poll", "guard", "park", "pause", "app", "raw")):
+        if any(x in ONLY for x in ("poll", "guard", "park", "pause", "app", "raw", "listen")):
             polling = leg_poll(found_ap.get("custom_init", ""), held)
         if polling and "guard" in ONLY:
             leg_guard(live)
@@ -803,6 +1031,8 @@ def main():
             leg_app()
         if polling and "raw" in ONLY:
             leg_raw()
+        if polling and "listen" in ONLY:
+            leg_listen()
     except SystemExit:
         pass
     finally:
