@@ -39,6 +39,8 @@ The bench switches the vehicle-specific row type on with the other two (`specifi
 
 The test route (`POST /api/autopid/test`) applies no bounds: it shows 16777215 on both images.
 
+**What the car itself answers is not on record (looked up 2026-11-27).** The Car Scanner logs of the same model that users sent (the same generation: 29-bit, protocol 7, `18DAF1DB`, `18DAF1DE` and `18DAF1E5` among its eight ECUs) never ask `22F0D0`, so when the ECU turns to `FF FF FF` stays unknown. They do show the habit behind the report: `18DAF1DB` answers an identifier it holds no data for with FF bytes, not with a refusal (`22F190`: 17 bytes of FF every complete time, 5 of 5, while three other ECUs answer the same request with their data). Six ECUs answer a `22` request on the functional id, which the profile's `ATCRA18DAF1DB` narrows to one. Every request in those logs went out on the functional id: whether the ECU answers the same when it is addressed directly is not recorded.
+
 **Regressions on the image with the fix (2026-11-27):** `.\test.ps1 profilee2e` PASS, 40 checks (12:41: the published Leaf ZE1 profile, 128 parameters with their string ranges now applied, every published value right, `polls_failed` +0); `autopid_profile_bench.py` PASS (12:45: 90 of 90 published profiles accepted, the 24-parameter row read); `.\test.ps1 twoecus` PASS, 28 checks (12:45, `test-reports/2026-11-27_1245_twoecus.md`); `.\test.ps1 host autopid` PASS, 209 tests (12:48, [host.md](host.md)); the unit's own 29 rows (an Audi profile among them, 9 string bounds) all still read.
 
 Traps:
