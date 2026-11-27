@@ -16,6 +16,24 @@ the store records the protocol and nothing is written to the OBD chip.
             on protocol 8 in fifteen seconds: all answered, with the unit's
             own CAN node on too (it cannot read that talk and goes
             listen-only: the unit's own conversation does not stop it)
+  body      A car whose CAN pins carry a bus OBD is never asked on, and whose
+            engine ECU sits on the K-line (GitHub issue #1022, a 2008 Fiat
+            Ducato: "Detect my vehicle" said "The car did not answer" and the
+            protocol set to 5 by hand worked). The simulator as a KWP car on
+            the K-line with its HS CAN at 50 kbit/s broadcasting and
+            answering nothing; the PCAN adapter acknowledges that bus when one
+            of its channels reads it. Automate on, the protocol on Automatic,
+            three rows, a restart: the bus guard keeps the chip off the CAN
+            pins (their traffic cannot be read at 250 or 500 kbit/s), and the
+            unit stays parked: for 30 s nothing is written to the chip, no
+            K-line start, no poll, nothing on the CAN pins, the car's record
+            as it was. First contact does not look on SAE J1850 and the
+            K-line there (Ali, 2026-11-27: the detection only; a build of
+            that day that did was taken out). With --detect, first: Automate off, a restart on
+            that car, "Detect my vehicle" by hand: the job is not refused for
+            the traffic, asks on no CAN protocol, finds the car on protocol 5
+            with its VIN, and the chip holds 5 (one save); the way back by a
+            detection on the unit's own CAN car (one more save)
   startup   Automate on, the protocol on Automatic, three rows in the tables.
             The simulator as an ISO 9141-2 car alone, a restart: the stored
             CAN protocol stays silent, the walk goes on behind the CAN
@@ -49,10 +67,11 @@ the store records the protocol and nothing is written to the OBD chip.
             the unit's own CAN car, a restart, the detection again
 
 The simulator, the unit's tables, its Automate settings and the vehicle
-store are put back as found. Automate must be off at the start. Seven planned
-restarts (ten with --detect); no write of the OBD chip without --detect.
+store are put back as found. Automate must be off at the start. Eight planned
+restarts (fourteen with --detect); no write of the OBD chip without --detect
+(five with it: to 2, to 5, back, and to 5 and back for the body leg).
 
-usage: precan_contact_bench.py [--dut localhost:18081] [--only test,startup] [--detect] [--can off|on]
+usage: precan_contact_bench.py [--dut localhost:18081] [--only test,body,startup] [--detect] [--can off|on]
   the DUT through an ssh tunnel (`ssh -N -L 18081:<dut>:80 rpi001`), ECU sim
   v2 at its own address (firmware v1.00-16 or later for the detect leg).
   --can: the unit's own CAN node off or on for the run, put back after (as
@@ -73,12 +92,14 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "lib"))
 sys.path.insert(0, HERE)
 import bench_bus            # noqa: E402
+import body_bus             # noqa: E402
 import chip_nvm             # noqa: E402
 import kline_accept_bench as kb     # noqa: E402  (its helpers; it reads --dut and --detect the same way)
 
-ONLY = [x for x in kb.arg("--only", "test,startup").split(",") if x]
+ONLY = [x for x in kb.arg("--only", "test,body,startup").split(",") if x]
 DETECT = "--detect" in kb.ARGS
 CAN = kb.arg("--can", "")           # "off" / "on": the unit's own CAN node for the run (as found without it)
+BODY_KBPS = 50                      # the body bus on the CAN pins: a bit rate OBD is never asked at
 ROWS = kb.ROWS
 PERIOD_S = kb.PERIOD_MS / 1000.0
 check, say, http = kb.check, kb.say, kb.http
@@ -271,6 +292,150 @@ def leg_test():
           (good, refused[:2]))
 
 
+def body_bus_on():
+    """the simulator as a KWP car on the K-line with a body bus on the CAN pins; the adapter acknowledges it when one of
+    its channels reads it. Returns the acker (stop() it) and the simulator's HS CAN counters at that moment"""
+    bench_bus.sim_only("kwpfast")
+    bench_bus.sim_body_bus(BODY_KBPS)
+    time.sleep(1)
+    acker = body_bus.Acker(BODY_KBPS)
+    ch = acker.start()
+    time.sleep(2)
+    hs = (bench_bus.sim_status() or {}).get("hs_can") or {}
+    say("FACT a body bus at %d kbit/s on the CAN pins, the engine ECU on the K-line: %s; the simulator's HS CAN sent %s frames so far" % (
+        BODY_KBPS, ("%s acknowledges (%d frames in 2 s, %d error frames)" % (ch, acker.frames, acker.errors)) if ch else
+        "NOBODY acknowledges (no channel of the adapter reads it): the simulator repeats its frame", hs.get("tx_frames")))
+    return acker, hs
+
+
+def can_pins_left_alone(acker, hs0):
+    """nothing of the unit's was on the CAN pins: at the wrong bit rate it shows as errors at the simulator and at the
+    adapter, and the simulator receives no frame from anybody. Returns (ok, the numbers)"""
+    hs1 = (bench_bus.sim_status() or {}).get("hs_can") or {}
+    rx = hs1.get("rx_frames", 0) - hs0.get("rx_frames", 0)
+    errs = hs1.get("bus_errors", 0) - hs0.get("bus_errors", 0) if acker.channel else 0   # unacknowledged: its own errors count
+    return rx == 0 and errs == 0 and acker.errors == 0, "the simulator's HS CAN received +%d, bus errors +%d; the adapter %d frames, %d error frames" % (
+        rx, hs1.get("bus_errors", 0) - hs0.get("bus_errors", 0), acker.frames, acker.errors)
+
+
+def chip_tx():
+    """bytes the firmware has written to the OBD chip since the boot (GET /api/obd_chip `uart.tx_bytes`), or None"""
+    st, oc = http("/api/obd_chip")
+    return ((oc.get("uart") or {}).get("tx_bytes")) if isinstance(oc, dict) else None
+
+
+def detect_once():
+    """"Detect my vehicle" pressed once: (the start's http status, its body, the job's last status, the protocols tried, seconds)"""
+    t0 = time.time()
+    st, r = http("/api/autopid/vehicles/detect", "POST", {})
+    tried, js, ran = [], {}, False
+    while st == 202 and time.time() - t0 < 180:
+        st2, js = http("/api/autopid/std_scan", timeout=6)
+        js = js if isinstance(js, dict) else {}
+        ran = ran or js.get("status") == "running"
+        if js.get("trying") and (not tried or tried[-1] != js["trying"]):
+            tried.append(js["trying"])
+        if js.get("status") in ("done", "failed") and (ran or time.time() - t0 > 6):
+            break
+        time.sleep(0.25)
+    if st != 202:
+        st2, js = http("/api/autopid/std_scan", timeout=6)
+        js = js if isinstance(js, dict) else {}
+    return st, r, js, tried, int(time.time() - t0)
+
+
+def leg_body(car0, g0):
+    """GitHub issue #1022: the CAN pins carry a bus OBD is never asked on, the car answers on the K-line. Until
+    2026-11-27 the bus guard's park for the CAN pins stopped the detection before its own walk over SAE J1850 and the
+    K-line (409, "the vehicle bus carries traffic at a bitrate that could not be read (not 250 or 500 kbit/s): nothing
+    is transmitted", which the wizard showed as "The car did not answer"). The detection goes through now; the poller
+    and first contact stay parked on such a bus, and that is checked too"""
+    vin = car0.get("vin", car0.get("key"))
+    acker = None
+    try:
+        # Automate off before the simulator changes: a unit that polls its CAN car keeps the verdict of that bus (a bus
+        # does not change its bit rate under a unit that stays plugged in) and would ask at 500 kbit/s into the body bus
+        ok, why = kb.apply({"enabled": False, "std_protocol": "0"})
+        if not check("body: Automate off, the protocol on Automatic", ok, why):
+            return
+        if DETECT:
+            # by hand, the car's record on its CAN protocol: nobody named a protocol this car answers on
+            acker, hs0 = body_bus_on()
+            if not check("body: a restart on a K-line car with a body bus on the CAN pins, Automate off", restart()):
+                return
+            time.sleep(3)
+            ga, ka = kb.guard(), kb.kline()
+            st, r, js, tried, secs = detect_once()
+            gb, car, kc = kb.guard(), kb.own_car(), kb.kline()
+            st2, res = http("/api/autopid/std_scan/result", timeout=20)
+            res = res if isinstance(res, dict) else {}
+            alone, numbers = can_pins_left_alone(acker, hs0)
+            say("FACT detection on that car: start http %s %s; %s after %d s, tried %r, error %r; result protocol %s, vin %s, %s PIDs; the "
+                "chip's store %s -> %s, saves %s; the simulator's K-line fast inits +%d; %s" % (
+                    st, str(r)[:150], js.get("status"), secs, "".join(tried), js.get("error"), res.get("protocol_detected"), res.get("vin"),
+                    js.get("found"), ga.get("stored_protocol"), gb.get("stored_protocol"), gb.get("protocol_saves"),
+                    kc.get("inits_fast", 0) - ka.get("inits_fast", 0), numbers))
+            check("body: the detection is not refused for the traffic on the CAN pins (SAE J1850 and the K-line are other pins)",
+                  st == 202, (st, str(r)[:160]))
+            check("body: the detection finds the car on protocol 5 with its VIN and its supported PIDs, and asks on no CAN protocol",
+                  js.get("status") == "done" and not js.get("error") and res.get("protocol_detected") == "5" and res.get("vin") == vin and
+                  (js.get("found") or 0) > 0 and bool(tried) and not any(p in "6789" for p in tried),
+                  (js.get("status"), js.get("error"), res.get("protocol_detected"), "".join(tried)))
+            check("body: the detection left the CAN pins alone", alone, numbers)
+            check("body: the car's record names 5 and the chip holds it after ONE save",
+                  car.get("protocol") == "5" and kb.digit(gb.get("stored_protocol", "")) == "5" and gb.get("protocol_saves") == 1,
+                  (car.get("protocol"), gb.get("stored_protocol"), gb.get("protocol_saves")))
+            acker.stop()
+            acker = None
+            # the way back for the start-up half: the record on its CAN protocol again (one save a boot)
+            bench_bus.sim_only("hs11_500")
+            back = restart()
+            st, js, tried, secs = kb.detect_run()
+            check("body: the way back: a detection on the unit's own CAN car, the record and the chip's store as found",
+                  back and js.get("status") == "done" and kb.own_car().get("protocol") == car0.get("protocol") and
+                  kb.digit(kb.guard().get("stored_protocol", "")) == kb.digit(g0.get("stored_protocol", "")),
+                  (js.get("status"), kb.own_car().get("protocol"), kb.guard().get("stored_protocol")))
+        # at start-up, Automate on, the record on a CAN protocol: the chip is parked for the CAN pins and the unit sends
+        # nothing anywhere. Not looked for on SAE J1850 and the K-line by itself (Ali, 2026-11-27: the detection only)
+        group, pids = kb.rows_table(kb.PERIOD_MS)
+        st, r = http("/api/autopid/config", "PUT", {"groups": [group], "pids": pids, "filters": []})
+        if not check("body: the tables are accepted", st == 200, r):
+            return
+        acker, hs0 = body_bus_on()
+        ok, why = kb.apply({"enabled": True, "std_protocol": "0"})
+        if ok and why == "as wanted":
+            ok = restart()
+        if not check("body: Automate on, the protocol on Automatic, a restart on that car", ok, why):
+            return
+        t0, g = time.time(), {}
+        while time.time() - t0 < 30:        # the first look needs 0.4 s of the bus
+            g = kb.stats().get("bus_guard") or {}
+            if g.get("parked"):
+                break
+            time.sleep(0.5)
+        tx0, c0, p0 = chip_tx(), kb.chip_kline(), (kb.stats().get("stats") or {})
+        time.sleep(30)
+        tx1, c1, p1 = chip_tx(), kb.chip_kline(), (kb.stats().get("stats") or {})
+        g = kb.stats().get("bus_guard") or {}
+        alone, numbers = can_pins_left_alone(acker, hs0)
+        say("FACT that car at start-up, 30 s: the bus guard %s; chip tx_bytes +%s, K-line starts +%d failed +%d, polls ok +%d failed +%d, the "
+            "record on %s; %s" % ({k: g.get(k) for k in ("bus", "verdict", "parked", "reason")}, (tx1 - tx0) if None not in (tx0, tx1) else "?",
+                                  c1.get("starts", 0) - c0.get("starts", 0), c1.get("failed", 0) - c0.get("failed", 0),
+                                  p1.get("polls_ok", 0) - p0.get("polls_ok", 0), p1.get("polls_failed", 0) - p0.get("polls_failed", 0),
+                                  kb.own_car().get("protocol"), numbers))
+        check("body: at start-up the unit is parked for the CAN pins, and its sentence says where nothing is sent",
+              g.get("parked") is True and g.get("bus") == "unreadable" and "nothing is sent on CAN" in str(g.get("reason")),
+              {k: g.get(k) for k in ("bus", "verdict", "parked", "reason")})
+        check("body: parked, it writes nothing to the chip for 30 s: no request on any protocol, no K-line start, the record stays",
+              tx0 is not None and tx1 == tx0 and c1.get("starts", 0) == c0.get("starts", 0) and c1.get("failed", 0) == c0.get("failed", 0) and
+              p1.get("polls_ok", 0) == p0.get("polls_ok", 0) and p1.get("polls_failed", 0) == p0.get("polls_failed", 0) and
+              kb.own_car().get("protocol") == car0.get("protocol"), (tx0, tx1, c1, kb.own_car().get("protocol")))
+        check("body: start-up left the CAN pins alone", alone, numbers)
+    finally:
+        if acker is not None:
+            acker.stop()
+
+
 def leg_detect(car0, g0):
     vin = car0.get("vin", car0.get("key"))
     # a car WiCAN has never seen, a J1850 VPW one: nobody asks for a detection. The unit's own car is forgotten first
@@ -351,8 +516,10 @@ def main():
             raise SystemExit(1)
         if "test" in ONLY:
             leg_test()
-        if DETECT:
+        if DETECT and ("detect" in ONLY or "--only" not in kb.ARGS):
             leg_detect(car0, g0)
+        if "body" in ONLY:
+            leg_body(car0, g0)
         if "startup" in ONLY:
             leg_startup(car0, g0, (CAN == "on") if CAN in ("on", "off") else bool(can0.get("enabled")))
     except SystemExit:
@@ -383,6 +550,13 @@ def main():
             check("the unit's tables as found", st == 200 and back == found_cfg)
         check("the vehicle store as found (the car, its name, its protocol)", kb.store_view(kb.vehicles()) == kb.store_view(found_store),
               kb.store_view(kb.vehicles()))
+        # a car that was forgotten and found again comes back without its profile and its init (2026-11-27: the bench
+        # unit's own car lost its profile to the detect leg, and the check above did not look at it)
+        entry = ("name", "profile", "specific_init")
+        if any(kb.own_car().get(k, "") != car0.get(k, "") for k in entry):
+            http("/api/autopid/vehicles/" + urllib.parse.quote(car0.get("key"), safe=""), "PUT", {k: car0.get(k, "") for k in entry})
+        check("the car's name, profile and init as found", all(kb.own_car().get(k, "") == car0.get(k, "") for k in entry),
+              {k: kb.own_car().get(k) for k in entry})
         check("the simulator's settings as found", kb.sim_back(sim0))
 
     check("Automate's settings read as found", kb.settings() == ap)

@@ -3197,6 +3197,10 @@
          profile's requests in the body the job confirms it by the profile
          (phase "probe", no rows), without them it fails as before */
       if (state.scan.status === "running") return J({ error: "scan running" }, 409);
+      /* the preset `detect: "refused"` (2026-11-27): the bus guard refuses the job at
+         the door, as it does for a CAN protocol pinned by the setting on a bus that
+         runs at the other bit rate. Nothing is asked: 409 with its sentence */
+      if (state.detect === "refused") return J({ error: "the vehicle bus runs at 250 kbit/s and the protocol setting 6 transmits at 500: nothing is transmitted (set the protocol to Automatic)" }, 409);
       const probe = body && typeof body === "object" ? body : {};
       const probeCmds = Array.isArray(probe.cmds) ? probe.cmds.length : 0;
       const nothingStd = state.detect === "profileonly";
@@ -12889,7 +12893,13 @@ SCREENS.vehicle=async()=>{
         h("input",{id:"qs-veh-name",value:W.vehName,placeholder:"e.g. Family car",style:"max-width:260px",oninput:e=>{W.vehName=e.target.value;W.vehNameAuto=false;}}),
         h("span",{class:"help",style:"font-size:12px"},car1&&W.vehNameAuto?"from the profile; change it if you like":"shown on the Status page and in Home Assistant"))));
       out.push(sub("2. Detect the vehicle"));
-      if(phase==="noanswer")out.push(banner("warn","alert",h("b",{},"The car did not answer. "),
+      /* a detection WiCAN refused to start (409: the bus guard's sentence, or
+         another job on the chip) asked the car nothing, so the ignition and
+         the plug are not the advice (2026-11-27, GitHub issue #1022: a refusal
+         read "The car did not answer ... usually the ignition is off") */
+      if(phase==="noanswer"&&W.scanStatus&&W.scanStatus.refused)out.push(banner("warn","alert",h("b",{},"WiCAN did not ask the car. "),
+        (W.scanStatus.error?W.scanStatus.error+". ":"")+"Nothing was sent to the vehicle."));
+      else if(phase==="noanswer")out.push(banner("warn","alert",h("b",{},"The car did not answer. "),
         (W.scanStatus&&W.scanStatus.error?W.scanStatus.error+". ":"")+"Usually the ignition is off or the plug is not seated. Turn the ignition on (an EV in ready mode) and try again. You can also skip: WiCAN detects the car by itself the first time it answers, and the Status page tells you when it has."));
       const detBtn=btn(phase==="noanswer"?"Try again":"Detect my vehicle",startDetect,"pri",{icon:"refresh",disabled:!(W.plugged&&W.ignition)||chipOld()});
       const ack=(key,id,title,text)=>h("label",{class:"qs-agree"},h("input",{type:"checkbox",id,checked:W[key],onchange:e=>{W[key]=e.target.checked;detBtn.disabled=!(W.plugged&&W.ignition)||chipOld();}}),h("div",{},h("b",{},title),h("span",{},text)));
@@ -12902,7 +12912,7 @@ SCREENS.vehicle=async()=>{
       if(!D.vehicles)out.push(note("","This firmware keeps one vehicle only (no vehicle store): the result is stored, but moving WiCAN between cars needs a new scan each time."));
     }else if(phase==="detecting"){
       out.push(sub("2. Detecting the vehicle"));
-      const phases=[["protocol","Detecting the OBD protocol","WiCAN asks on each CAN protocol in turn, first the OBD-II way (0100), then the way of newer vans and trucks (ISO 27145: 22 F400). A few seconds."],["vin","Reading the VIN","Mode 09 PID 02, then UDS 22 F190 (22 F802 on an ISO 27145 vehicle). Without either, the car is identified by the set of ECUs that answered."],["pids","Finding the standard PIDs","The support bitmaps of every ECU that answers (0100, 0120 and up, or 22 F400 and up). Stored under this vehicle."],["network","Listening to the vehicle network","Is this a J1939 network (trucks, buses, agricultural machines)? WiCAN only listens here: the controllers that broadcast, the groups they send, the VIN when one is broadcast."]];
+      const phases=[["protocol","Detecting the OBD protocol","WiCAN asks on each CAN protocol in turn, first the OBD-II way (0100), then the way of newer vans and trucks (ISO 27145: 22 F400). A few seconds. Then on SAE J1850 and the K-line, for a car from before CAN: up to ten seconds more."],["vin","Reading the VIN","Mode 09 PID 02, then UDS 22 F190 (22 F802 on an ISO 27145 vehicle). Without either, the car is identified by the set of ECUs that answered."],["pids","Finding the standard PIDs","The support bitmaps of every ECU that answers (0100, 0120 and up, or 22 F400 and up). Stored under this vehicle."],["network","Listening to the vehicle network","Is this a J1939 network (trucks, buses, agricultural machines)? WiCAN only listens here: the controllers that broadcast, the groups they send, the VIN when one is broadcast."]];
       phases.push(["probe","Asking the profile's own requests","Nothing standard answered: the profile's first requests confirm the car and give the ECUs it is identified by."]);
       const ph=W.scanStatus&&W.scanStatus.phase;const idx=Math.max(0,phases.findIndex(p=>p[0]===ph));
       phases.forEach((p,i)=>out.push(check(i<idx?"ok":i===idx?"run":"","info",p[1],p[2],i<idx?chip("Done","ok"):i===idx?chip("Working",""):null)));
@@ -13046,7 +13056,7 @@ SCREENS.vehicle=async()=>{
         await loadProfiles();
         W.vehPhase="result";render();
       });
-    }catch(e){W.vehPhase="noanswer";W.scanStatus={error:e.message};render();}
+    }catch(e){W.vehPhase="noanswer";W.scanStatus={error:e.message,refused:e.status===409};render();}
   }
   /* Test profile: one real request per profile PID through POST /api/autopid/test,
      every parameter decoded from that reply; shown in a popup, nothing saved */

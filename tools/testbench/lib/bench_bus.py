@@ -21,7 +21,8 @@ chip follows its protocol (ATTP).
 
 As a module: sim_get/sim_set/sim_status, sim_patch (any keys of any of its
 settings groups behind one reboot), sim_only (a one-bus state out of
-SIM_BUSES, on sim_patch), sim_tester, sim_dtcs (its trouble codes),
+SIM_BUSES, on sim_patch), sim_body_bus (its HS CAN as a bus OBD is never
+asked on, behind sim_only), sim_tester, sim_dtcs (its trouble codes),
 sim_rx_seq (the CAN frames it has received), sim_bus_live,
 sim_restart_state/sim_restart_delta, dut_can(). The simulator's REST is
 reachable from the PC only (its USB network link, found by sim_net.py); its
@@ -401,6 +402,20 @@ def sim_only(bus, base=SIM_URL):
         time.sleep(0.3)
         running = sim_status(base)
     return previous, running
+
+
+def sim_body_bus(kbps=50, base=SIM_URL):
+    """ECU sim v2's HS CAN as a bus OBD is never asked on: on at `kbps`,
+    broadcasting its profile's frames and answering nothing, the way a body
+    bus sits on pins 6 and 14 of a car whose OBD lives on other pins (a 2008
+    Fiat Ducato: 50 kbit/s there, the engine ECU on the K-line; GitHub issue
+    #1022). Call it behind sim_only() of the bus the car answers on; one more
+    reboot. Nobody acknowledges such a bus by itself: lib/body_bus.py puts
+    the PCAN adapter on it as the second node. Returns (previous, running)
+    like sim_patch; the bit rate goes back with the settings group as found."""
+    return sim_patch({"ecu_sim": {"hs_enabled": True, "hs_bitrate_kbps": int(kbps), "hs_obd11": False,
+                                  "hs_obd29": False, "hs_uds": False, "hs_j1939": False,
+                                  "hs_broadcast": True, "broadcast_enabled": True}}, base)
 
 
 #: ECU sim v2's ECUs on the pins that are not CAN (K-line, J1850), each with

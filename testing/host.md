@@ -10,6 +10,30 @@ Host **unit** suites (`components/*/host_test`, 526 tests across 44 components a
 
 **Pi offline:** `bash tools/testbench/host_gcc_wsl.sh <vpn_manager|config_backup>` from WSL compiles that PURE suite with the system gcc + Unity under ASan/UBSan (no IDF build; 2026-10-16, issues #985 to #989: `vpn_manager` 11, `config_backup` 24; add a case per IDF-free suite)
 
+**2026-11-27 11:08, `.\test.ps1 host autopid`: PASS, 208 tests (2 new)**
+(`test-reports/2026-11-27_1108_host_autopid.md`), a park of the bus guard is about the CAN pins
+and leaves SAE J1850 and the K-line open to the detection job (GitHub issue #1022, a car with its
+engine ECU on the K-line behind a body bus on pins 6 and 14; the device half and its records are in
+[precan_contact_bench.md](precan_contact_bench.md)). The sources as they are after Ali's decision
+of that day (the detection only: first contact and the poller stay parked, and their files and
+`test_dialect.c` are as they were). Two earlier runs of the day belong to a build that also let
+first contact look on those pins: 08:38 (208 tests, with the walk's rule taking the count of CAN
+protocols a bus could be asked on) and 09:35 (209 tests, with a case that kept a parked poller's
+candidates off every CAN protocol, written behind a regression the stage `autobaud` caught,
+[autobaud.md](autobaud.md)); that code and its cases went out with the decision. In the new
+`test_other_pins.c`:
+`test_guard_a_park_for_can_leaves_the_other_pins_open` (`ap_guard_other_pins_open()`: open for
+the chip's search and for a stored CAN protocol on traffic that cannot be read, also when a CAN
+node of the unit's own said so; closed when the setting pins a CAN protocol, on unreadable
+traffic and at the other bit rate; nothing to open without a park, and none for a car known on
+the K-line, which is not parked at all) and `test_guard_the_parks_sentence_names_the_can_pins`
+(the park's sentence word for word with "nothing is sent on CAN", a pinned CAN protocol at the
+other bit rate still "nothing is transmitted", and the status of a car asked on a K-line or J1850
+protocol behind such a bus: "protocol 5 is asked on other pins" where it read "vehicle bus not
+probed"). `test_guard_a_fixed_nodes_unreadable_names_its_setting` (`test_bus_guard.c`) reads the
+node's sentence with the new words. A host case cannot be red before code it does not compile
+against: the red record of this change is the bench leg's.
+
 **2026-11-27 01:22, `.\test.ps1 host autopid`: PASS, 206 tests (2 new)**
 (`test-reports/2026-11-27_0122_host_autopid.md`), the ECU a row reads when several answer one
 request (a field report of 2026-11-24, an odometer at FFFFFF = 16777215 km; the device half and

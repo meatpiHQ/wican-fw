@@ -1064,6 +1064,10 @@
          profile's requests in the body the job confirms it by the profile
          (phase "probe", no rows), without them it fails as before */
       if (state.scan.status === "running") return J({ error: "scan running" }, 409);
+      /* the preset `detect: "refused"` (2026-11-27): the bus guard refuses the job at
+         the door, as it does for a CAN protocol pinned by the setting on a bus that
+         runs at the other bit rate. Nothing is asked: 409 with its sentence */
+      if (state.detect === "refused") return J({ error: "the vehicle bus runs at 250 kbit/s and the protocol setting 6 transmits at 500: nothing is transmitted (set the protocol to Automatic)" }, 409);
       const probe = body && typeof body === "object" ? body : {};
       const probeCmds = Array.isArray(probe.cmds) ? probe.cmds.length : 0;
       const nothingStd = state.detect === "profileonly";

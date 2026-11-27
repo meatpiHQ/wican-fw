@@ -22,6 +22,9 @@
      D  the list: a car without a VIN shows "No VIN" and "Same car as...";
         folding it into the VIN car calls the merge route and drops the entry
      E  no JS errors on any of them
+     F  (2026-11-27) a detection WiCAN refuses to start says so, in the
+        refusal's own words and without the ignition advice; and while a
+        detection looks, the step names SAE J1850 and the K-line too
    usage: node probe_profile_first.mjs   (after make_preview.py; node >= 20) */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -182,6 +185,27 @@ async function detect(p, name, wait = 4800) {
     check("D: the merge route was called with the VIN car as the target", merges.length === 1 && merges[0].from === "fp:0a70ff20" && merges[0].into === VIN, merges);
     check("D: the list is down to the VIN car, which carries the face", p.$$(".qs-net").length === 1 && /Bench car/.test(p.text()) && (p.M().vehicles.vehicles[0].faces || []).includes("0a70ff20"), p.M().vehicles.vehicles[0].faces);
     check("D: no JS errors", p.errs.length === 0, p.errs.slice(0, 2));
+  }
+  /* F (2026-11-27, GitHub issue #1022): a detection WiCAN refuses to start asked the car
+     nothing. Until then the banner read "The car did not answer" with the ignition and
+     the plug as the advice, whatever the refusal said */
+  {
+    const p = await openVehicle({ __name: "F1", detect: "refused" });
+    await detect(p, "F1", 900);
+    const t = p.text();
+    check("F1: a refused detection says WiCAN did not ask, with the refusal's own sentence", /WiCAN did not ask the car\. the vehicle bus runs at 250 kbit\/s and the protocol setting 6 transmits at 500: nothing is transmitted \(set the protocol to Automatic\)\. Nothing was sent to the vehicle\./.test(t),
+      (t.match(/WiCAN did not ask[^]{0,220}/) || [(t.match(/did not answer[^]{0,160}/) || [""])[0]])[0]);
+    check("F1: it does not blame the ignition or the plug, and does not say the car did not answer", !/The car did not answer/.test(t) && !/Usually the ignition is off/.test(t));
+    check("F1: Try again and section 1 are still there", !!p.btn(/Try again/) && /1\. Which car is this\?/.test(t));
+    check("F1: no JS errors", p.errs.length === 0, p.errs.slice(0, 2));
+  }
+  {
+    const p = await openVehicle({ __name: "F2" });
+    p.tick(p.$("#qs-plugged")); p.tick(p.$("#qs-ignition"));
+    p.btn(/Detect my vehicle/).click(); await sleep(500);
+    check("F2: while it looks, the step says the job goes on to SAE J1850 and the K-line behind the CAN protocols",
+      /Detecting the OBD protocol/.test(p.text()) && /Then on SAE J1850 and the K-line, for a car from before CAN/.test(p.text()), (p.text().match(/Detecting the OBD protocol[^]{0,260}/) || [""])[0]);
+    check("F2: no JS errors", p.errs.length === 0, p.errs.slice(0, 2));
   }
 
   console.log(fails ? `FAILED ${fails} of ${total}` : `ALL PASS (${total} checks)`);

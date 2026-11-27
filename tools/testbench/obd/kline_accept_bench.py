@@ -186,7 +186,10 @@ def apply(wanted):
 
 
 def sim_groups():
-    return {g: {k: v for k, v in bench_bus.sim_get(g).items() if k not in ("degraded", "pending_reboot")} for g in SIM_GROUPS}
+    # `bitrate` and `id_format` are bench_bus's view of ECU sim v2's HS CAN, not keys it stores: with them in the
+    # snapshot a leg that left the HS bit rate changed could not be put back (sim_patch: "no key ['bitrate']", 2026-11-27)
+    return {g: {k: v for k, v in bench_bus.sim_get(g).items() if k not in ("degraded", "pending_reboot", "bitrate", "id_format")}
+            for g in SIM_GROUPS}
 
 
 def sim_back(found):
