@@ -297,6 +297,13 @@ bool autopid_test_pid_contains_case_insensitive(const char *haystack, const char
     return false;
 }
 
+/* J1850 / K-line (ELM protocols 1 to 5): 3-byte header printed as 3 tokens. */
+static bool autopid_test_pid_kline(void)
+{
+    int32_t protocol = -1;
+    return autopid_get_protocol_number(&protocol) == ESP_OK && protocol >= 1 && protocol <= 5;
+}
+
 bool autopid_test_pid_parse_hex_byte_stream(const char *s, uint8_t *out, size_t out_max, uint32_t *out_len)
 {
     if (!s || !out || !out_len)
@@ -345,7 +352,12 @@ bool autopid_test_pid_parse_hex_byte_stream(const char *s, uint8_t *out, size_t 
                 switch (tok_len)
                 {
                 case 1:  drop = 3; break;      /* J1939 prio + PGN + SA        */
-                case 2:  drop = 4; break;      /* spaced 29-bit id (MIC3624)   */
+                case 2:                         /* spaced 29-bit id (MIC3624),  */
+                    /* or J1850 / K-line "48 6B 11 41 0C": drop 2 tokens, the
+                     * source address stays in the PCI slot, as in the live
+                     * parse_elm327_response(). */
+                    drop = autopid_test_pid_kline() ? 2 : 4;
+                    break;
                 case 3:                         /* 11-bit id                    */
                 case 8:  drop = 1; break;      /* one-token 29-bit id          */
                 default: drop = 0; break;      /* no recognisable header       */
