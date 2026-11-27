@@ -10,6 +10,19 @@ Host **unit** suites (`components/*/host_test`, 526 tests across 44 components a
 
 **Pi offline:** `bash tools/testbench/host_gcc_wsl.sh <vpn_manager|config_backup>` from WSL compiles that PURE suite with the system gcc + Unity under ASan/UBSan (no IDF build; 2026-10-16, issues #985 to #989: `vpn_manager` 11, `config_backup` 24; add a case per IDF-free suite)
 
+**2026-11-27 01:22, `.\test.ps1 host autopid`: PASS, 206 tests (2 new)**
+(`test-reports/2026-11-27_0122_host_autopid.md`), the ECU a row reads when several answer one
+request (a field report of 2026-11-24, an odometer at FFFFFF = 16777215 km; the device half and
+its records are in [twoecus.md](twoecus.md)). In `test_frames.c`:
+`test_frames_row_reads_the_first_answer` (the bench's own print, `7EC 06 62 20 06 01 E2 40` then
+`7EA 06 62 20 06 FF FF FF`: 123456 for a custom or vehicle row, 16777215 for a standard row and for
+`ap_resp_frames`; the order turned round; a refusal behind the answer and ahead of it; the answer
+to another identifier passed over; nobody answering, marked so; nothing to compare; a raw row's
+request) and `test_frames_row_keeps_one_ecus_frames` (two long replies with their frames mixed,
+29-bit ids, a headers-off reply and a pre-CAN reply with their one view, an error line, an empty
+reply, a missing argument). The cross-talk guard moved to `autopid_resp_echo.c` unchanged: its
+cases (`test_resp_raw_cmd_request`, `test_resp_raw_row_guard`) pass as they stood.
+
 **2026-11-26 23:57, `.\test.ps1 host autopid`: PASS, 204 tests (1 more)**
 (`test-reports/2026-11-26_2357_host_autopid.md`), components pull request 15 (overkillthemighty,
 GitHub issue #1078: a filter listens on its bus) with our part on top; the device half and its
