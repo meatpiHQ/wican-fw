@@ -31,6 +31,7 @@
 #include "obd_chip.h"
 #include "ota_manager.h"
 #include "restart_tracker.h"
+#include "script_engine.h"
 #include "usb_acm_cli.h"
 #include "espnetlink_link.h"
 #include "wifi_manager.h"
@@ -544,12 +545,17 @@ void main_glue_wire_factory_reset(void)
     (void)api_http_set_factory_reset(main_factory_reset);
 }
 
-/* ---- no restart while the OBD chip's firmware is written -------------------------- */
+/* ---- no restart while the OBD chip's firmware or an ECU is written ---------------- */
 
 static const char *restart_hold(void)
 {
-    return obd_chip_kept_for_update() ? "the OBD chip's firmware is being updated"
-                                      : NULL;
+    if (obd_chip_kept_for_update())
+    {
+        return "the OBD chip's firmware is being updated";
+    }
+
+    /* a script past its flash_commit() is writing an ECU (2026-11-27) */
+    return script_engine_busy_reason();
 }
 
 void main_glue_wire_restart_hold(void)
