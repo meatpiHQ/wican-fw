@@ -17,6 +17,14 @@ The bench plays it on the ECU simulator (its fuel level set to 100 %, raw
                                                          on a custom row: 100
   FuelWrongScale  custom 012F  B3*0.4           0..100  102: outside the
                                                          band, stays dropped
+and three rows as the web page stores a vehicle profile's (2026-11-27, a
+field report: an odometer at FFFFFF = 16777215 km on v6, never on 4.5x; its
+max was "1000000"). Every published profile writes `min` / `max` as strings,
+the page's import keeps them so, and v6 read a bound only as a JSON number:
+no bound of a profile was applied.
+  ProfileWrongScale specific 012F B3*0.4          "0".."100"  102: dropped
+  ProfileNoise      specific 012F B3*0.3921568692 "0".."100"  the float noise: 100
+  ProfileInside     specific 012F B3*0.2          "0".."100"  51: read
 Then the generator: `GET /api/autopid/std_table` must hand out the fuel
 row as `B3*100/255` (0xFF decodes to exactly 100, no float noise) and the
 test route must decode it so.
@@ -91,15 +99,21 @@ def sim_set_level(v):
 
 
 def table():
-    def row(name, typ, cmd, expr):
+    def row(name, typ, cmd, expr, lo=0, hi=100):
         return {"name": name, "type": typ, "cmd": cmd, "group": "bounds",
                 "parameters": [{"name": name, "expression": expr, "unit": "%",
-                                "min": 0, "max": 100}]}
+                                "min": lo, "max": hi}]}
     return {"groups": [{"name": "bounds", "enabled": True, "period_ms": 1000}],
             "pids": [row("FuelTankLevel", "std", "012F", NOISE),
                      row("CalcEngineLoad", "std", "0104", NOISE),
                      row("FuelCustomNoise", "custom", "012F", NOISE),
-                     row("FuelWrongScale", "custom", "012F", "B3*0.4")],
+                     row("FuelWrongScale", "custom", "012F", "B3*0.4"),
+                     # a vehicle profile's rows as the web page stores them:
+                     # the bounds as STRINGS, the way every published
+                     # profile writes them (2026-11-27)
+                     row("ProfileWrongScale", "specific", "012F", "B3*0.4", "0", "100"),
+                     row("ProfileNoise", "specific", "012F", NOISE, "0", "100"),
+                     row("ProfileInside", "specific", "012F", "B3*0.2", "0", "100")],
             "filters": []}
 
 
@@ -194,7 +208,8 @@ def main():
         new_settings = dict(saved_settings)
         for k in ("degraded", "pending_reboot"):
             new_settings.pop(k, None)
-        want = {"enabled": True, "std_enabled": True, "custom_enabled": True}
+        want = {"enabled": True, "std_enabled": True, "custom_enabled": True,
+                "specific_enabled": True}
         if any(new_settings.get(k) != v for k, v in want.items()):
             new_settings.update(want)
             st, body = http(base, "PUT", "/api/settings/autopid", new_settings)
@@ -230,6 +245,21 @@ def main():
         c.add("a custom row decoding 102 against a max of 100 stays dropped",
               vals.get("FuelWrongScale") is None,
               "FuelWrongScale %s" % vals.get("FuelWrongScale"))
+        # a field report (2026-11-24): an odometer at FFFFFF = 16777215 km on
+        # v6, never on 4.5x. The row's max was "1000000", a string, as in
+        # every published profile; v6 read a bound only as a JSON number, so
+        # no bound of a vehicle profile was applied
+        c.add("a profile row whose bounds are written as strings, decoding 102 "
+              "against a max of \"100\", is dropped",
+              vals.get("ProfileWrongScale") is None,
+              "ProfileWrongScale %s (before the fix: 102)" % vals.get("ProfileWrongScale"))
+        c.add("a profile row with string bounds and the float noise reads 100",
+              vals.get("ProfileNoise") == 100,
+              "ProfileNoise %s" % vals.get("ProfileNoise"))
+        c.add("a profile row with string bounds and a value inside them reads it (51)",
+              vals.get("ProfileInside") is not None and
+              abs(vals["ProfileInside"] - 51.0) < 0.01,
+              "ProfileInside %s" % vals.get("ProfileInside"))
         c.add("the poller is running", stats.get("running") is True and
               stats.get("polls_ok", 0) > stats0.get("polls_ok", 0),
               "polls_ok %s -> %s, failed %s -> %s" % (

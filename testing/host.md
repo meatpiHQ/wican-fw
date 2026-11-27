@@ -10,6 +10,22 @@ Host **unit** suites (`components/*/host_test`, 526 tests across 44 components a
 
 **Pi offline:** `bash tools/testbench/host_gcc_wsl.sh <vpn_manager|config_backup>` from WSL compiles that PURE suite with the system gcc + Unity under ASan/UBSan (no IDF build; 2026-10-16, issues #985 to #989: `vpn_manager` 11, `config_backup` 24; add a case per IDF-free suite)
 
+**2026-11-27 12:48, `.\test.ps1 host autopid`: PASS, 209 tests (1 new)**
+(`test-reports/2026-11-27_1248_host_autopid.md`; the same sources green at 12:27 too), a
+parameter's `min` / `max` written as a string is a bound. Every published vehicle profile writes
+its bounds as strings and v6 read numbers alone, so no range of a profile was applied (a field
+report: a Mitsubishi Outlander PHEV's odometer reading 16,777,215 km; the device half and its
+records are in [autopid_bounds_bench.md](autopid_bounds_bench.md)). **Red without the parser
+change, 12:33: 1 failure of 209**, the new case alone
+(`test-reports/2026-11-27_1233_host_autopid.md`). In `test_bounds.c`:
+
+- `test_bounds_a_profile_writes_them_as_strings`: the reporter's Odometer row as the web page
+  stores it (`22F0D0`, `ATCRA18DAF1DB;`, `[B4:B6]`, `"min": "0"`, `"max": "1000000"`) through
+  `ap_config_parse()` reads min 0 and max 1000000; 16777215 against it is dropped and 123456 is
+  kept; `" -40 "` and `"215.5"` are read with the blanks around them, `"1e3"` is 1000; `""`,
+  `"none"` and `"12abc"` are no bound, and so are `"-inf"`, `"nan"`, `true`, `null` and a missing
+  key; a bound written as a number reads as before.
+
 **2026-11-27 11:08, `.\test.ps1 host autopid`: PASS, 208 tests (2 new)**
 (`test-reports/2026-11-27_1108_host_autopid.md`), a park of the bus guard is about the CAN pins
 and leaves SAE J1850 and the K-line open to the detection job (GitHub issue #1022, a car with its
