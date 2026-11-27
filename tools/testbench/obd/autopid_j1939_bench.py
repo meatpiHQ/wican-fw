@@ -367,8 +367,13 @@ def leg_a1():
               json.dumps({k: e.get(k) for k in ("key", "dialect", "j1939", "protocol",
                                                 "vin", "ecus", "std_supported")}))
     ecus = e.get("ecus", "")
+    # as a set: the sample lists the sources in the order their frames arrive
+    # (the twin's frame goes out right behind the truck's own), and the car's
+    # key is made from a sorted copy. Until 2026-11-27 the check wanted source
+    # 0 first, and was red the one run in which the window opened between the
+    # two frames (`11:00000000,0:00000000`, the same key `fp:b84d5512`)
     run.check("a1_controllers_are_the_responder_set",
-              ecus.startswith("0:") and ",11:" in ecus.upper(), ecus)
+              sorted(x.split(":")[0].upper() for x in ecus.split(",") if x) == ["0", "11"], ecus)
     code, cfg = dut.api("/api/autopid/config")
     pgn_rows = [p for p in (cfg.get("pids", []) if isinstance(cfg, dict) else [])
                 if str(p.get("cmd", "")).upper().startswith("PGN:")]

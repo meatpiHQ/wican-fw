@@ -951,10 +951,19 @@ def leg_c2(wire):
     check("c2_guard_allows",
           not g.get("parked") and not b["stats"].get("paused_bus")
           and g.get("bus") == "live" and g.get("bus_kbps") == 250, guard(b))
-    check("c2_polling", polls(b)[0] > polls(a)[0]
-          and polls(b)[1] == polls(a)[1],
-          f"polls_ok +{polls(b)[0] - polls(a)[0]}, "
-          f"failed +{polls(b)[1] - polls(a)[1]} in {WINDOW:.0f} s")
+    # A row of the unit's own tables that pins a 500 kbit/s protocol (a
+    # vehicle profile's `ATSP6` / `ATSP7`) is refused by the guard on this
+    # bus, by design, and counts as a failed poll: one refusal a try
+    # (`bus_guard.refused`). Those are not the leg's business; a failed poll
+    # the guard did not refuse is. Until 2026-11-27 the check wanted no failed
+    # poll at all and was red whenever the bench unit carried such a profile
+    # (13 rows of the Audi MEB one, each tried twice in the window: +26).
+    failed = polls(b)[1] - polls(a)[1]
+    refused = (g.get("refused") or 0) - (a.get("bus_guard", {}).get("refused") or 0)
+    check("c2_polling", polls(b)[0] > polls(a)[0] and failed == refused,
+          f"polls_ok +{polls(b)[0] - polls(a)[0]}, failed +{failed} in "
+          f"{WINDOW:.0f} s, of which rows the guard refused (their own init "
+          f"pins a protocol at the other bit rate): +{refused}")
     metric("c2_failed_polls_until_contact", polls(b)[1])
     e_restart, e_steady = wire.errors(t_submit, t0), wire.errors(t0)
     check("c2_wire", e_restart == 0 and e_steady == 0,
