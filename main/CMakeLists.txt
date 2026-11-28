@@ -9,4 +9,5 @@ idf_component_register(
     REQUIRES   "${requires}"         # optional, list the public requirements (component names)
     PRIV_REQUIRES       # optional, list the private requirements
     EMBED_FILES "homepage_full.html"
+    EMBED_TXTFILES "le_roots.pem"
 )
